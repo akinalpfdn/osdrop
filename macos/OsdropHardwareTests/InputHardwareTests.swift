@@ -70,7 +70,8 @@ struct ScreenHardwareTests {
     func describesDisplays() throws {
         let screens = CGScreenDescriber().screens()
         #expect(screens.count == NSScreen.screens.count)
-        let main = try #require(screens.first(where: \.isMain))
+        let mainScreen = screens.first { $0.isMain }
+        let main = try #require(mainScreen)
         #expect(main.frame == CGDisplayBounds(CGMainDisplayID()))
         #expect(main.scale >= 1)
         #expect(Set(screens.map(\.id)).count == screens.count)
