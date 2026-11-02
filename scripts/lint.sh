@@ -6,7 +6,7 @@ set -euo pipefail
 
 readonly CLANG_FORMAT_VERSION="23.1.3"
 readonly CLANG_TIDY_VERSION="22.1.8"
-readonly SWIFT_SOURCES=(Package.swift macos/Osdrop macos/OsdropTests macos/CoreBridge macos/CoreBridgeTests)
+readonly SWIFT_SOURCES=(Package.swift macos/Osdrop macos/Shared macos/OsdropCaptureGuard macos/OsdropTests macos/OsdropHardwareTests macos/CoreBridge macos/CoreBridgeTests)
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"

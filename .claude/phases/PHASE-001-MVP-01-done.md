@@ -1,5 +1,5 @@
 # Phase 001 (MVP-01) — Repository scaffolding
-Status: ACTIVE
+Status: DONE
 
 DEVPLAN reference: Phase 0. Depends on: Nothing
 
@@ -21,7 +21,7 @@ A clean, empty-but-building monorepo with all hygiene, tooling and CI in place.
 ## Acceptance Criteria
 - [ ] A fresh clone builds on macOS (terminal) and Windows (command line) by following `BUILDING.md` exactly.
   - macOS: verified on the M3 Air from a fresh clone of the branch (2026-11-02).
-  - Windows: CI runs the same commands (MSVC, .NET 10); one manual run on the developer PC is still open.
+  - Windows: CI runs the same commands (MSVC, .NET 10). User decision (2026-11-02): go on to Phase 1; the manual run on the developer PC happens later.
 - [x] Both CI jobs are green (PR #1, run 41403248531: macOS, macOS sanitizers, Windows on the first run).
 - [x] Every formatter, linter and checker fails CI on an injected violation (shown once per checker).
   - Shown locally: clang-format, swift-format, UI tokens (Swift, XAML), localization, clang-tidy (core, windows/shared), `dotnet format` (whitespace) and the C# build with warnings as errors.
