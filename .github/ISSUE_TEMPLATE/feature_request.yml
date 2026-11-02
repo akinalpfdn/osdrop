@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement that fits Osdrop's scope.
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Osdrop shares one keyboard and mouse, files and the clipboard between computers on the same
+        local network. Screen sharing (see Osplay) and control over the internet are out of scope.
+        Check DEVPLAN.md → Post-MVP for features that are already planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
