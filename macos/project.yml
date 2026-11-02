@@ -53,6 +53,19 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Osdrop.app/Contents/MacOS/Osdrop
+  OsdropHardwareTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: OsdropHardwareTests
+    dependencies:
+      - target: Osdrop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.hardwaretests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Osdrop.app/Contents/MacOS/Osdrop
 schemes:
   Osdrop:
     build:
@@ -64,3 +77,13 @@ schemes:
       gatherCoverageData: true
       targets:
         - OsdropTests
+  # Moves the real cursor and captures input on the machine running it; not part of CI.
+  OsdropHardware:
+    build:
+      targets:
+        Osdrop: all
+        OsdropHardwareTests: [test]
+    test:
+      config: Debug
+      targets:
+        - OsdropHardwareTests
