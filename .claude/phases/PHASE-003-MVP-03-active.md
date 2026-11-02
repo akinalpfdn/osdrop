@@ -23,3 +23,6 @@ On one Mac, a file dragged to a screen edge is captured by Osdrop, and Osdrop ca
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- On one Mac the loopback is two steps (capture at the right edge, then an Osdrop drag from the left edge to where the user put the cursor): macOS runs one drag at a time and the user's own drag holds the button. Across two computers it is one movement.
+- Finder reads the staged file URL as well as the promise, so items up to 64 MB are also copied to staging. Staged copies are removed when a drag is cancelled and at the next launch, not right after a drop: the target may keep reading them (Mail attachments).
+- Swift 6 inserts main actor checks into AppKit callbacks it believes run on the main thread. Two crashes came from callbacks AppKit runs on background queues: the promise delegate's queue and name lookups (WhatsApp, through file coordination) and the reader of received promises (Photos). Both are now nonisolated, each with a test that calls it from background queues.
