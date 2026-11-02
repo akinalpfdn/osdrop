@@ -41,6 +41,18 @@ struct InjectionWindowHardwareTests {
             "The test window has no keyboard focus; nothing was typed. \(window.deliveredEvents) events delivered")
     }
 
+    /// Stops the test before any mouse event is sent unless the test window is the topmost window
+    /// at that point. A window just ordered front can take a moment to appear; until it does, a
+    /// click, scroll or drag would reach the app underneath.
+    private func requireOwnWindow(at point: CGPoint) async throws {
+        for _ in 0..<40 where !window.isTopmost(at: point) {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try #require(
+            window.isTopmost(at: point),
+            "The test window is not the topmost window at \(point); no mouse event was sent")
+    }
+
     private func type(_ usages: [UInt16]) {
         for usage in usages {
             injector.key(.keyboard(usage), .down)
@@ -62,7 +74,9 @@ struct InjectionWindowHardwareTests {
     @Test("A click focuses the text view, typing reaches it, Shift changes the character")
     func clickAndType() async throws {
         defer { finish() }
-        click(at: window.point(in: window.textView, at: NSPoint(x: 20, y: 20)))
+        let textPoint = window.point(in: window.textView, at: NSPoint(x: 20, y: 20))
+        try await requireOwnWindow(at: textPoint)
+        click(at: textPoint)
         try await requireFocus()
         window.textView.string = ""
         type(Usage.digits)
@@ -76,12 +90,15 @@ struct InjectionWindowHardwareTests {
     @Test("A double click selects the word under the cursor")
     func doubleClickSelectsWord() async throws {
         defer { finish() }
-        click(at: window.point(in: window.textView, at: NSPoint(x: 20, y: 20)))
+        let textPoint = window.point(in: window.textView, at: NSPoint(x: 20, y: 20))
+        try await requireOwnWindow(at: textPoint)
+        click(at: textPoint)
         try await requireFocus()
         window.textView.string = ""
         type(Usage.digits + [Usage.space] + Usage.digits)
         try await settle()
         let word = try #require(window.pointOfCharacters(NSRange(location: 1, length: 1)))
+        try await requireOwnWindow(at: word)
         click(at: word)
         click(at: word)
         try await settle()
@@ -95,7 +112,9 @@ struct InjectionWindowHardwareTests {
         defer { finish() }
         window.textView.string = (1...200).map { "line \($0)" }.joined(separator: "\n")
         let before = window.scrollView.contentView.bounds.origin.y
-        injector.moveCursor(to: window.point(in: window.textView, at: NSPoint(x: 40, y: 40)))
+        let scrollPoint = window.point(in: window.textView, at: NSPoint(x: 40, y: 40))
+        try await requireOwnWindow(at: scrollPoint)
+        injector.moveCursor(to: scrollPoint)
         for _ in 0..<5 {
             injector.scroll(ScrollDelta(x: 0, y: -5, unit: .line))
         }
@@ -109,6 +128,7 @@ struct InjectionWindowHardwareTests {
         defer { finish() }
         let before = window.window.frame.origin
         let titleBar = window.titleBarPoint()
+        try await requireOwnWindow(at: titleBar)
         injector.button(.left, isDown: true, at: titleBar)
         for step in 1...6 {
             injector.moveCursor(to: CGPoint(x: titleBar.x + Double(step * 10), y: titleBar.y + Double(step * 5)))
@@ -124,7 +144,9 @@ struct InjectionWindowHardwareTests {
     @Test("Typing reaches a password field, where Secure Event Input is on")
     func passwordField() async throws {
         defer { finish() }
-        click(at: window.point(in: window.passwordField, at: NSPoint(x: 10, y: 8)))
+        let fieldPoint = window.point(in: window.passwordField, at: NSPoint(x: 10, y: 8))
+        try await requireOwnWindow(at: fieldPoint)
+        click(at: fieldPoint)
         try await requireFocus()
         type(Usage.digits)
         try await settle()
@@ -201,6 +223,13 @@ private final class TestWindow {
         rect.origin.x += textView.textContainerOrigin.x
         rect.origin.y += textView.textContainerOrigin.y
         return point(in: textView, at: NSPoint(x: rect.midX, y: rect.midY))
+    }
+
+    /// Whether this window is the frontmost window under a point in global display coordinates.
+    func isTopmost(at point: CGPoint) -> Bool {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let screenPoint = NSPoint(x: point.x, y: primaryHeight - point.y)
+        return NSWindow.windowNumber(at: screenPoint, belowWindowWithWindowNumber: 0) == window.windowNumber
     }
 
     private func globalPoint(_ screenPoint: NSPoint) -> CGPoint {
