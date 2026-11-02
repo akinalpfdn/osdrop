@@ -126,11 +126,16 @@ final class PromiseFulfiller: NSObject, NSFilePromiseProviderDelegate, @unchecke
         self.report = report
     }
 
-    func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
+    // AppKit marks these two for the main actor, but sandboxed drop targets (WhatsApp) reach them
+    // through file coordination on a background queue, where the main actor check would end Osdrop.
+    // Both only read values that never change.
+    nonisolated func filePromiseProvider(
+        _ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String
+    ) -> String {
         (filePromiseProvider as? OsdropFilePromiseProvider)?.item.name ?? fileType
     }
 
-    func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
+    nonisolated func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
         queue
     }
 

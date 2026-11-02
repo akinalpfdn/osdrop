@@ -190,3 +190,31 @@ struct DragStagingTests {
         #expect(!FileManager.default.fileExists(atPath: staging.root.path))
     }
 }
+
+@Suite("File promise delegate")
+struct PromiseFulfillerTests {
+    /// Sandboxed drop targets call these through file coordination on a background queue; with a
+    /// main actor check in them, Osdrop crashed when a file was dropped on WhatsApp.
+    @Test("The promise delegate answers from a background queue")
+    func answersOffTheMainActor() async throws {
+        let item = DragItem(
+            id: UUID(), name: "notes.txt", isDirectory: false, byteCount: 5, contentType: "public.plain-text")
+        let fulfiller = PromiseFulfiller(
+            writer: PromisedItemWriter(reader: LocalFileContentReader(sources: [:])), staging: DragStaging(),
+            report: { _, _ in })
+        // Handed to a background queue on purpose, as AppKit does; nothing else touches it meanwhile.
+        nonisolated(unsafe) let provider = OsdropFilePromiseProvider(item: item, fulfiller: fulfiller)
+        let answers = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                let queue =
+                    fulfiller.perform(
+                        NSSelectorFromString("operationQueueForFilePromiseProvider:"), with: provider)?
+                    .takeUnretainedValue() as? OperationQueue
+                let name = fulfiller.filePromiseProvider(provider, fileNameForType: "public.plain-text")
+                continuation.resume(returning: (queue != nil, name))
+            }
+        }
+        #expect(answers.0)
+        #expect(answers.1 == "notes.txt")
+    }
+}
