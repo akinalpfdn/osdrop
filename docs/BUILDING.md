@@ -58,7 +58,13 @@ open DerivedData/Build/Products/Debug/Osdrop.app
 ```
 
 The app has no Dock icon; it appears in the menu bar as two half arrows crossing a vertical line. Its menu shows the app and
-core versions and a Quit button.
+core versions and a Quit button. The app bundle also carries `OsdropCaptureGuard` in
+`Contents/MacOS`, built by the same scheme.
+
+Osdrop reads and sends input, so it asks for Accessibility access (System Settings › Privacy &
+Security › Accessibility); the menu shows a button that opens the right pane. Debug builds have a
+**Developer…** menu item with the input tools of Phase 1. Tests that move the real cursor are in a
+separate scheme and never run in CI; see [`TESTING.md`](TESTING.md) → Hardware tests.
 
 To work in Xcode, run `xcodegen generate` in `macos/` and open `Osdrop.xcodeproj`. The project is
 generated from `macos/project.yml` and is not committed: re-run `xcodegen generate` after pulling

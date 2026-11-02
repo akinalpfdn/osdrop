@@ -41,3 +41,23 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 - `windows/CMakeLists.txt` adds `core` and `windows/shared` and, on Windows, the engine, input
   process and service. On other hosts it builds the portable parts only (`portable` preset).
 - The WPF shell loads the engine DLL through P/Invoke.
+
+## macOS input layer
+
+Built in Phase 1 (`macos/Osdrop/Services/Input`):
+
+- **Capture** — `EventTapCapture` runs an active event tap at the HID level on its own thread. The
+  callback translates each event into a platform-neutral `InputEvent` (USB HID usages for keys) and
+  enqueues it; in capture mode it also swallows the event. Events Osdrop posts carry a tag in their
+  source user data and always pass.
+- **Freezing and hiding the cursor** — `CGAssociateMouseAndMouseCursorPosition` and
+  `BackgroundCursorHider` (the private `SetsCursorInBackground` property, looked up at run time).
+- **Ways out of a capture** — the release chord ⌃⌥⌘⎋ (handled in the tap callback); the in-app
+  watchdog, which ends a capture whose owner stopped confirming it for 1 s or whose tap stayed
+  disabled; and `OsdropCaptureGuard`, a separate process that ends Osdrop after 2 s without a
+  heartbeat, because a hung app cannot undo its own frozen, hidden cursor.
+- **Injection** — `CGEventInjector` posts CoreGraphics events with click counts, explicit modifier
+  flags and a ledger of held keys and buttons, which `releaseAll` lets go of on every way out.
+- **Focus** — `InvisibleKeyWindowFocus` takes keyboard focus during capture so password fields in
+  other apps resign and Secure Event Input turns off; `SystemSecureInput` names the app that still
+  holds it.
