@@ -1,21 +1,35 @@
-# [Project Name]
+# Osdrop
 
 ## What This Is
-[One paragraph. What does this project do, who is it for, what problem does it solve.]
+Osdrop moves one keyboard and mouse across several computers on the same LAN: push the cursor
+through a screen edge and it continues on the neighbouring computer. Files dragged across the edge
+are copied where they are dropped, and the clipboard is shared. Every direction between macOS and
+Windows (Mac ↔ PC, Mac ↔ Mac, PC ↔ PC), up to 8 computers in one arrangement. Not screen sharing
+(that is the sibling project Osplay) and not remote access over the internet. Open source (MIT),
+no backend services.
+
+`DEVPLAN.md` is the authoritative plan: stack, constraints, protocol decisions and phases.
 
 ## Tech Stack
 | Layer | Technology | Why |
 |-------|-----------|-----|
-| Backend | | |
-| Frontend | | |
-| Database | | |
-| Infrastructure | | |
+| Shared core | C++20, CMake + SwiftPM, flat C API | One implementation of protocol, crossings, roster merges and file name mapping |
+| macOS app | Swift 6 (strict concurrency), SwiftUI menu bar, XcodeGen | Event taps, event posting, drag sessions, file promises |
+| Windows engine | C++20 DLL, CMake presets (Ninja + MSVC) | Sessions, OLE drag and drop, clipboard, files, discovery |
+| Windows input | C++20 `OsdropInput.exe` (SYSTEM in the user session) + `OsdropService` | Low-level hooks and SendInput that also work over elevated windows |
+| Windows shell | C# .NET 10, WPF, WPF-UI, CommunityToolkit.Mvvm | Tray panel, settings, arrangement; calls the engine via P/Invoke |
+| Persistence | Keychain / DPAPI, UserDefaults / JSON | No server, no database |
 
 ## Architecture
-[Brief description. Key components and how they relate.]
+See `DEVPLAN.md` → Architecture and `docs/ARCHITECTURE.md`.
+`core/` (protocol, crypto, transport, session, mesh, group, layout, input, clipboard, transfer, capi)
+is used by `macos/` (Swift) and `windows/engine/` (C++ DLL). `windows/input/` captures and injects
+input as SYSTEM; `windows/service/` keeps it running in the active session. `windows/app/` is the
+WPF shell.
 
 ## Current Phase
 See `.claude/phases/` — always check the active phase file before starting work.
+Phase files map DEVPLAN "Phase N" to `PHASE-0(N+1)-MVP-(N+1)`.
 
 ## Rules
 claude-ground rules live in `~/.claude/rules/` and load automatically — no imports needed here.
@@ -23,7 +37,28 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
 - Language rules and `frontend.md` load when Claude reads a matching file (`paths:` frontmatter).
 
 ## Project-Specific Constraints
-<!-- Things Claude must not do in this project. Add as you discover them. -->
+- Production grade from the first phase: no throwaway prototypes or spikes in the codebase (user
+  decision 2026-11-02). Platform risks are retired by the go/no-go phases 1–4.
+- Public repository `akinalpfdn/osdrop`. One branch per DEVPLAN phase
+  (`feature/phase-XX-<slug>`, created with `--no-track`), merged by the user through a PR after CI
+  is green. Phase files and plan docs are commits on the phase branch, never a docs-only PR.
+- Work is tracked only in `.claude/phases/` and `DECISIONS.md`, not in Lore.
+- Identifier prefix: `com.akinalpfdn.osdrop`. Bonjour service type `_osdrop._tcp`.
+- Code taken from Osplay is copied at a recorded commit and owned here; security fixes in either
+  project are checked against the other.
+- Input safety invariants (DEVPLAN → Implementation Guidelines) override feature work.
+- Never log keystrokes, clipboard contents, file contents or key material.
+- Every user-facing string is localized (English + Turkish); `core`, the engine and the input
+  process return error codes, never text.
+- Every visual value comes from the platform theme source.
+- Docs and READMEs use a plain tone: no emoji, no marketing headings.
+- Run `scripts/lint.sh` before committing; CI fails on formatting and lint violations.
+- Builds and checks are described in `docs/BUILDING.md` — keep it exact; it is an acceptance criterion.
 
 ## Context
-<!-- Anything not obvious from the code: target platform, known constraints, current focus. -->
+- Developer hardware: MacBook Air M3 (macOS 26) with an external monitor, a second Mac, a Windows PC
+  with two monitors and a second Windows computer; tests run wired and over Wi-Fi.
+- The Mac developer verifies Windows code through CI (`windows` job) and runs hardware tests on the
+  PCs by hand.
+- Claude builds and relaunches the Mac app itself; signing uses the maintainer's Developer ID so TCC
+  grants (Accessibility) survive rebuilds.
