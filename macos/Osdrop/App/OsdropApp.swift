@@ -20,7 +20,7 @@ struct OsdropApp: App {
         MenuBarExtra {
             MenuContentView(accessibility: dependencies.accessibility)
         } label: {
-            Label("app.name", systemImage: Theme.Symbol.menuBar)
+            Label("app.name", image: Theme.Artwork.menuBar)
         }
         .menuBarExtraStyle(.window)
 

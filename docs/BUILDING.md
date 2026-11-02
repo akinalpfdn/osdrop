@@ -57,7 +57,7 @@ xcodebuild -project Osdrop.xcodeproj -scheme Osdrop -destination 'platform=macOS
 open DerivedData/Build/Products/Debug/Osdrop.app
 ```
 
-The app has no Dock icon; it appears as a cursor icon in the menu bar. Its menu shows the app and
+The app has no Dock icon; it appears in the menu bar as two half arrows crossing a vertical line. Its menu shows the app and
 core versions and a Quit button.
 
 To work in Xcode, run `xcodegen generate` in `macos/` and open `Osdrop.xcodeproj`. The project is

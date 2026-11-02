@@ -27,8 +27,12 @@ enum Theme {
         static let developerWindowWidth: CGFloat = 520
     }
 
+    enum Artwork {
+        /// A screen edge with a half arrow crossing it each way; a template image, so macOS tints it.
+        static let menuBar = "MenuBarIcon"
+    }
+
     enum Symbol {
-        static let menuBar = "cursorarrow.motionlines"
         static let warning = "exclamationmark.triangle.fill"
         static let granted = "checkmark.circle.fill"
     }
