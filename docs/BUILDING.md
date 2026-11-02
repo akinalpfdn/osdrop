@@ -130,7 +130,7 @@ python ..\scripts\run_clang_tidy.py windows/build/debug core/src windows/
 cd app
 dotnet format Osdrop.slnx --verify-no-changes
 dotnet build Osdrop.slnx -c Release
-dotnet test Osdrop.slnx -c Release --no-build
+dotnet test --solution Osdrop.slnx -c Release --no-build
 dotnet run --project Osdrop.App -c Release
 ```
 

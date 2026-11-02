@@ -109,4 +109,4 @@ jobs:
 
       - name: Shell — test
         working-directory: windows/app
-        run: dotnet test Osdrop.slnx -c Release --no-build
+        run: dotnet test --solution Osdrop.slnx -c Release --no-build
