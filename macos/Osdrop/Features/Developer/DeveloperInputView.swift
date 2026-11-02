@@ -161,6 +161,10 @@
                         Note(text: Text("developer.capture.releasedChord"))
                     case .watchdog:
                         Note(text: Text("developer.capture.releasedWatchdog"), color: Theme.Colors.warning)
+                    case .tapLost:
+                        Note(text: Text("developer.capture.releasedTapLost"), color: Theme.Colors.warning)
+                    case .guardUnavailable:
+                        Note(text: Text("developer.capture.guardUnavailable"), color: Theme.Colors.warning)
                     }
                 }
             }
@@ -230,6 +234,7 @@
             switch self {
             case .tapUnavailable: "developer.tap.unavailable"
             case .threadDidNotStart: "developer.tap.threadFailed"
+            case .guardUnavailable: "developer.capture.guardUnavailable"
             }
         }
     }

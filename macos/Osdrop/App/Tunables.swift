@@ -16,8 +16,12 @@ enum Tunables {
         static let captureHeartbeatTimeout: Duration = .seconds(1)
         /// How often the owner of a capture confirms it.
         static let captureHeartbeatInterval: Duration = .milliseconds(250)
-        /// How often the capture watchdog checks the last confirmation.
+        /// How often the capture watchdog checks the last confirmation. Each healthy check also
+        /// sends the capture guard a heartbeat.
         static let watchdogCheckInterval: Duration = .milliseconds(100)
+        /// Watchdog checks in a row that may find the event tap disabled before capture ends;
+        /// the tap callback normally turns it back on within one.
+        static let tapLostChecks = 3
         /// Captured events buffered for a slow consumer before the oldest are dropped.
         static let eventBufferLimit = 4096
         /// How long `stop` waits for the event tap thread to finish.

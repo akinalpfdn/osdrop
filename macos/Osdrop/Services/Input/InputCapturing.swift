@@ -13,6 +13,10 @@ enum CaptureReleaseReason: Sendable, Equatable {
     case releaseChord
     /// The owner stopped confirming the capture (DEVPLAN, input safety invariants).
     case watchdog
+    /// macOS turned the event tap off and it did not come back.
+    case tapLost
+    /// Capture was refused because the capture guard is not running.
+    case guardUnavailable
 }
 
 enum TapDisableReason: Sendable, Equatable {
@@ -35,6 +39,8 @@ enum CaptureError: Error, Equatable {
     case tapUnavailable
     /// The event tap thread did not start in time.
     case threadDidNotStart
+    /// The process that gives the cursor back if Osdrop hangs could not be started.
+    case guardUnavailable
 }
 
 /// Watches this Mac's physical input and, when asked, takes it over (DEVPLAN Phase 1).

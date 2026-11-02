@@ -9,14 +9,20 @@ final class EventTapCapture: InputCapturing {
     let events: AsyncStream<CaptureEvent>
     private let continuation: AsyncStream<CaptureEvent>.Continuation
     private let cursor: any CursorHiding
+    private let captureGuard: any CaptureGuarding
     private let context: TapContext
     private let transitions = DispatchQueue(label: "com.akinalpfdn.osdrop.capture", qos: .userInteractive)
     private let running = Locked<RunningTap?>(nil)
+    /// Held while the tap runs: App Nap would delay the watchdog and the heartbeats the capture
+    /// guard depends on, and add latency to every captured event.
+    private let activity = Locked<NSObjectProtocol?>(nil)
 
-    init(cursor: any CursorHiding = BackgroundCursorHider()) {
+    init(cursor: any CursorHiding = BackgroundCursorHider(), captureGuard: any CaptureGuarding = ProcessCaptureGuard())
+    {
         (events, continuation) = AsyncStream.makeStream(
             of: CaptureEvent.self, bufferingPolicy: .bufferingNewest(Tunables.Input.eventBufferLimit))
         self.cursor = cursor
+        self.captureGuard = captureGuard
         context = TapContext(continuation: continuation)
         context.onReleaseChord = { [weak self] in
             guard let self else { return }
@@ -44,6 +50,7 @@ final class EventTapCapture: InputCapturing {
 
     func start(layout: KeyboardPhysicalLayout) throws(CaptureError) {
         guard !isRunning else { return }
+        guard captureGuard.ensureRunning() else { throw .guardUnavailable }
         context.state.withLock { $0.translator = EventTranslator(layout: layout) }
         let started = Locked<Result<CFRunLoop, CaptureError>?>(nil)
         let ready = DispatchSemaphore(value: 0)
@@ -62,6 +69,11 @@ final class EventTapCapture: InputCapturing {
         }
         switch result {
         case .success(let runLoop):
+            activity.withLock {
+                $0 = ProcessInfo.processInfo.beginActivity(
+                    options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+                    reason: "Osdrop watches this Mac's input")
+            }
             let watchdog = makeWatchdog()
             running.withLock { $0 = RunningTap(runLoop: runLoop, finished: finished, watchdog: watchdog) }
             watchdog.resume()
@@ -86,6 +98,12 @@ final class EventTapCapture: InputCapturing {
         }
         tap.watchdog.cancel()
         CFRunLoopStop(tap.runLoop)
+        if let activity = activity.withLock({ state -> NSObjectProtocol? in
+            defer { state = nil }
+            return state
+        }) {
+            ProcessInfo.processInfo.endActivity(activity)
+        }
         if tap.finished.wait(timeout: .now() + Tunables.Input.tapThreadStopTimeout.timeInterval) == .timedOut {
             Log.input.error("The event tap thread did not stop in time")
         }
@@ -101,21 +119,28 @@ final class EventTapCapture: InputCapturing {
 
     /// Runs on `transitions` only.
     private func apply(_ mode: CaptureMode, reason: CaptureReleaseReason) {
-        let previous = context.state.withLock { state -> CaptureMode in
-            defer {
-                state.mode = mode
-                state.lastHeartbeat = .now
-            }
-            return state.mode
-        }
-        guard previous != mode else { return }
+        guard context.state.withLock({ $0.mode }) != mode else { return }
         switch mode {
         case .capture:
+            // Capture never starts without the guard that gives the cursor back if Osdrop hangs.
+            guard captureGuard.ensureRunning() else {
+                Log.input.error("Capture refused: the capture guard is not running")
+                continuation.yield(.released(.guardUnavailable))
+                return
+            }
+            captureGuard.send(.arm)
+            context.state.withLock { state in
+                state.mode = .capture
+                state.lastHeartbeat = .now
+                state.tapDisabledChecks = 0
+            }
             CGAssociateMouseAndMouseCursorPosition(0)
             cursor.hide()
         case .observe:
+            context.state.withLock { $0.mode = .observe }
             CGAssociateMouseAndMouseCursorPosition(1)
             cursor.show()
+            captureGuard.send(.disarm)
             continuation.yield(.released(reason))
         }
         Log.input.info("Capture mode \(String(describing: mode), privacy: .public)")
@@ -126,17 +151,32 @@ final class EventTapCapture: InputCapturing {
         let interval = Tunables.Input.watchdogCheckInterval.timeInterval
         timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            let isStale = context.state.withLock { state in
-                state.mode == .capture
-                    && ContinuousClock.now - state.lastHeartbeat > Tunables.Input.captureHeartbeatTimeout
-            }
-            if isStale {
-                Log.input.error("Capture released by the watchdog")
-                apply(.observe, reason: .watchdog)
-            }
+            self?.checkCapture()
         }
         return timer
+    }
+
+    /// Runs on `transitions`, on every watchdog tick. Ends a capture whose owner went quiet or whose
+    /// event tap macOS turned off; otherwise tells the capture guard that all is well.
+    private func checkCapture() {
+        let (mode, isStale, isTapLost) = context.state.withLock { state -> (CaptureMode, Bool, Bool) in
+            let isEnabled = state.port.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+            state.tapDisabledChecks = isEnabled ? 0 : state.tapDisabledChecks + 1
+            return (
+                state.mode, ContinuousClock.now - state.lastHeartbeat > Tunables.Input.captureHeartbeatTimeout,
+                state.tapDisabledChecks >= Tunables.Input.tapLostChecks
+            )
+        }
+        guard mode == .capture else { return }
+        if isStale {
+            Log.input.error("Capture released by the watchdog")
+            apply(.observe, reason: .watchdog)
+        } else if isTapLost {
+            Log.input.error("Capture released: the event tap stayed disabled")
+            apply(.observe, reason: .tapLost)
+        } else {
+            captureGuard.send(.heartbeat)
+        }
     }
 
     private static func runTap(
@@ -185,6 +225,8 @@ private final class TapContext: @unchecked Sendable {
         var translator = EventTranslator(layout: .ansi)
         var port: CFMachPort?
         var lastHeartbeat = ContinuousClock.now
+        /// Consecutive watchdog checks that found the tap disabled.
+        var tapDisabledChecks = 0
     }
 
     let state = Locked(State())

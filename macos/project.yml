@@ -30,9 +30,16 @@ targets:
     platform: macOS
     sources:
       - path: Osdrop
+      # Definitions the app shares with its capture guard.
+      - path: Shared
     dependencies:
       - package: OsdropCore
         product: CoreBridge
+      - target: OsdropCaptureGuard
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop
@@ -40,6 +47,20 @@ targets:
         INFOPLIST_FILE: Osdrop/Resources/Info.plist
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
+  # Ends Osdrop if it hangs while capturing input, so the cursor always comes back (DEVPLAN,
+  # input safety invariants). Lives next to the app's executable in Contents/MacOS.
+  OsdropCaptureGuard:
+    type: tool
+    platform: macOS
+    sources:
+      - path: OsdropCaptureGuard
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: OsdropCaptureGuard
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.captureguard
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
   OsdropTests:
     type: bundle.unit-test
     platform: macOS

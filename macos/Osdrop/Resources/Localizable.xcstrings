@@ -188,6 +188,23 @@
         }
       }
     },
+    "developer.capture.guardUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture did not start: the capture guard is not running. Reinstall Osdrop."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakalama başlamadı: yakalama bekçisi çalışmıyor. Osdrop'u yeniden yükleyin."
+          }
+        }
+      }
+    },
     "developer.capture.recorded %lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -218,6 +235,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Yakalama ⌃⌥⌘⎋ ile bitti."
+          }
+        }
+      }
+    },
+    "developer.capture.releasedTapLost" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture ended: macOS turned the event tap off."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakalama bitti: macOS olay dinleyiciyi kapattı."
           }
         }
       }
