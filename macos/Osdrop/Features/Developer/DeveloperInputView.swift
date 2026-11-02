@@ -140,6 +140,8 @@
             switch phase {
             case .idle:
                 EmptyView()
+            case .startingIn(let secondsLeft):
+                Note(text: Text("developer.capture.startingIn \(secondsLeft)"), color: Theme.Colors.warning)
             case .capturing(let secondsLeft):
                 Note(text: Text("developer.capture.remaining \(secondsLeft)"), color: Theme.Colors.warning)
             case .replaying:

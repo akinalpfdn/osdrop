@@ -143,13 +143,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Takes over this Mac's mouse and keyboard for the chosen time, then plays back what you did. ⌃⌥⌘⎋ ends the capture at once."
+            "value" : "Press Capture, then put the cursor where you want to work within 3 seconds. Osdrop then takes over this Mac's mouse and keyboard for the chosen time: the cursor hides and stays put, and what you do reaches no app. Afterwards it plays back what you did from that point. ⌃⌥⌘⎋ ends the capture at once."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bu Mac'in faresini ve klavyesini seçilen süre boyunca devralır, sonra yaptıklarınızı tekrar oynatır. ⌃⌥⌘⎋ yakalamayı hemen bitirir."
+            "value" : "Yakala'ya bas, sonra 3 saniye içinde imleci çalışacağın yere götür. Osdrop seçilen süre boyunca bu Mac'in faresini ve klavyesini devralır: imleç gizlenir ve yerinde kalır, yaptıkların hiçbir uygulamaya ulaşmaz. Ardından yaptıklarını o noktadan başlayarak tekrar oynatır. ⌃⌥⌘⎋ yakalamayı hemen bitirir."
           }
         }
       }
@@ -286,6 +286,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Yakala"
+          }
+        }
+      }
+    },
+    "developer.capture.startingIn %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture starts in %lld s. Put the cursor where you want to work; it stays there while hidden."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yakalama %lld sn sonra başlıyor. İmleci çalışacağın yere götür; gizlendiğinde orada kalır."
           }
         }
       }

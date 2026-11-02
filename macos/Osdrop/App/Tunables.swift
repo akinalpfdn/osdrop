@@ -36,6 +36,8 @@ enum Tunables {
             static let defaultCaptureSeconds = 5
             /// Gaps between recorded events longer than this are shortened during replay.
             static let maximumReplayGap: Duration = .milliseconds(500)
+            /// Seconds between pressing Capture and the capture starting.
+            static let captureCountdownSeconds = 3
         }
     #endif
 }

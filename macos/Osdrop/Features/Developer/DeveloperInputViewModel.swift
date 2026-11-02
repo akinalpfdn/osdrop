@@ -16,6 +16,8 @@
 
         enum RunPhase: Equatable {
             case idle
+            /// Time to put the visible cursor where the test happens; capture hides it.
+            case startingIn(secondsLeft: Int)
             case capturing(secondsLeft: Int)
             case replaying
             case finished(replayedEvents: Int, release: CaptureReleaseReason)
@@ -79,7 +81,7 @@
 
         var isBusy: Bool {
             switch phase {
-            case .capturing, .replaying: true
+            case .startingIn, .capturing, .replaying: true
             case .idle, .finished: false
             }
         }
@@ -151,6 +153,15 @@
         }
 
         private func runCaptureAndReplay() async {
+            for secondsLeft in stride(from: Tunables.Developer.captureCountdownSeconds, to: 0, by: -1) {
+                phase = .startingIn(secondsLeft: secondsLeft)
+                // A cancelled sleep ends the countdown through Task.isCancelled.
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else {
+                    phase = .idle
+                    return
+                }
+            }
             let start = CGEventInjector.currentCursorLocation()
             recording = []
             captureRelease = nil
