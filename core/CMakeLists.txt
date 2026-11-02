@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.28)
+
+# The version lives in the public header so C, Swift and C# consumers see the same numbers.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/osdrop/osdrop.h" _osdrop_version_lines
+     REGEX "^#define OSDROP_CORE_VERSION_(MAJOR|MINOR|PATCH) [0-9]+$")
+foreach(_line IN LISTS _osdrop_version_lines)
+    string(REGEX MATCH "OSDROP_CORE_VERSION_([A-Z]+) ([0-9]+)" _ "${_line}")
+    set(_osdrop_version_${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
+endforeach()
+
+project(OsdropCore
+    VERSION "${_osdrop_version_MAJOR}.${_osdrop_version_MINOR}.${_osdrop_version_PATCH}"
+    DESCRIPTION "Shared protocol, crypto, transport and input model library for Osdrop"
+    LANGUAGES CXX)
+
+option(OSDROP_CORE_BUILD_TESTS "Build the core unit tests" ${PROJECT_IS_TOP_LEVEL})
+
+if(NOT TARGET osdrop::warnings)
+    include(cmake/OsdropWarnings.cmake)
+endif()
+
+add_library(osdrop_core STATIC
+    src/capi/version.cpp)
+add_library(osdrop::core ALIAS osdrop_core)
+
+target_include_directories(osdrop_core
+    PUBLIC include
+    PRIVATE src)
+target_compile_features(osdrop_core PUBLIC cxx_std_20)
+set_target_properties(osdrop_core PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(osdrop_core PRIVATE osdrop::warnings)
+
+if(OSDROP_CORE_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests/cpp)
+endif()

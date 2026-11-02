@@ -1,0 +1,4 @@
+module OsdropCore {
+    header "osdrop/osdrop.h"
+    export *
+}
