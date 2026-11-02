@@ -1,0 +1,33 @@
+---
+BasedOnStyle: LLVM
+Standard: c++20
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -4
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBraces: Attach
+DerivePointerAlignment: false
+PointerAlignment: Left
+FixNamespaceComments: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<osdrop/'
+    Priority: 2
+  - Regex: '^<(gtest|gmock|asio|monocypher)'
+    Priority: 3
+  # windows.h must precede every other Windows SDK header.
+  - Regex: '^<windows\.h>'
+    Priority: 4
+  - Regex: '^<.*\.h>'
+    Priority: 5
+  - Regex: '^<'
+    Priority: 6
+InsertNewlineAtEOF: true
+SortIncludes: CaseSensitive
+SpaceAfterTemplateKeyword: true
+...

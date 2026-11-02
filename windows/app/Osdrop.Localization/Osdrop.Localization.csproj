@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- User-facing strings live in their own assembly so XAML can reference the generated
+       accessor with {x:Static} during WPF markup compilation. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Osdrop.Localization</RootNamespace>
+    <NeutralLanguage>en</NeutralLanguage>
+    <SatelliteResourceLanguages>en;tr</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Strongly typed accessors are generated at build time, so no Designer.cs is committed. -->
+    <EmbeddedResource Update="Resources\Strings.resx">
+      <StronglyTypedLanguage>CSharp</StronglyTypedLanguage>
+      <StronglyTypedNamespace>Osdrop.Localization</StronglyTypedNamespace>
+      <StronglyTypedClassName>Strings</StronglyTypedClassName>
+      <!-- The resource is embedded under its folder name; the accessor must look it up there. -->
+      <StronglyTypedManifestPrefix>Osdrop.Localization.Resources</StronglyTypedManifestPrefix>
+      <StronglyTypedFileName>$(IntermediateOutputPath)Strings.Designer.cs</StronglyTypedFileName>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

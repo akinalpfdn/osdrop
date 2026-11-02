@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+
+      - name: Install build tools
+        run: brew install cmake ninja xcodegen
+
+      - name: Core — configure, build, test
+        working-directory: core
+        run: |
+          cmake --preset debug
+          cmake --build --preset debug
+          ctest --preset debug
+
+      - name: Portable Windows libraries — configure, build, test
+        working-directory: windows
+        run: |
+          cmake --preset portable
+          cmake --build --preset portable
+          ctest --preset portable
+
+      - name: Format, lint and localization checks
+        run: scripts/lint.sh
+
+      - name: Swift package — build and test
+        run: swift test
+
+      - name: macOS app — generate, build, test
+        working-directory: macos
+        run: |
+          xcodegen generate
+          xcodebuild -project Osdrop.xcodeproj -scheme Osdrop -destination 'platform=macOS' \
+            -derivedDataPath DerivedData -quiet test
+
+  macos-sanitizers:
+    name: macOS sanitizers
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build tools
+        run: brew install cmake ninja
+
+      - name: Core — AddressSanitizer and UndefinedBehaviorSanitizer
+        working-directory: core
+        run: |
+          cmake --preset asan
+          cmake --build --preset asan
+          ctest --preset asan
+
+      - name: Core — ThreadSanitizer
+        working-directory: core
+        run: |
+          cmake --preset tsan
+          cmake --build --preset tsan
+          ctest --preset tsan
+
+  windows:
+    name: Windows
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/app/global.json
+
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+
+      - name: Native — configure, build, test, clang-tidy
+        working-directory: windows
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          . ../scripts/windows/Enter-DevShell.ps1
+          cmake --preset debug
+          cmake --build --preset debug
+          ctest --preset debug
+          python ../scripts/run_clang_tidy.py windows/build/debug core/src windows/
+
+      - name: Shell — format check
+        working-directory: windows/app
+        run: dotnet format Osdrop.slnx --verify-no-changes
+
+      - name: Shell — build
+        working-directory: windows/app
+        run: dotnet build Osdrop.slnx -c Release
+
+      - name: Shell — test
+        working-directory: windows/app
+        run: dotnet test Osdrop.slnx -c Release --no-build

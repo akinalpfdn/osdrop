@@ -1,0 +1,73 @@
+name: Bug report
+description: Something does not work as described.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please search existing issues first. Security issues go to the
+        private advisory form instead (see the issue chooser).
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Direction
+      description: Which computer's mouse and keyboard were in use, and which computer did they move to?
+      options:
+        - Mac → PC
+        - PC → Mac
+        - Mac → Mac
+        - PC → PC
+        - Three or more computers
+        - Other / not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Cursor and keyboard
+        - Dragging files
+        - Clipboard
+        - Pairing and devices
+        - Arrangement
+        - Installation or permissions
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: osdrop-version
+    attributes:
+      label: Osdrop version (every computer involved)
+      placeholder: "Mac 0.1.0, Windows 0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS versions, computer models, monitors on each computer, wired or Wi-Fi, keyboard layouts.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste the output of "Copy diagnostics" from the app, if available.
+      render: text
