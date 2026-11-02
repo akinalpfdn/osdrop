@@ -2,12 +2,33 @@ import SwiftUI
 
 @main
 struct OsdropApp: App {
+    private let dependencies: AppDependencies
+    #if DEBUG
+        @State private var developer: DeveloperInputViewModel
+    #endif
+
+    init() {
+        let dependencies = AppDependencies()
+        dependencies.accessibility.startMonitoring()
+        self.dependencies = dependencies
+        #if DEBUG
+            _developer = State(initialValue: DeveloperInputViewModel(dependencies: dependencies))
+        #endif
+    }
+
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView()
+            MenuContentView(accessibility: dependencies.accessibility)
         } label: {
             Label("app.name", systemImage: Theme.Symbol.menuBar)
         }
         .menuBarExtraStyle(.window)
+
+        #if DEBUG
+            Window("developer.title", id: DeveloperInputView.windowID) {
+                DeveloperInputView(viewModel: developer)
+            }
+            .windowResizability(.contentSize)
+        #endif
     }
 }

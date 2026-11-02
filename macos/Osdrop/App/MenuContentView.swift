@@ -3,8 +3,12 @@ import CoreBridge
 import SwiftUI
 
 struct MenuContentView: View {
+    let accessibility: AccessibilityPermission
     private let appVersion = AppVersion.current
     private let coreVersion = CoreVersion.linked
+    #if DEBUG
+        @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.medium) {
@@ -19,9 +23,20 @@ struct MenuContentView: View {
                 Text("menu.coreVersion \(coreVersion.description)")
             }
             .font(Theme.Typography.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Colors.secondary)
             .fixedSize(horizontal: false, vertical: true)
+
+            if !accessibility.isTrusted {
+                AccessibilityBanner(accessibility: accessibility)
+            }
+
             Divider()
+            #if DEBUG
+                Button("menu.developer") {
+                    openWindow(id: DeveloperInputView.windowID)
+                    NSApp.activate()
+                }
+            #endif
             Button("menu.quit") {
                 NSApplication.shared.terminate(nil)
             }
@@ -29,5 +44,22 @@ struct MenuContentView: View {
         }
         .padding(Theme.Spacing.large)
         .frame(width: Theme.Size.menuWidth, alignment: .leading)
+    }
+}
+
+private struct AccessibilityBanner: View {
+    let accessibility: AccessibilityPermission
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Label("menu.accessibility.missing", systemImage: Theme.Symbol.warning)
+                .foregroundStyle(Theme.Colors.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("menu.accessibility.open") {
+                accessibility.requestAccess()
+                accessibility.openSystemSettings()
+            }
+        }
+        .font(Theme.Typography.caption)
     }
 }
