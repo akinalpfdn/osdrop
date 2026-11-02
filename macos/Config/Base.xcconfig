@@ -1,0 +1,7 @@
+// Signing defaults that work for every clone and on CI: ad hoc, no team.
+// Maintainers override them in Signing.local.xcconfig (gitignored); see docs/BUILDING.md.
+CODE_SIGN_IDENTITY = -
+CODE_SIGN_STYLE = Manual
+DEVELOPMENT_TEAM =
+
+#include? "Signing.local.xcconfig"
