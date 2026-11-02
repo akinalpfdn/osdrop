@@ -12,6 +12,7 @@
         enum Phase: Equatable {
             case idle
             case armed
+            case receiving(promiseCount: Int)
             case captured(CapturedDrag)
             case startingIn(secondsLeft: Int)
             case dragging
@@ -21,6 +22,7 @@
 
         enum Failure: Equatable {
             case captureFailed
+            case promiseTimedOut
             case tapUnavailable
         }
 
@@ -56,6 +58,9 @@
             }
             edge.decide = { [weak self] in
                 self?.acceptsDrops == true ? .acceptAsCopy : .reject
+            }
+            edge.onReceiving = { [weak self] count in
+                self?.phase = .receiving(promiseCount: count)
             }
             edge.onCapture = { [weak self] result in
                 self?.captured(result)
@@ -134,6 +139,7 @@
             removeStaging()
             switch result {
             case .success(let drag): phase = .captured(drag)
+            case .failure(PromiseCollector.Failure.timedOut): phase = .failed(.promiseTimedOut)
             case .failure: phase = .failed(.captureFailed)
             }
         }

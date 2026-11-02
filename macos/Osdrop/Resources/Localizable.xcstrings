@@ -647,6 +647,40 @@
         }
       }
     },
+    "developer.drag.promiseTimedOut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The source app did not deliver the promised items within 2 minutes. If they are in iCloud, download them in Photos first."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaynak uygulama söz verilen öğeleri 2 dakika içinde teslim etmedi. iCloud'daysalar önce Fotoğraflar'da indir."
+          }
+        }
+      }
+    },
+    "developer.drag.receiving %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the source app to deliver %lld promised items. Photos may first download them from iCloud."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaynak uygulamanın %lld söz verilmiş öğeyi teslim etmesi bekleniyor. Fotoğraflar önce iCloud'dan indiriyor olabilir."
+          }
+        }
+      }
+    },
     "developer.drag.startingIn %lld" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -34,6 +34,9 @@ enum Tunables {
         /// Items up to this size are also offered as a staged file URL, for apps that do not take
         /// file promises. The copy is made synchronously when the target asks for it.
         static let stagedURLLimit: UInt64 = 64 * 1024 * 1024
+        /// How long a capture waits for the source app to write promised files. Photos may first
+        /// download originals from iCloud.
+        static let promiseTimeout: Duration = .seconds(120)
     }
 
     enum Permissions {

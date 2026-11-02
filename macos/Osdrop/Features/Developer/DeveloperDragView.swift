@@ -44,6 +44,8 @@
                 EmptyView()
             case .armed:
                 DragNote(text: Text("developer.drag.armed"))
+            case .receiving(let count):
+                DragNote(text: Text("developer.drag.receiving \(count)"), color: Theme.Colors.warning)
             case .captured(let drag):
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                     DragNote(text: Text("developer.drag.captured \(drag.items.count)"))
@@ -68,6 +70,8 @@
                 switch failure {
                 case .captureFailed:
                     DragNote(text: Text("developer.drag.captureFailed"), color: Theme.Colors.warning)
+                case .promiseTimedOut:
+                    DragNote(text: Text("developer.drag.promiseTimedOut"), color: Theme.Colors.warning)
                 case .tapUnavailable:
                     DragNote(text: Text("developer.tap.unavailable"), color: Theme.Colors.warning)
                 }

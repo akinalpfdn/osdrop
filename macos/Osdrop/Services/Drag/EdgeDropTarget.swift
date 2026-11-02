@@ -25,6 +25,8 @@ final class EdgeDropTarget {
     var onEnter: ((_ fileCount: Int, _ promiseCount: Int) -> Void)?
     /// Decides the drop; called synchronously when the source app's drag is released on the edge.
     var decide: (() -> EdgeDropDecision)?
+    /// Called when the drop holds promises and Osdrop waits for the source app to write them.
+    var onReceiving: ((_ promiseCount: Int) -> Void)?
     /// Called once every item is readable from a local file: at once for files, after the source
     /// app has written them for promises.
     var onCapture: ((Result<CapturedDrag, Error>) -> Void)?
@@ -61,8 +63,13 @@ final class EdgeDropTarget {
 
     fileprivate func entered(_ info: any NSDraggingInfo) -> NSDragOperation {
         let operation = operation(for: info)
+        let files = Self.fileURLs(on: info.draggingPasteboard).count
+        let promises = Self.promises(on: info.draggingPasteboard).count
+        Log.drag.info(
+            "Drag entered the edge: \(files, privacy: .public) files, \(promises, privacy: .public) promises, source operations \(info.draggingSourceOperationMask.rawValue, privacy: .public)"
+        )
         if operation == .copy {
-            onEnter?(Self.fileURLs(on: info.draggingPasteboard).count, Self.promises(on: info.draggingPasteboard).count)
+            onEnter?(files, promises)
         }
         return operation
     }
@@ -75,10 +82,16 @@ final class EdgeDropTarget {
     }
 
     fileprivate func perform(_ info: any NSDraggingInfo) -> Bool {
-        guard decide?() == .acceptAsCopy else { return false }
+        guard decide?() == .acceptAsCopy else {
+            Log.drag.info("Drop on the edge refused")
+            return false
+        }
         let pasteboard = info.draggingPasteboard
         let files = Self.fileURLs(on: pasteboard)
         let promises = Self.promises(on: pasteboard)
+        Log.drag.info(
+            "Drop on the edge accepted: \(files.count, privacy: .public) files, \(promises.count, privacy: .public) promises"
+        )
         if promises.isEmpty {
             onCapture?(Result { try Self.capture(files: files, promised: [], stagingFolder: nil) })
         } else {
@@ -97,13 +110,17 @@ final class EdgeDropTarget {
             return
         }
         let expected = promises.reduce(0) { $0 + max($1.fileTypes.count, 1) }
-        let reader = PromiseCollector.reader(expecting: expected) { [weak self] urls, failure in
+        onReceiving?(expected)
+        let reader = PromiseCollector.reader(expecting: expected, timeout: Tunables.Drag.promiseTimeout) {
+            [weak self] urls, failure in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let failure {
+                    Log.drag.error("Receiving promised files failed: \(failure.localizedDescription, privacy: .public)")
                     staging.remove(folder)
                     onCapture?(.failure(failure))
                 } else {
+                    Log.drag.info("Received \(urls.count, privacy: .public) promised files")
                     onCapture?(Result { try Self.capture(files: files, promised: urls, stagingFolder: folder) })
                 }
             }
@@ -171,19 +188,47 @@ private final class EdgeDropView: NSView {
 /// reports once when every one has arrived. Kept free of any actor: a main actor check in the
 /// reader ended Osdrop when Photos delivered a photo.
 enum PromiseCollector {
+    enum Failure: Error, Equatable {
+        /// The source app did not deliver every promised file in time (Photos may be downloading
+        /// the original from iCloud first).
+        case timedOut
+    }
+
+    private struct State {
+        var urls: [URL] = []
+        var failure: Error?
+        var count = 0
+        var isFinished = false
+    }
+
+    /// Reports exactly once: when every file arrived, or after `timeout`, whichever comes first.
+    /// Files that arrive after a timeout are ignored.
     static func reader(
-        expecting expected: Int, completion: @escaping @Sendable ([URL], Error?) -> Void
+        expecting expected: Int, timeout: Duration, completion: @escaping @Sendable ([URL], Error?) -> Void
     ) -> @Sendable (URL, Error?) -> Void {
-        let received = Locked<(urls: [URL], failure: Error?, count: Int)>(([], nil, 0))
+        let state = Locked(State())
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout.timeInterval) {
+            let timedOut = state.withLock { state -> Bool in
+                guard !state.isFinished else { return false }
+                state.isFinished = true
+                return true
+            }
+            if timedOut {
+                completion([], Failure.timedOut)
+            }
+        }
         return { url, error in
-            let done = received.withLock { state -> (urls: [URL], failure: Error?)? in
+            let done = state.withLock { state -> (urls: [URL], failure: Error?)? in
+                guard !state.isFinished else { return nil }
                 if let error {
                     state.failure = state.failure ?? error
                 } else {
                     state.urls.append(url)
                 }
                 state.count += 1
-                return state.count == expected ? (state.urls, state.failure) : nil
+                guard state.count == expected else { return nil }
+                state.isFinished = true
+                return (state.urls, state.failure)
             }
             if let done {
                 completion(done.urls, done.failure)

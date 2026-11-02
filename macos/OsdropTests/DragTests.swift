@@ -228,7 +228,7 @@ struct PromiseCollectorTests {
         let urls = (0..<8).map { URL(fileURLWithPath: "/tmp/promised-\($0)") }
         let reported = await withCheckedContinuation { continuation in
             let calls = Locked(0)
-            let reader = PromiseCollector.reader(expecting: urls.count) { received, failure in
+            let reader = PromiseCollector.reader(expecting: urls.count, timeout: .seconds(30)) { received, failure in
                 calls.withLock { $0 += 1 }
                 continuation.resume(returning: (Set(received), failure == nil, calls.withLock { $0 }))
             }
@@ -244,12 +244,34 @@ struct PromiseCollectorTests {
     @Test("A failed file fails the whole capture")
     func reportsFailure() async {
         let failed = await withCheckedContinuation { continuation in
-            let reader = PromiseCollector.reader(expecting: 2) { _, failure in
+            let reader = PromiseCollector.reader(expecting: 2, timeout: .seconds(30)) { _, failure in
                 continuation.resume(returning: failure != nil)
             }
             DispatchQueue.global().async { reader(URL(fileURLWithPath: "/tmp/a"), nil) }
             DispatchQueue.global().async { reader(URL(fileURLWithPath: "/tmp/b"), CocoaError(.fileReadNoSuchFile)) }
         }
         #expect(failed)
+    }
+}
+
+@Suite("Promise collector timeout")
+struct PromiseCollectorTimeoutTests {
+    @Test("A source that never delivers ends the capture after the timeout; late files are ignored")
+    func timesOut() async {
+        let reports = Locked<[Error?]>([])
+        let result = await withCheckedContinuation { continuation in
+            let reader = PromiseCollector.reader(expecting: 2, timeout: .milliseconds(100)) { urls, failure in
+                reports.withLock { $0.append(failure) }
+                continuation.resume(returning: (urls.isEmpty, failure as? PromiseCollector.Failure))
+            }
+            reader(URL(fileURLWithPath: "/tmp/only-one"), nil)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+                reader(URL(fileURLWithPath: "/tmp/too-late"), nil)
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(400))  // lets the late file arrive
+        #expect(result.0)
+        #expect(result.1 == .timedOut)
+        #expect(reports.withLock { $0.count } == 1)
     }
 }

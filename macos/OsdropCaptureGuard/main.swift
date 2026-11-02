@@ -41,7 +41,9 @@ while true {
         exit(EXIT_SUCCESS)
     }
     if state.shouldTerminate(at: now) {
-        log.error("Osdrop stopped answering during input capture; ending it to give the cursor back")
+        log.error(
+            "Process \(target, privacy: .public) stopped answering during input capture; ending it to give the cursor back"
+        )
         // SIGKILL also ends a stopped process; a hung app could not handle SIGTERM.
         kill(target, SIGKILL)
         exit(EXIT_SUCCESS)
