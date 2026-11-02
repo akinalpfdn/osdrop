@@ -18,12 +18,17 @@ protocol SecureInputChecking {
     func current() -> SecureInputStatus
 }
 
+/// Names the owner only when macOS's record agrees with the frontmost app. The record can be stale:
+/// with Secure Event Input turned on by a background process, macOS reported an unrelated app
+/// (measured in Phase 1), and a wrong name would send the user to the wrong window.
 struct SystemSecureInput: SecureInputChecking {
     func current() -> SecureInputStatus {
         guard IsSecureEventInputEnabled() else { return .off }
-        let processID = Self.ownerProcessID()
-        let name = processID.flatMap { NSRunningApplication(processIdentifier: $0)?.localizedName }
-        return SecureInputStatus(isEnabled: true, ownerName: name, ownerProcessID: processID)
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        guard let processID = Self.ownerProcessID(), processID == frontmost?.processIdentifier else {
+            return SecureInputStatus(isEnabled: true, ownerName: nil, ownerProcessID: nil)
+        }
+        return SecureInputStatus(isEnabled: true, ownerName: frontmost?.localizedName, ownerProcessID: processID)
     }
 
     /// The window server records the owner in the console user's session dictionary.
