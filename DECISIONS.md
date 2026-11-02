@@ -77,3 +77,21 @@ choices the plan leaves open are logged here.
 **Revisit if:** Another person gets write access, or releases need technically immutable tags.
 
 ---
+
+## 2026-11-02 — User decision: a guard process gives the cursor back when Osdrop hangs
+**Chosen:** `OsdropCaptureGuard`, a Foundation-only tool embedded in `Contents/MacOS`, is started with the event tap and reads one-byte messages on its standard input: arm when capture starts, a heartbeat on every healthy watchdog check (every 100 ms), disarm when capture ends. Armed and silent for 2 seconds, it sends SIGKILL to Osdrop; closing Osdrop's window server connection makes macOS show and release the cursor. Capture refuses to start when the guard cannot run. The in-app watchdog also ends a capture when the event tap stays disabled for three checks.
+**Alternatives:** Documenting Force Quit (⌥⌘⎋) as the way out; deferring the problem to Phase 18.
+**Why:** Phase 1 measured it: with Osdrop stopped (`SIGSTOP`) during capture, the cursor stayed hidden and frozen for as long as the app was stopped, because the freeze and the hidden state belong to Osdrop's own connection. The in-app watchdog cannot help when every thread is stuck. Leaving the user without a mouse breaks the input safety invariants, and a Force Quit escape depends on the keyboard still working and on the user knowing it.
+**Trade-offs:** One more process; a hung Osdrop is ended instead of waited for (it was not answering anyway). The guard's timeout must stay above the in-app watchdog's, so a hung main thread is still handled inside the app first.
+**Revisit if:** macOS offers a way to freeze and hide the cursor that ends with the process's responsiveness rather than its connection.
+
+---
+
+## 2026-11-02 — App Nap is held off while the event tap runs
+**Chosen:** `EventTapCapture` holds a `userInitiatedAllowingIdleSystemSleep` + `latencyCritical` activity from `start` to `stop`; the guard runs at user-interactive quality of service.
+**Alternatives:** Relying on the app being frontmost during capture.
+**Why:** A guard test in the windowless test host took 5 min 49 s instead of 2.8 s: App Nap delayed its timers by minutes. In Osdrop the same delay would make the watchdog late and could let the guard end a healthy app. Capture cannot rely on Osdrop being frontmost, because macOS 14 may refuse to activate it.
+**Trade-offs:** Slightly higher energy use while the tap runs; system sleep is still allowed.
+**Revisit if:** Input observation moves to a component that App Nap does not apply to.
+
+---
