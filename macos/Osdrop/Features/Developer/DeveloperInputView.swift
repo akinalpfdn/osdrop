@@ -123,6 +123,8 @@
                     Button("developer.capture.start") { viewModel.captureAndReplay() }
                         .disabled(!viewModel.canCapture)
                 }
+                Toggle("developer.capture.replay", isOn: $viewModel.replaysAfterCapture)
+                    .disabled(viewModel.isBusy)
                 PhaseNote(phase: viewModel.phase)
                 if viewModel.focusAcquired == true {
                     Note(text: Text("developer.capture.focusAcquired"))
@@ -146,9 +148,12 @@
                 Note(text: Text("developer.capture.remaining \(secondsLeft)"), color: Theme.Colors.warning)
             case .replaying:
                 Note(text: Text("developer.capture.replaying"))
-            case .finished(let replayed, let release):
+            case .finished(let recorded, let replayed, let release):
                 VStack(alignment: .leading, spacing: Theme.Spacing.small) {
-                    Note(text: Text("developer.capture.result \(replayed)"))
+                    Note(text: Text("developer.capture.recorded \(recorded)"))
+                    if let replayed {
+                        Note(text: Text("developer.capture.result \(replayed)"))
+                    }
                     switch release {
                     case .requested:
                         EmptyView()

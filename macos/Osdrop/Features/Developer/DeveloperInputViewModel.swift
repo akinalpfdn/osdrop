@@ -20,7 +20,8 @@
             case startingIn(secondsLeft: Int)
             case capturing(secondsLeft: Int)
             case replaying
-            case finished(replayedEvents: Int, release: CaptureReleaseReason)
+            /// `replayedEvents` is nil when replay was off.
+            case finished(recordedEvents: Int, replayedEvents: Int?, release: CaptureReleaseReason)
         }
 
         struct Counts: Equatable {
@@ -33,6 +34,8 @@
         let accessibility: AccessibilityPermission
         let hidesCursorInBackground: Bool
         var captureSeconds = Tunables.Developer.defaultCaptureSeconds
+        /// Off by default: replayed keys go to whichever app has focus once the capture ends.
+        var replaysAfterCapture = false
         private(set) var tapState: TapState = .stopped
         private(set) var phase: RunPhase = .idle
         private(set) var counts = Counts()
@@ -186,6 +189,11 @@
             let recorded = recording ?? []
             recording = nil
 
+            let replayed = replaysAfterCapture ? await replay(recorded, from: start) : nil
+            phase = .finished(recordedEvents: recorded.count, replayedEvents: replayed, release: release)
+        }
+
+        private func replay(_ recorded: [CapturedInput], from start: CGPoint) async -> Int {
             phase = .replaying
             let bounds = screens.map(\.frame).reduce(CGRect.null) { $0.union($1) }
             let plan = ReplayPlan(
@@ -197,7 +205,7 @@
             }
             injector.releaseAll()
             droppedKeyCount = injector.droppedKeyCount
-            phase = .finished(replayedEvents: plan.steps.count, release: release)
+            return plan.steps.count
         }
 
         private func apply(_ action: ReplayPlan.Action) {
