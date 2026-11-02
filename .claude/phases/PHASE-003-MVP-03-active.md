@@ -1,5 +1,5 @@
 # Phase 003 (MVP-03) — macOS drag bridge
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 2 (go/no-go gate). Depends on: Phase 1
 
