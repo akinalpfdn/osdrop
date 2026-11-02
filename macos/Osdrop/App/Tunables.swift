@@ -28,6 +28,14 @@ enum Tunables {
         static let tapThreadStopTimeout: Duration = .seconds(2)
     }
 
+    enum Drag {
+        /// How often the drag monitor looks at the mouse button and the drag pasteboard.
+        static let monitorInterval: Duration = .milliseconds(33)
+        /// Items up to this size are also offered as a staged file URL, for apps that do not take
+        /// file promises. The copy is made synchronously when the target asks for it.
+        static let stagedURLLimit: UInt64 = 64 * 1024 * 1024
+    }
+
     enum Permissions {
         /// macOS posts no reliable notification when Accessibility access changes, so it is
         /// re-read on this interval while the app runs.
@@ -42,6 +50,15 @@ enum Tunables {
             static let maximumReplayGap: Duration = .milliseconds(500)
             /// Seconds between pressing Capture and the capture starting.
             static let captureCountdownSeconds = 3
+            /// The loopback drag starts this far inside the primary display's left edge.
+            static let dragOriginInset = 40.0
+            /// The loopback drag moves in this many steps, this far apart.
+            static let dragSteps = 24
+            static let dragStepDelay: Duration = .milliseconds(25)
+            /// Pause on each small movement over the drop target before releasing.
+            static let dropHover: Duration = .milliseconds(150)
+            /// How long the loopback waits for macOS to report the end of the drag.
+            static let dragEndTimeout: Duration = .seconds(5)
         }
     #endif
 }

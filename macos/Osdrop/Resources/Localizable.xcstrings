@@ -426,6 +426,261 @@
         }
       }
     },
+    "developer.drag.accept" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accept drops at the edge (off: the drag slides back)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kenara bırakılanı kabul et (kapalıysa sürükleme geri kayar)"
+          }
+        }
+      }
+    },
+    "developer.drag.arm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arm"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hazırla"
+          }
+        }
+      }
+    },
+    "developer.drag.armed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Armed: drag something to the right edge of the main display."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hazır: bir şeyi ana ekranın sağ kenarına sürükle."
+          }
+        }
+      }
+    },
+    "developer.drag.cancelled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The drag was cancelled or nothing accepted it."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sürükleme iptal edildi ya da hiçbir yer kabul etmedi."
+          }
+        }
+      }
+    },
+    "developer.drag.captureFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The dropped items could not be read."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bırakılan öğeler okunamadı."
+          }
+        }
+      }
+    },
+    "developer.drag.captured %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Captured %lld items; the originals stay where they are:"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld öğe yakalandı; asılları yerinde duruyor:"
+          }
+        }
+      }
+    },
+    "developer.drag.disarm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disarm"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapat"
+          }
+        }
+      }
+    },
+    "developer.drag.dragging" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dragging…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sürükleniyor…"
+          }
+        }
+      }
+    },
+    "developer.drag.drop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drop with Osdrop"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osdrop ile Bırak"
+          }
+        }
+      }
+    },
+    "developer.drag.dropped %lld %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dropped. Written: %1$lld, failed: %2$lld (large items keep writing; Finder shows their progress)."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bırakıldı. Yazılan: %1$lld, başarısız: %2$lld (büyük öğeler yazılmaya devam eder; ilerlemesini Finder gösterir)."
+          }
+        }
+      }
+    },
+    "developer.drag.explanation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arm, then drag files or folders from Finder or Photos to the right edge of the main display: a green strip appears there during the drag. Release on it. Then press Drop with Osdrop and put the cursor where the items should land within 3 seconds; Osdrop drags them there from the left edge while it holds this Mac's input."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hazırla'ya bas, sonra Finder'dan ya da Fotoğraflar'dan dosya veya klasörleri ana ekranın sağ kenarına sürükle: sürükleme sırasında orada yeşil bir şerit çıkar. Şeridin üstünde bırak. Ardından Osdrop ile Bırak'a bas ve 3 saniye içinde imleci öğelerin gideceği yere götür; Osdrop bu Mac'in girdisini tutarken onları sol kenardan oraya sürükler."
+          }
+        }
+      }
+    },
+    "developer.drag.item %@ %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "developer.drag.placeCursor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press Drop with Osdrop, then put the cursor on a Finder window, the desktop or an app."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osdrop ile Bırak'a bas, sonra imleci bir Finder penceresine, masaüstüne ya da bir uygulamaya götür."
+          }
+        }
+      }
+    },
+    "developer.drag.startingIn %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dragging in %lld s: put the cursor where the items should land."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sn sonra sürüklenecek: imleci öğelerin gideceği yere götür."
+          }
+        }
+      }
+    },
+    "developer.drag.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drag bridge (loopback)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sürükleme köprüsü (loopback)"
+          }
+        }
+      }
+    },
     "developer.keyboard.dropped %lld" : {
       "extractionState" : "manual",
       "localizations" : {

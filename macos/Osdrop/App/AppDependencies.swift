@@ -8,6 +8,7 @@ final class AppDependencies {
     let focus: any CaptureFocusing
     let secureInput: any SecureInputChecking
     let screens: any ScreenDescribing
+    let staging: DragStaging
 
     init(
         accessibility: AccessibilityPermission = AccessibilityPermission(),
@@ -15,7 +16,8 @@ final class AppDependencies {
         injector: (any InputInjecting)? = nil,
         focus: any CaptureFocusing = InvisibleKeyWindowFocus(),
         secureInput: any SecureInputChecking = SystemSecureInput(),
-        screens: any ScreenDescribing = CGScreenDescriber()
+        screens: any ScreenDescribing = CGScreenDescriber(),
+        staging: DragStaging = DragStaging()
     ) {
         self.accessibility = accessibility
         self.cursor = cursor
@@ -24,5 +26,6 @@ final class AppDependencies {
         self.focus = focus
         self.secureInput = secureInput
         self.screens = screens
+        self.staging = staging
     }
 }

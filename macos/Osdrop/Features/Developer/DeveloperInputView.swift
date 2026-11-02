@@ -5,6 +5,7 @@
         static let windowID = "developer"
 
         @Bindable var viewModel: DeveloperInputViewModel
+        let drag: DeveloperDragViewModel
 
         var body: some View {
             ScrollView {
@@ -14,6 +15,8 @@
                     TapSection(viewModel: viewModel)
                     Divider()
                     CaptureSection(viewModel: viewModel)
+                    Divider()
+                    DragLoopbackSection(viewModel: drag)
                     Divider()
                     SecureInputSection(status: viewModel.secureInput)
                     Divider()
