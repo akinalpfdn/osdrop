@@ -97,33 +97,21 @@ final class EdgeDropTarget {
             return
         }
         let expected = promises.reduce(0) { $0 + max($1.fileTypes.count, 1) }
-        let received = Locked<(urls: [URL], failure: Error?, count: Int)>(([], nil, 0))
+        let reader = PromiseCollector.reader(expecting: expected) { [weak self] urls, failure in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let failure {
+                    staging.remove(folder)
+                    onCapture?(.failure(failure))
+                } else {
+                    onCapture?(Result { try Self.capture(files: files, promised: urls, stagingFolder: folder) })
+                }
+            }
+        }
         let queue = OperationQueue()
         queue.qualityOfService = .userInitiated
         for promise in promises {
-            promise.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: queue) {
-                [weak self] url, error in
-                let done = received.withLock { state -> (urls: [URL], failure: Error?)? in
-                    if let error {
-                        state.failure = state.failure ?? error
-                    } else {
-                        state.urls.append(url)
-                    }
-                    state.count += 1
-                    return state.count == expected ? (state.urls, state.failure) : nil
-                }
-                guard let done else { return }
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if let failure = done.failure {
-                        staging.remove(folder)
-                        onCapture?(.failure(failure))
-                    } else {
-                        onCapture?(
-                            Result { try Self.capture(files: files, promised: done.urls, stagingFolder: folder) })
-                    }
-                }
-            }
+            promise.receivePromisedFiles(atDestination: folder, options: [:], operationQueue: queue, reader: reader)
         }
     }
 
@@ -176,5 +164,30 @@ private final class EdgeDropView: NSView {
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         target?.perform(sender) ?? false
+    }
+}
+
+/// Collects promised files as the source app delivers them, on whatever queue AppKit uses, and
+/// reports once when every one has arrived. Kept free of any actor: a main actor check in the
+/// reader ended Osdrop when Photos delivered a photo.
+enum PromiseCollector {
+    static func reader(
+        expecting expected: Int, completion: @escaping @Sendable ([URL], Error?) -> Void
+    ) -> @Sendable (URL, Error?) -> Void {
+        let received = Locked<(urls: [URL], failure: Error?, count: Int)>(([], nil, 0))
+        return { url, error in
+            let done = received.withLock { state -> (urls: [URL], failure: Error?)? in
+                if let error {
+                    state.failure = state.failure ?? error
+                } else {
+                    state.urls.append(url)
+                }
+                state.count += 1
+                return state.count == expected ? (state.urls, state.failure) : nil
+            }
+            if let done {
+                completion(done.urls, done.failure)
+            }
+        }
     }
 }

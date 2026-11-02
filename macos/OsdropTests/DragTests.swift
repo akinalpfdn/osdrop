@@ -218,3 +218,38 @@ struct PromiseFulfillerTests {
         #expect(answers.1 == "notes.txt")
     }
 }
+
+@Suite("Promise collector")
+struct PromiseCollectorTests {
+    /// AppKit delivers promised files on a background queue; a main actor check in the reader
+    /// ended Osdrop when Photos delivered a photo.
+    @Test("Files arriving on background queues are reported once, all together")
+    func collectsOffTheMainActor() async {
+        let urls = (0..<8).map { URL(fileURLWithPath: "/tmp/promised-\($0)") }
+        let reported = await withCheckedContinuation { continuation in
+            let calls = Locked(0)
+            let reader = PromiseCollector.reader(expecting: urls.count) { received, failure in
+                calls.withLock { $0 += 1 }
+                continuation.resume(returning: (Set(received), failure == nil, calls.withLock { $0 }))
+            }
+            for url in urls {
+                DispatchQueue.global().async { reader(url, nil) }
+            }
+        }
+        #expect(reported.0 == Set(urls))
+        #expect(reported.1)
+        #expect(reported.2 == 1)
+    }
+
+    @Test("A failed file fails the whole capture")
+    func reportsFailure() async {
+        let failed = await withCheckedContinuation { continuation in
+            let reader = PromiseCollector.reader(expecting: 2) { _, failure in
+                continuation.resume(returning: failure != nil)
+            }
+            DispatchQueue.global().async { reader(URL(fileURLWithPath: "/tmp/a"), nil) }
+            DispatchQueue.global().async { reader(URL(fileURLWithPath: "/tmp/b"), CocoaError(.fileReadNoSuchFile)) }
+        }
+        #expect(failed)
+    }
+}
