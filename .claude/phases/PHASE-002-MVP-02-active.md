@@ -1,5 +1,5 @@
 # Phase 002 (MVP-02) — macOS input layer
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 1 (go/no-go gate). Depends on: Phase 0
 
