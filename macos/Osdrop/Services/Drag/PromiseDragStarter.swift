@@ -82,6 +82,12 @@ final class PromiseDragStarter {
     private func finish(_ outcome: DragOutcome) {
         origin.hide()
         pending = nil
+        // After a drop, the target may still read its staged copies (Mail keeps attachments by
+        // path until the message is sent); they go when Osdrop starts next. A cancelled drag
+        // leaves no reader, so its copies go now.
+        if outcome == .cancelled {
+            fulfiller?.removeStagedCopies()
+        }
         let completion = self.completion
         self.completion = nil
         completion?(outcome)
@@ -103,6 +109,7 @@ final class PromiseFulfiller: NSObject, NSFilePromiseProviderDelegate, @unchecke
     private let writer: PromisedItemWriter
     private let staging: DragStaging
     private let report: @Sendable (DragItem, Result<URL, Error>) -> Void
+    private let stagedFolders = Locked<[URL]>([])
     private let queue: OperationQueue = {
         let queue = OperationQueue()
         queue.qualityOfService = .userInitiated
@@ -147,12 +154,21 @@ final class PromiseFulfiller: NSObject, NSFilePromiseProviderDelegate, @unchecke
         }
     }
 
+    func removeStagedCopies() {
+        let folders = stagedFolders.withLock { folders in
+            defer { folders.removeAll() }
+            return folders
+        }
+        folders.forEach(staging.remove)
+    }
+
     /// A complete copy in a staging folder, for drop targets that read only file URLs. Written
     /// synchronously, so it is offered only below `Tunables.Drag.stagedURLLimit`.
     func stagedCopy(of item: DragItem) -> URL? {
         guard item.byteCount <= Tunables.Drag.stagedURLLimit else { return nil }
         do {
             let folder = try staging.makeFolder()
+            stagedFolders.withLock { $0.append(folder) }
             return try writer.write(item, into: folder, progress: Progress(totalUnitCount: Int64(item.byteCount)))
         } catch {
             Log.drag.error("Staging a copy failed: \(error.localizedDescription, privacy: .public)")
