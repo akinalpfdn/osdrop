@@ -61,10 +61,11 @@ scenario says otherwise: replayed keys reach whichever app has focus.
 | C1 | Capture | **Capture**, 10 s; after the countdown move the mouse, click, scroll and press keys | The cursor hides and stays put; nothing on screen reacts; after 10 s the cursor is back where it was and works |
 | C2 | Release chord | **Capture**, then press ⌃⌥⌘⎋ | Capture ends at once; the window reports the chord |
 | C3 | Hung app | **Capture**; in a terminal, stop the app when the capture starts: `kill -STOP $(pgrep -x Osdrop)` | About 2 s later `OsdropCaptureGuard` ends Osdrop and the cursor comes back; start Osdrop again |
-| C4 | Secure input | Turn on Terminal › Secure Keyboard Entry and focus Terminal | The developer window names Terminal under "Secure keyboard entry" |
+| C4 | Secure input | Turn on Terminal › Secure Keyboard Entry and focus Terminal | The developer window says secure keyboard entry is on |
+| C5 | Another app in front | **Capture**; during the countdown click Finder | The cursor hides and stays put; the window says whether macOS gave Osdrop keyboard focus |
 
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
-| 2026-11-02 | Phase 1 branch, Debug, M3 Air | C1, C3 | Pass (C3 after the capture guard was added; before it, the cursor stayed hidden while the app was stopped) |
+| 2026-11-02 | Phase 1 branch, Debug, M3 Air | C1, C3, C5 | Pass (C3 after the capture guard was added; before it, the cursor stayed hidden while the app was stopped). C5: macOS refused Osdrop keyboard focus with Finder in front |
