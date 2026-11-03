@@ -4,8 +4,8 @@
 // per group member, dialled by the side with the lower device ID; duplicates from simultaneous
 // dials resolved the same way on both sides; reconnects with backoff; transfer streams opened on
 // sessions. The Asio node drives it on its I/O thread; tests drive several meshes over a simulated
-// network. Every call must come from the same thread, and observers must not call back into the
-// mesh.
+// network. Every call must come from the same thread. Observers must not call back into the mesh;
+// they may defer() work instead, which runs before the entry point that called them returns.
 
 #include "crypto/noise.hpp"
 #include "mesh/transfer_channel.hpp"
@@ -20,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -36,6 +37,7 @@ using DeviceId = protocol::Id;
 using session::LogLevel;
 using session::SessionStats;
 using session::TrustDecision;
+using session::TrustVerdict;
 
 struct PeerAddress {
     std::string host;
@@ -96,8 +98,8 @@ class MeshObserver {
 public:
     virtual ~MeshObserver() = default;
     /// The peer's static key is authenticated. Decide from in-memory data: the mesh waits.
-    [[nodiscard]] virtual TrustDecision on_trust_query(const crypto::Key& peer_key,
-                                                       const protocol::Hello& hello) = 0;
+    [[nodiscard]] virtual TrustVerdict on_trust_query(const crypto::Key& peer_key,
+                                                      const protocol::Hello& hello) = 0;
     /// A first pairing: show the code; answer with Mesh::confirm_pairing.
     virtual void on_pairing_code(ConnectionId connection, std::uint32_t code,
                                  const crypto::Key& peer_key, const protocol::Hello& hello) = 0;
@@ -108,8 +110,12 @@ public:
     virtual void on_peer_connected(const DeviceId& device, const crypto::Key& peer_key,
                                    const protocol::Hello& hello,
                                    const protocol::Capabilities& capabilities) = 0;
-    /// `reason` is empty for an orderly end.
-    virtual void on_peer_disconnected(const DeviceId& device, std::optional<Error> reason) = 0;
+    /// `reason` is empty for an orderly end; `bye` is the reason the peer gave, if it said Bye.
+    virtual void on_peer_disconnected(const DeviceId& device, std::optional<Error> reason,
+                                      std::optional<protocol::ByeReason> bye) = 0;
+    /// A connected peer announced new capabilities.
+    virtual void on_peer_capabilities(const DeviceId& device,
+                                      const protocol::Capabilities& capabilities) = 0;
     /// Silent for unresponsive_after (false), or heard from again (true). Input to and from an
     /// unresponsive peer must stop.
     virtual void on_peer_responsive(const DeviceId& device, bool responsive) = 0;
@@ -165,6 +171,14 @@ public:
     [[nodiscard]] Status<Error> confirm_pairing(ConnectionId id, bool accepted, TimePoint now);
     /// Changes the group this computer advertises in Hello and dials members of.
     void set_group(const protocol::Id& group, TimePoint now);
+    /// Who is trusted changed (a roster merge): peers refused before are dialled again.
+    void trust_changed(TimePoint now);
+    /// Changes the features announced to a connected peer (its permissions changed).
+    void update_features(const DeviceId& device, std::uint32_t features, TimePoint now);
+    /// Runs `work` after the current entry point's own work, before it returns. For observers.
+    void defer(std::function<void(Mesh&, TimePoint)> work);
+    /// Runs deferred work now; for callers outside any entry point (commands on other layers).
+    void flush(TimePoint now);
     [[nodiscard]] Status<Error>
     send_message(const DeviceId& device, const protocol::ControlMessage& message, TimePoint now);
     [[nodiscard]] Status<Error> send_motion(const DeviceId& device,
@@ -192,7 +206,7 @@ private:
     struct Peer;
 
     // Session events, from the adapters.
-    TrustDecision trust_query(Connection& connection, const crypto::Key& peer_key);
+    TrustVerdict trust_query(Connection& connection, const crypto::Key& peer_key);
     void session_state(Connection& connection, session::SessionState state,
                        std::optional<Error> reason, TimePoint now);
     void session_established(Connection& connection, const protocol::Capabilities& peer);
@@ -231,6 +245,7 @@ private:
     std::map<ConnectionId, std::unique_ptr<Connection>> connections_;
     std::map<DeviceId, Peer> peers_;
     std::vector<ConnectionId> duplicates_; // control connections to close as duplicates
+    std::vector<std::function<void(Mesh&, TimePoint)>> deferred_;
     bool settling_ = false;
     TimePoint now_; // the time of the entry point being run, for session callbacks
 };

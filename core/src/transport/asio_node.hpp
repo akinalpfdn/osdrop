@@ -14,6 +14,7 @@
 #include "util/expected.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace osdrop::transport {
@@ -26,10 +27,12 @@ struct NodeOptions {
 
 class AsioNode {
 public:
-    /// Listens on both IPv4 and IPv6 and starts the I/O thread.
+    /// Listens on both IPv4 and IPv6 and starts the I/O thread. `attach` sees the mesh before
+    /// anything reaches it, so a layer above (the group) can keep a reference to it.
     [[nodiscard]] static Expected<std::unique_ptr<AsioNode>, Error>
     create(mesh::MeshConfig config, crypto::KeyPair identity, crypto::RandomSource& random,
-           mesh::MeshObserver& observer, NodeOptions options = {});
+           mesh::MeshObserver& observer, NodeOptions options = {},
+           const std::function<void(mesh::Mesh&)>& attach = {});
 
     /// Ends every session with Bye (application quit), lets queued bytes go out for a moment and
     /// joins the I/O thread.
@@ -46,11 +49,14 @@ public:
     void peer_discovered(const mesh::DeviceId& device, const protocol::Id& group,
                          const mesh::PeerAddress& address);
     void peer_lost(const mesh::DeviceId& device);
-    void set_group(const protocol::Id& group);
     void send_motion(const mesh::DeviceId& device, const protocol::PointerMotion& motion);
     void close_transfer(const mesh::DeviceId& device, std::uint32_t stream_id);
-    void disconnect(const mesh::DeviceId& device, protocol::ByeReason reason);
     void close_all(protocol::ByeReason reason);
+
+    /// Runs `work` on the I/O thread with the mesh, for layers above it; returns at once.
+    void run(std::function<void(mesh::Mesh&, TimePoint)> work);
+    /// As run, and waits until it ran; false when the I/O thread did not answer in time.
+    [[nodiscard]] bool run_and_wait(std::function<void(mesh::Mesh&, TimePoint)> work);
 
     // Wait for the I/O thread's answer.
     [[nodiscard]] Expected<mesh::ConnectionId, Error> pair_with(const mesh::PeerAddress& address);

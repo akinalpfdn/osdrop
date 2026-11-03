@@ -33,8 +33,9 @@ bool allowed_in_plaintext(ControlType type) {
 /// The local reason for an Error message from the peer: the codes the UI explains as such, any
 /// other as a generic peer error.
 Error reason_for_peer_error(std::uint16_t code) {
-    for (const Error known : {Error::UnsupportedVersion, Error::PairingRejected, Error::NotTrusted,
-                              Error::PeerBusy, Error::NotPermitted}) {
+    for (const Error known :
+         {Error::UnsupportedVersion, Error::PairingRejected, Error::NotTrusted, Error::PeerBusy,
+          Error::NotPermitted, Error::GroupFull, Error::InAnotherGroup}) {
         if (code == static_cast<std::uint16_t>(known)) {
             return known;
         }
@@ -224,8 +225,9 @@ bool SessionEngine::is_expected(ControlType type) const {
         return state_ == SessionState::Handshaking && peer_hello_received_ && handshake_;
     case ControlType::PairingConfirm:
         return state_ == SessionState::AwaitingPairing && !peer_accepted_;
-    case ControlType::Capabilities:
-        return state_ == SessionState::Negotiating && !peer_capabilities_;
+    case ControlType::Capabilities: // again when the peer's permissions for this computer change
+        return (state_ == SessionState::Negotiating && !peer_capabilities_) ||
+               state_ == SessionState::Established;
     case ControlType::SessionSetup:
         return state_ == SessionState::Negotiating && !peer_setup_;
     case ControlType::Ping:
@@ -253,8 +255,13 @@ void SessionEngine::handle_message(const ControlMessage& message, TimePoint now)
                    [&](const protocol::HandshakeMessage& m) { handle_handshake(m, now); },
                    [&](const protocol::PairingConfirm& m) { handle_pairing_confirm(m, now); },
                    [&](const protocol::Capabilities& m) {
+                       const bool update = state_ == SessionState::Established;
                        peer_capabilities_ = m;
-                       establish_if_ready(now);
+                       if (update) {
+                           observer_.on_capabilities(m);
+                       } else {
+                           establish_if_ready(now);
+                       }
                    },
                    [&](const protocol::SessionSetup& m) {
                        peer_setup_ = m;
@@ -344,12 +351,14 @@ void SessionEngine::handshake_complete(TimePoint now) {
     next_stats_ = now + config_.tunables.stats_interval;
     set_state(SessionState::AwaitingPairing);
 
-    trust_ = observer_.on_trust_query(peer_static_);
+    const TrustVerdict verdict = observer_.on_trust_query(peer_static_);
     if (state_ == SessionState::Closed) {
         return;
     }
+    trust_ = verdict.decision;
+    features_ = verdict.features;
     if (trust_ == TrustDecision::Blocked) {
-        fail(Error::NotTrusted, true, now);
+        fail(verdict.refusal, true, now);
         return;
     }
     if (trust_ == TrustDecision::Trusted) {
@@ -416,7 +425,7 @@ void SessionEngine::enter_negotiation(TimePoint now) {
         return;
     }
     set_state(SessionState::Negotiating);
-    send(config_.capabilities, now);
+    send(offered_capabilities(), now);
     send(protocol::SessionSetup{.udp_port = input_port,
                                 .listen_port = listen_port,
                                 .input_token = input_token_,
@@ -490,6 +499,22 @@ Status<Error> SessionEngine::send_message(const ControlMessage& message, TimePoi
     send(message, now);
     return state_ == SessionState::Closed ? Status<Error>::failure(Error::ConnectionClosed)
                                           : Status<Error>::ok();
+}
+
+protocol::Capabilities SessionEngine::offered_capabilities() const {
+    protocol::Capabilities offered = config_.capabilities;
+    offered.features &= features_;
+    return offered;
+}
+
+void SessionEngine::update_features(std::uint32_t features, TimePoint now) {
+    if (features_ == features) {
+        return;
+    }
+    features_ = features;
+    if (state_ == SessionState::Established && !closing_) {
+        send(offered_capabilities(), now);
+    }
 }
 
 void SessionEngine::close(protocol::ByeReason reason, TimePoint now) {

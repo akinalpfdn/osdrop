@@ -21,11 +21,13 @@ add_executable(osdrop_core_tests
     capi_mesh_test.cpp
     capi_protocol_test.cpp
     crypto_primitives_test.cpp
+    group_test.cpp
     input_crypto_test.cpp
     mesh_test.cpp
     noise_handshake_test.cpp
     noise_vectors_test.cpp
     protocol_codec_test.cpp
+    roster_test.cpp
     protocol_fixture_test.cpp
     session_engine_test.cpp
     transport_test.cpp

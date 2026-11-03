@@ -42,7 +42,8 @@ struct Mesh::Peer {
     TimePoint discovered_at;
     TimePoint next_dial;
     Microseconds backoff{0};
-    bool blocked = false; ///< refused, or disconnected on purpose: no dial until rediscovered
+    bool refused = false; ///< refused this computer: no dial until trust changes or rediscovered
+    bool held = false;    ///< disconnected on purpose: no dial until rediscovered
 };
 
 struct Mesh::Connection {
@@ -86,7 +87,7 @@ public:
         mesh_->session_state(*connection_, state, reason, mesh_->now_);
     }
     void on_peer_hello(const protocol::Hello& /*hello*/) override {}
-    TrustDecision on_trust_query(const crypto::Key& peer_static_key) override {
+    TrustVerdict on_trust_query(const crypto::Key& peer_static_key) override {
         return mesh_->trust_query(*connection_, peer_static_key);
     }
     void on_pairing_code(std::uint32_t code) override {
@@ -104,6 +105,11 @@ public:
     }
     void on_established(const protocol::Capabilities& peer) override {
         mesh_->session_established(*connection_, peer);
+    }
+    void on_capabilities(const protocol::Capabilities& peer) override {
+        if (connection_->connected_reported) {
+            mesh_->observer_.on_peer_capabilities(connection_->peer, peer);
+        }
     }
     void on_responsive(bool responsive) override {
         if (connection_->connected_reported) {
@@ -258,16 +264,16 @@ std::vector<DeviceId> Mesh::connected_peers() const {
 
 // --- Session events ------------------------------------------------------------------------------
 
-TrustDecision Mesh::trust_query(Connection& connection, const crypto::Key& peer_key) {
+TrustVerdict Mesh::trust_query(Connection& connection, const crypto::Key& peer_key) {
     const DeviceId device = crypto::device_id(peer_key);
     if (device == device_id_) {
         log(LogLevel::Warning, "Connected to this computer itself");
-        return TrustDecision::Blocked;
+        return TrustVerdict{};
     }
     if (connection.expected && *connection.expected != device) {
         log(LogLevel::Warning,
             "Dialled " + short_id(*connection.expected) + " but reached " + short_id(device));
-        return TrustDecision::Blocked;
+        return TrustVerdict{};
     }
     connection.peer = device;
     connection.peer_known = true;
@@ -290,7 +296,7 @@ TrustDecision Mesh::trust_query(Connection& connection, const crypto::Key& peer_
                                 std::to_string(loser.id));
     }
     if (connection.duplicate) {
-        return TrustDecision::Unknown; // nothing is sent before the duplicate is closed
+        return TrustVerdict{.decision = TrustDecision::Unknown}; // closed before anything is sent
     }
     return observer_.on_trust_query(peer_key, connection.engine->peer_hello());
 }
@@ -316,7 +322,7 @@ void Mesh::session_state(Connection& connection, session::SessionState state,
     close_children(connection.id, reason.value_or(Error::ConnectionClosed));
     if (connection.connected_reported) {
         log(LogLevel::Info, "Disconnected from " + short_id(connection.peer));
-        observer_.on_peer_disconnected(connection.peer, reason);
+        observer_.on_peer_disconnected(connection.peer, reason, connection.engine->peer_bye());
     } else if (connection.pairing) {
         observer_.on_pairing_failed(connection.id, reason.value_or(Error::ConnectionClosed));
     }
@@ -331,7 +337,7 @@ void Mesh::session_state(Connection& connection, session::SessionState state,
         return;
     }
     if (blocks_redial(reason)) {
-        it->second.blocked = true;
+        it->second.refused = true;
     } else if (connection.engine->peer_bye() != protocol::ByeReason::Duplicate) {
         schedule_retry(it->second, now);
     }
@@ -544,8 +550,8 @@ void Mesh::on_closed(ConnectionId id, Error reason, TimePoint now) {
 // --- Time and dialling ---------------------------------------------------------------------------
 
 bool Mesh::wants_session(const Peer& peer) const {
-    return peer.discovered && peer.address && !peer.blocked && !is_zero(config_.group_id) &&
-           peer.group == config_.group_id;
+    return peer.discovered && peer.address && !peer.refused && !peer.held &&
+           !is_zero(config_.group_id) && peer.group == config_.group_id;
 }
 
 TimePoint Mesh::dial_due(const Peer& peer) const {
@@ -624,12 +630,21 @@ void Mesh::settle(TimePoint now) {
         return;
     }
     settling_ = true;
-    while (!duplicates_.empty()) {
-        const ConnectionId id = duplicates_.back();
-        duplicates_.pop_back();
-        if (const Connection* connection = find(id);
-            connection != nullptr && connection->kind == Connection::Kind::Control) {
-            connection->engine->close(protocol::ByeReason::Duplicate, now);
+    while (!duplicates_.empty() || !deferred_.empty()) {
+        while (!duplicates_.empty()) {
+            const ConnectionId id = duplicates_.back();
+            duplicates_.pop_back();
+            if (const Connection* connection = find(id);
+                connection != nullptr && connection->kind == Connection::Kind::Control) {
+                connection->engine->close(protocol::ByeReason::Duplicate, now);
+            }
+        }
+        // Observers' deferred work may call entry points; their own settle() returns at once and
+        // this loop picks up what they leave.
+        auto work = std::move(deferred_);
+        deferred_.clear();
+        for (auto& item : work) {
+            item(*this, now);
         }
     }
     std::erase_if(connections_, [](const auto& entry) { return entry.second->closed; });
@@ -653,7 +668,8 @@ void Mesh::peer_discovered(const DeviceId& device, const protocol::Id& group,
         peer.discovered_at = now;
     }
     peer.discovered = true;
-    peer.blocked = false;
+    peer.refused = false;
+    peer.held = false;
     if (changed) {
         peer.next_dial = now;
         peer.backoff = Microseconds{0};
@@ -693,6 +709,32 @@ Status<Error> Mesh::confirm_pairing(ConnectionId id, bool accepted, TimePoint no
                       : Status<Error>::failure(Error::InvalidState);
     settle(now);
     return result;
+}
+
+void Mesh::defer(std::function<void(Mesh&, TimePoint)> work) {
+    deferred_.push_back(std::move(work));
+}
+
+void Mesh::flush(TimePoint now) {
+    now_ = now;
+    settle(now);
+}
+
+void Mesh::trust_changed(TimePoint now) {
+    now_ = now;
+    for (auto& [device, peer] : peers_) {
+        peer.refused = false;
+    }
+    dial_due_peers(now);
+    settle(now);
+}
+
+void Mesh::update_features(const DeviceId& device, std::uint32_t features, TimePoint now) {
+    now_ = now;
+    if (const Connection* connection = established_with(device); connection != nullptr) {
+        connection->engine->update_features(features, now);
+    }
+    settle(now);
 }
 
 void Mesh::set_group(const protocol::Id& group, TimePoint now) {
@@ -788,7 +830,7 @@ void Mesh::close_transfer(const DeviceId& device, std::uint32_t stream_id, TimeP
 void Mesh::disconnect(const DeviceId& device, protocol::ByeReason reason, TimePoint now) {
     now_ = now;
     if (const auto it = peers_.find(device); it != peers_.end()) {
-        it->second.blocked = true;
+        it->second.held = true;
     }
     for (auto& [id, connection] : connections_) {
         if (!connection->closed && connection->kind == Connection::Kind::Control &&
@@ -803,7 +845,7 @@ void Mesh::disconnect(const DeviceId& device, protocol::ByeReason reason, TimePo
 void Mesh::close_all(protocol::ByeReason reason, TimePoint now) {
     now_ = now;
     for (auto& [device, peer] : peers_) {
-        peer.blocked = true;
+        peer.held = true;
     }
     for (auto& [id, connection] : connections_) {
         if (connection->closed) {
