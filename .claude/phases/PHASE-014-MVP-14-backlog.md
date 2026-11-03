@@ -1,5 +1,6 @@
 # Phase 014 (MVP-14) — File transfer engine
-Status: ACTIVE
+Status: BACKLOG — code done (PR #12, draft, CI green); the 10 GB Mac ↔ PC throughput criterion
+and TESTING F1–F4 wait for the PC and Phase 14's drag and drop
 
 DEVPLAN reference: Phase 13. Depends on: Phase 7, Phase 8
 

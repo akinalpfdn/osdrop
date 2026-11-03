@@ -1,5 +1,5 @@
 # Phase 016 (MVP-16) — Shared clipboard
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 15. Depends on: Phase 13
 
@@ -21,3 +21,6 @@ Copy on one computer and paste on another, for text, images and files.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- Started while only one Mac is at hand (user, 2026-11-03: "devam edebilirsin"); the only phase whose
+  dependencies are met. Branch stacked on Phase 13 (`feature/phase-13-transfer`); its PR targets
+  that branch and is not merged until the stack is merged in order.
