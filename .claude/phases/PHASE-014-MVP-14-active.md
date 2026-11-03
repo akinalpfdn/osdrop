@@ -1,5 +1,5 @@
 # Phase 014 (MVP-14) — File transfer engine
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 13. Depends on: Phase 7, Phase 8
 
@@ -22,3 +22,11 @@ DEVPLAN reference: Phase 13. Depends on: Phase 7, Phase 8
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decision: received files are not marked (no quarantine on macOS, no Mark of the Web on
+  Windows).
+- User decision: symbolic links inside folders are recreated when their target stays inside the
+  transferred tree; others are skipped; on Windows a link that cannot be created is skipped and
+  reported.
+- Branch stacked on Phase 10 (`feature/phase-10-discovery`); its PR targets that branch and is not
+  merged until the stack is merged in order (user, 2026-11-03).
+- The 10 GB Mac ↔ PC throughput criterion needs the PC; until then it is measured on loopback.

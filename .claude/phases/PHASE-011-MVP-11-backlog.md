@@ -1,5 +1,6 @@
 # Phase 011 (MVP-11) — Discovery, pairing and group on both platforms
-Status: ACTIVE
+Status: BACKLOG — code done (PR #11, draft, CI green); hardware acceptance waits until a second
+computer is available (user, 2026-11-03: one Mac only)
 
 DEVPLAN reference: Phase 10. Depends on: Phase 9
 
