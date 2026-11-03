@@ -744,6 +744,39 @@ bit 3), and the receiving side refuses requests that ignore that:
 | files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped |
 | clipboard | ClipboardAnnounce is dropped; a ManifestRequest or ContentRequest for the clipboard gets TransferError NOT_PERMITTED |
 
+## Arrangement
+
+One shared arrangement places every member's logical desktop in a single space; the arrangement
+never moves a computer's monitors relative to each other.
+
+### Screens
+
+- A member sends its ScreenReport to each member whose session is established, and to every
+  connected member whenever its monitors change. A report replaces the sender's previous one;
+  members keep each member's last report, also while it is offline.
+- On macOS the frames are the displays in points. On Windows the sender derives them from the
+  physical layout: the primary monitor's frame is its physical rectangle scaled by its own scale;
+  a monitor that touches an already placed one in physical pixels gets the shared edge in common
+  with it and starts as far along that edge as in pixels, scaled by the placed monitor; a monitor
+  that touches none keeps its physical position, scaled like the primary.
+
+### Layout document
+
+- LayoutState carries the whole document. A member keeps the newer by (revision, author); for
+  the same pair it keeps the one whose placements, listed by device ID as (device_id, x, y,
+  detached), sort first, so a faulty member cannot split the group.
+- A member sends its document to each member whose session is established, and to every connected
+  member whenever its document changes, except the member it came from.
+- A member that knows its own screens but is missing from the document adds itself: revision one
+  higher, itself as author, placements of computers that are no longer members dropped, and its
+  own placement to the right of everything placed: its leftmost monitor's left edge on the
+  rightmost monitor's right edge, tops aligned.
+- A computer that joins another group, or leaves its group, starts from an empty document.
+- An arrangement is valid when no two computers' monitors overlap and the attached computers all
+  touch each other, directly or through others. Two monitors touch when facing edges are at most
+  8 units apart and share a stretch along them. Editors publish only valid arrangements;
+  receivers take any well-formed document, because screens can change after it was made.
+
 ## Encryption
 
 ### Handshake

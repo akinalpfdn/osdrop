@@ -44,7 +44,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 
 ## Core networking
 
-Built in Phases 5–8 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+Built in Phases 5–9 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
 bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
 it with a simulated clock and network; one Asio layer drives it in the apps.
 
@@ -55,6 +55,7 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 | Session | `session/` | `SessionEngine`: one control connection from Hello to Bye — handshake, pairing confirmation, capabilities, ports, heartbeats, peer loss, clock offset, latest-wins input |
 | Mesh | `mesh/` | `Mesh`: every connection of one computer — who dials, duplicate resolution, reconnects with backoff, transfer streams with their tokens and keys |
 | Group | `group/` | `Group`: the mesh's observer — trust from the roster, pairing into a group, roster gossip, revocation, leaving, per-member permissions; passes members' events on to the layers above |
+| Layout | `layout/` | `Layout`: next in the chain — screen reports and the layout document between members; the arrangement checks; the crossing engine (below) |
 | Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
@@ -72,9 +73,39 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
   platform, name), the revocations (device ID, epoch) and the permissions that differ from the
   default; counts are u16 and integers little-endian, as on the wire. A newer version is refused,
   so it is never overwritten.
+- **Layout state.** `Layout` hands the platform its state after every change: magic `ODLY`, a
+  version byte (1), the group ID, the layout document as an encoded LayoutState message and each
+  member's last ScreenReport, each embedded with a u16 length so the wire checks apply. The
+  platform stores it with its settings; a newer version is refused.
 - **Traffic marking.** On macOS, input sockets are marked as interactive voice and control
   connections as signaling, so Wi-Fi gives them priority. Windows has no unprivileged equivalent;
   sockets stay unmarked there.
+
+## Layout and crossing
+
+Built in Phase 9 (`core/src/layout`). Each monitor has a logical frame, where the arrangement
+places it, and a native rectangle, where its computer's own cursor moves (macOS points, Windows
+physical pixels).
+
+- **Outer edges.** The cursor leaves a computer only through an edge that no other monitor of that
+  computer continues, in native units, so a computer's own monitors behave as its system arranges
+  them.
+- **Neighbours.** The exit point goes to logical units and into the arrangement. The cursor
+  continues on the facing monitor of another reachable, attached computer whose edge is within 8
+  units of the exit edge and whose span contains the exit point, the nearest first, at the same
+  position along the edge and just inside. Anywhere else the edge is a wall. Leaving and coming
+  back through the same edge returns within one unit (property-tested).
+- **Edge push.** The cursor crosses after the user has pushed against an edge with a neighbour for
+  1 s and 32 units, without a pause longer than 300 ms, or at once in immediate mode. These are
+  defaults that Phase 12 turns into settings.
+- **Virtual cursor.** While the input is on another computer, `CrossingEngine` moves a cursor for
+  it in that computer's native units: this computer's movement in logical units, times that
+  computer's speed setting, times the scale of the monitor under the cursor. Between that
+  computer's monitors it moves as its system would: straight to a point on any monitor, otherwise
+  horizontally then vertically through monitors that continue each other. It comes home to where
+  it left when its computer drops out of the arrangement.
+- **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → the platform, so the
+  layout hears only from members.
 
 ## macOS input layer
 
