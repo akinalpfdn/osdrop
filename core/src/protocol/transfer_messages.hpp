@@ -15,15 +15,16 @@
 
 namespace osdrop::protocol {
 
+/// Disjoint from ControlType, so a listener can tell a transfer stream by its first frame.
 enum class TransferType : std::uint8_t {
-    TransferHello = 0x01,
-    ManifestRequest = 0x02,
-    Manifest = 0x03,
-    ContentRequest = 0x04,
-    ContentChunk = 0x05,
-    ContentEnd = 0x06,
-    TransferError = 0x07,
-    TransferCancel = 0x08,
+    TransferHello = 0x81,
+    ManifestRequest = 0x82,
+    Manifest = 0x83,
+    ContentRequest = 0x84,
+    ContentChunk = 0x85,
+    ContentEnd = 0x86,
+    TransferError = 0x87,
+    TransferCancel = 0x88,
 };
 
 enum class ObjectKind : std::uint8_t { Drag = 1, Clipboard = 2 };

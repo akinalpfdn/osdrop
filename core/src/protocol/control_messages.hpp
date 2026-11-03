@@ -54,6 +54,7 @@ enum class ByeReason : std::uint8_t {
     Error = 4,
     LeavingGroup = 5,
     Revoked = 6,
+    Duplicate = 7,
 };
 enum class LeaveReason : std::uint8_t {
     CrossedOn = 1,
@@ -125,6 +126,7 @@ struct Capabilities {
 struct SessionSetup {
     static constexpr ControlType kType = ControlType::SessionSetup;
     std::uint16_t udp_port = 0;
+    std::uint16_t listen_port = 0;
     Id input_token{};
     Id transfer_token{};
     bool operator==(const SessionSetup&) const = default;

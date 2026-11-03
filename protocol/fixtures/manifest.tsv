@@ -16,6 +16,7 @@ control/heartbeat.bin	control	valid	8	Heartbeat
 control/error_not_permitted.bin	control	valid	9	Error NOT_PERMITTED
 control/error_unknown_code.bin	control	valid	9	Error with a code from a newer version
 control/bye_revoked.bin	control	valid	10	Bye: revoked
+control/bye_duplicate.bin	control	valid	10	Bye: duplicate connection
 control/roster_two_members.bin	control	valid	16	two members and a revocation
 control/roster_repaired_member.bin	control	valid	16	the same device at epochs 1 and 2, epoch 1 revoked
 control/roster_largest.bin	control	valid	16	64 members and 255 revocations
@@ -52,6 +53,7 @@ malformed/control_bad_magic.bin	control	error	4	magic is OP (Osplay)
 malformed/control_version_2.bin	control	error	5	version 2
 malformed/control_type_0.bin	control	error	6	type 0x00
 malformed/control_type_7f.bin	control	error	6	type 0x7F
+malformed/control_transfer_type.bin	control	error	6	type 0x88, a transfer type
 malformed/control_too_large.bin	control	error	10	65537-byte message
 malformed/hello_trailing_byte.bin	control	error	7	one extra byte
 malformed/hello_platform_3.bin	control	error	8	platform 3
@@ -77,12 +79,13 @@ malformed/capabilities_streams_0.bin	control	error	8	zero transfer streams
 malformed/capabilities_streams_9.bin	control	error	8	nine transfer streams
 malformed/capabilities_reserved_set.bin	control	error	8	last reserved byte is 1
 malformed/session_setup_port_0.bin	control	error	8	UDP port 0
+malformed/session_setup_listen_port_0.bin	control	error	8	listen port 0
 malformed/session_setup_zero_input_token.bin	control	error	8	input token all zeros
 malformed/session_setup_zero_transfer_token.bin	control	error	8	transfer token all zeros
 malformed/session_setup_short_token.bin	control	error	3	transfer token cut short
 malformed/error_code_0.bin	control	error	8	code 0
 malformed/bye_reason_0.bin	control	error	8	reason 0
-malformed/bye_reason_7.bin	control	error	8	reason 7
+malformed/bye_reason_8.bin	control	error	8	reason 8
 malformed/heartbeat_with_body.bin	control	error	7	Heartbeat with a body
 malformed/ping_truncated.bin	control	error	3	send time cut short
 malformed/roster_zero_group.bin	control	error	8	group ID all zeros
@@ -184,24 +187,25 @@ malformed/input_hello_zero_token.bin	input	error	8	token all zeros
 malformed/pointer_motion_control_0.bin	input	error	8	control_id 0
 malformed/pointer_motion_x_outside.bin	input	error	8	x one past 2^28
 malformed/pointer_motion_cut.bin	input	error	3	capture time cut short
-transfer/transfer_hello.bin	transfer	valid	1	TransferHello
-transfer/manifest_request_drag.bin	transfer	valid	2	manifest of dragged item 1
-transfer/manifest_request_last_item.bin	transfer	valid	2	dragged item 1023
-transfer/manifest_request_clipboard_files.bin	transfer	valid	2	manifest of the clipboard's files
-transfer/manifest_single_file.bin	transfer	valid	3	a file item's single entry
-transfer/manifest_tree.bin	transfer	valid	3	a folder with a subfolder, an executable and a link, not the last part
-transfer/content_request_drag.bin	transfer	valid	4	entry 2 of dragged item 0, to the end
-transfer/content_request_clipboard_text.bin	transfer	valid	4	the clipboard's plain text
-transfer/content_request_clipboard_file.bin	transfer	valid	4	entry 3 of the clipboard's files, resumed at 1 MiB
-transfer/content_chunk.bin	transfer	valid	5	a short chunk
-transfer/content_chunk_max.bin	transfer	valid	5	a 65504-byte chunk
-transfer/content_end.bin	transfer	valid	6	ContentEnd
-transfer/transfer_error_stream.bin	transfer	valid	7	error for the whole stream
-transfer/transfer_cancel.bin	transfer	valid	8	TransferCancel
+transfer/transfer_hello.bin	transfer	valid	129	TransferHello
+transfer/manifest_request_drag.bin	transfer	valid	130	manifest of dragged item 1
+transfer/manifest_request_last_item.bin	transfer	valid	130	dragged item 1023
+transfer/manifest_request_clipboard_files.bin	transfer	valid	130	manifest of the clipboard's files
+transfer/manifest_single_file.bin	transfer	valid	131	a file item's single entry
+transfer/manifest_tree.bin	transfer	valid	131	a folder with a subfolder, an executable and a link, not the last part
+transfer/content_request_drag.bin	transfer	valid	132	entry 2 of dragged item 0, to the end
+transfer/content_request_clipboard_text.bin	transfer	valid	132	the clipboard's plain text
+transfer/content_request_clipboard_file.bin	transfer	valid	132	entry 3 of the clipboard's files, resumed at 1 MiB
+transfer/content_chunk.bin	transfer	valid	133	a short chunk
+transfer/content_chunk_max.bin	transfer	valid	133	a 65504-byte chunk
+transfer/content_end.bin	transfer	valid	134	ContentEnd
+transfer/transfer_error_stream.bin	transfer	valid	135	error for the whole stream
+transfer/transfer_cancel.bin	transfer	valid	136	TransferCancel
 malformed/transfer_empty.bin	transfer	error	3	empty input
 malformed/transfer_bad_magic.bin	transfer	error	4	magic is od
 malformed/transfer_version_2.bin	transfer	error	5	version 2
-malformed/transfer_unknown_type.bin	transfer	error	6	type 0x09
+malformed/transfer_unknown_type.bin	transfer	error	6	type 0x89
+malformed/transfer_control_type.bin	transfer	error	6	type 0x01, a control type
 malformed/transfer_too_large.bin	transfer	error	10	65537-byte message
 malformed/transfer_hello_zero_token.bin	transfer	error	8	token all zeros
 malformed/transfer_hello_stream_0.bin	transfer	error	8	stream_id 0
