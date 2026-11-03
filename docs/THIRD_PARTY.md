@@ -1,13 +1,13 @@
 # Third-party components
 
-Licenses were reviewed on 2026-11-02 and Monocypher's again on 2026-11-03. Each component is
+Licenses were reviewed on 2026-11-02, and Monocypher's and Asio's again on 2026-11-03. Each component is
 re-checked when it is first added to the build (the phase is listed) and whenever its pinned
 version changes.
 
 | Component | Used for | License | Distributed with Osdrop | Added in |
 |-----------|----------|---------|-------------------------|----------|
 | [Monocypher](https://monocypher.org) 4.0.3 | X25519, ChaCha20-Poly1305, BLAKE2b | BSD-2-Clause or CC0-1.0 | Yes — vendored source (`core/third_party/monocypher`) | Phase 6 |
-| [Asio](https://think-async.com/Asio/) (standalone) | Sockets and timers in `core` | BSL-1.0 | Yes — vendored headers | Phase 7 |
+| [Asio](https://think-async.com/Asio/) 1.38.2 (standalone) | Sockets and timers in `core` | BSL-1.0 | Yes — vendored headers (`core/third_party/asio`) | Phase 7 |
 | [WPF-UI](https://github.com/lepoco/wpfui) | Fluent controls, theme following | MIT | Yes — NuGet assembly | Phase 17 |
 | [H.NotifyIcon.Wpf](https://github.com/HavenDV/H.NotifyIcon) 2.4.1 | Windows tray icon | MIT | Yes — NuGet assembly | Phase 0 |
 | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) 8.4.2 | WPF view models | MIT | Yes — NuGet assembly | Phase 0 |
@@ -27,7 +27,8 @@ Parts of [Osplay](https://github.com/akinalpfdn/osplay)'s core (MIT, same author
 `core/` and adapted. Phase 5 copied the protocol utilities (`util/expected.hpp`,
 `protocol/byte_io.hpp`, the UTF-8 rules of `protocol/text.cpp`), the codec and fixture layout and
 the fuzz replay runner; Phase 6 copied the Noise handshake, cipher states, replay window,
-randomness injection, the identity C API and the Noise test vectors, and Phase 7 copies the Asio
-transport base and control framing. The Osplay commit
+randomness injection, the identity C API and the Noise test vectors, and Phase 7 the control
+framing, the clock offset estimator, traffic marking and the design of the session engine and its
+Asio transport. The Osplay commit
 each copy comes from is recorded in `DECISIONS.md`. A security fix in either project is checked
 against the other.

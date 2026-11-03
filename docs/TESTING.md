@@ -17,6 +17,16 @@ Run by CI on every pull request (commands in [`BUILDING.md`](BUILDING.md)):
 
 The core also runs under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer on macOS.
 
+### Simulated networks and loopback sockets
+
+`core/tests/cpp/mesh_simulation.hpp` runs several meshes over a simulated clock and network:
+reliable ordered TCP, lossy and reordering UDP, computers that freeze (power loss) and a capture
+of every byte sent. The mesh tests check that five members converge to one session per pair even
+when all dial at once, that peer loss is reported within one second, that motion never moves
+backwards, and that nothing readable crosses the wire. `transport_test.cpp` repeats the essentials
+on real loopback sockets, including control latency while a transfer stream is saturated and a
+recording relay on the control connection.
+
 ### Protocol fixtures and fuzzing
 
 `protocol/fixtures/` holds valid and malformed samples of every message, written by an independent

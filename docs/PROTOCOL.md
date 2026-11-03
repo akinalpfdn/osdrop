@@ -592,6 +592,74 @@ Chunks of one request arrive in order and without gaps.
 |-------|------|--------|
 | request_id | u32 | not 0 |
 
+## Session flow
+
+### Connections
+
+- Every computer runs one TCP listener, the port in its SRV record. It accepts control connections
+  and transfer streams; the type of the first frame tells them apart.
+- Two members of a group keep exactly one session. The member with the lower device ID (compared
+  byte by byte) dials as soon as it discovers the other; the higher one dials too only when no
+  session exists 3 s after discovery. A computer dials only peers that advertise its own,
+  non-empty group.
+- When a second connection between the same pair authenticates, both sides keep the same one: if
+  the same side dialled both, the newer one; otherwise the one the lower device ID dialled. The
+  other is closed with Bye 7, which ends it without an error and without a reconnect.
+- A dialled peer must authenticate with the static key of the device ID it advertised; any other key
+  is refused with NOT_TRUSTED.
+- After a connection ends with an error, the dialling side tries again after 250 ms, doubling up to
+  30 s, until a session is established. A peer that refused (NOT_TRUSTED, PAIRING_REJECTED,
+  UNSUPPORTED_VERSION) or that this computer disconnected on purpose is not dialled again until it
+  is discovered again.
+
+### Control connection
+
+1. Both sides send Hello.
+2. The dialler sends HandshakeMessage step 1 once the listener's Hello arrived; steps 2 and 3
+   follow.
+3. Each side decides about the authenticated peer: a member gets PairingConfirm *accepted* at once;
+   an unknown computer gets the pairing code shown and PairingConfirm after the user's answer; a
+   refused one gets Error NOT_TRUSTED.
+4. When both have accepted, each side sends Capabilities and SessionSetup. The session is
+   *established* once the peer's two have arrived.
+5. Application messages (types 0x10 and above) travel only in an established session.
+
+Before the handshake completes only Hello, HandshakeMessage and Error travel, in plaintext; after
+it every frame is encrypted. A message that is malformed or arrives in the wrong state ends the
+session, and the peer is told with Error (UNSUPPORTED_VERSION for another major version,
+UNEXPECTED_MESSAGE otherwise); a frame that fails authentication ends it without a reply. Error
+codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED and UNSUPPORTED_VERSION are shown as
+such, any other code as a generic peer error. Bye 3 (going to sleep) ends the session with
+PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
+error; every other reason with CONNECTION_CLOSED.
+
+| Timing | Value |
+|--------|-------|
+| Hello through handshake message 3 | 10 s |
+| The user's answer to a pairing code | 120 s |
+| Heartbeat after sending nothing for | 250 ms |
+| Peer reported unresponsive, and input to and from it stopped, after silence of | 750 ms |
+| Session closed with TIMED_OUT after silence of | 10 s |
+| Ping (round trip and clock offset) | every 1 s |
+| First complete frame on an accepted connection | 10 s |
+
+### Input datagrams
+
+Once the peer's SessionSetup arrives, a side sends InputHello with the peer's `input_token` to the
+peer's `udp_port` at the address of the control connection: every 250 ms until the peer's
+InputHello arrives, then every 5 s. A valid InputHello tells the receiver where to send input
+datagrams, so it also follows the peer to a new address. PointerMotion is accepted only in an
+established session and only when its sequence is higher than that of the last one applied.
+
+### Transfer streams
+
+The side that receives data opens the stream: a TCP connection to the peer's `listen_port` at the
+address of the control connection, whose first frame is TransferHello with the token from the
+peer's SessionSetup and a stream ID of its own parity. The accepting side closes the connection
+unless the token belongs to an established session, the parity is the opener's and the ID was not
+used before in that session. Ending a session ends its streams. A side accepts no more messages
+for a stream while 4 MiB are waiting to be written to it, and continues once less than 1 MiB is.
+
 ## Encryption
 
 ### Handshake

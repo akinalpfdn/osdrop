@@ -156,3 +156,57 @@ choices the plan leaves open are logged here.
 **Why:** With IDs unique only per direction, both sides could open a stream 1; frames each side sends would then use the same key on two connections whose counters both start at 0, reusing ChaCha20-Poly1305 nonces. Parity makes (direction, stream ID) unique without extra bytes on the wire.
 **Trade-offs:** The session layer must enforce the parity; the codec cannot, as it does not know the role.
 **Revisit if:** Streams need to be opened by a third party (not planned).
+
+---
+
+## 2026-11-03 — One I/O thread for the whole mesh
+**Chosen:** `AsioNode` runs every connection, input socket and timer of a computer on one I/O thread owned by `core`; mesh and session logic stay sans-I/O. The timer waits for the mesh's next deadline instead of ticking. The session engine, control framing, clock offset estimator and traffic marking follow Osplay commit `35046970f99c145d1b3e549d2362897c114af733`; Asio 1.38.2 is vendored unmodified, checked against the release archive's SHA-256.
+**Alternatives:** One thread per session (Osplay's layout); a thread pool.
+**Why:** Up to seven sessions plus transfer streams fit easily in one thread (258 MB/s on loopback in a release build, control latency under 1 ms while a stream is saturated), and one thread means no locks in the mesh. A deadline timer lets an idle laptop sleep between heartbeats.
+**Trade-offs:** A slow operation on the I/O thread delays every peer, so file reading and pasteboard work must stay off it (Phase 13 reads files on platform threads).
+**Revisit if:** Profiling shows the I/O thread saturated during transfers.
+
+---
+
+## 2026-11-03 — Peer loss after 750 ms, session end after 10 s
+**Chosen:** Heartbeats go out after 250 ms without traffic. A peer silent for 750 ms is reported unresponsive and input to and from it stops; the session itself closes only after 10 s of silence.
+**Alternatives:** One timeout for both (1 s would tear down sessions on every Wi-Fi stall, 10 s would leave keys held for 10 s).
+**Why:** The DEVPLAN requires peer loss detected within one second for input safety, and Osplay showed Wi-Fi stalls of several hundred milliseconds from AWDL. Separating the two keeps input safe without reconnect churn.
+**Trade-offs:** Four small frames per second per idle peer.
+**Revisit if:** Real Wi-Fi measurements show stalls longer than 750 ms that are not losses.
+
+---
+
+## 2026-11-03 — Session pairs: lower device ID dials, the same rule resolves duplicates
+**Chosen:** The member with the lower device ID dials; the higher one dials too after 3 s without a session. When two connections between a pair authenticate, both keep the newer one if the same side dialled both, otherwise the one the lower device ID dialled, and close the other with a new Bye reason 7.
+**Alternatives:** Both always dial and keep the first established; a coordinator.
+**Why:** The rule is deterministic on both sides from facts both know, so they never close different connections; the fallback covers a computer that cannot see the other's advertisement. "Newer wins" for the same dialler replaces a connection the other side has already given up.
+**Trade-offs:** A connection established moments earlier can be replaced in a dial race at startup.
+**Revisit if:** Field logs show repeated duplicate closes.
+
+---
+
+## 2026-11-03 — Protocol fixes found while building sessions
+**Chosen:** Transfer message types move to 0x81–0x88, SessionSetup gains `listen_port`, Bye gains reason 7 (duplicate connection).
+**Alternatives:** Telling transfer streams apart by length; a second listener for transfer streams; learning the port from discovery.
+**Why:** The shared listener must classify a connection by its first frame, and Hello and TransferHello both had type 0x01. A computer that was dialled knows its peer's address but not its listener. Closing a duplicate needs a reason that is neither an error nor a reconnect trigger.
+**Trade-offs:** None; the protocol is not frozen before the first release.
+**Revisit if:** —
+
+---
+
+## 2026-11-03 — Traffic marking on macOS only
+**Chosen:** Input sockets are marked `NET_SERVICE_TYPE_VO` and control connections `NET_SERVICE_TYPE_SIG` on macOS; Windows sockets stay unmarked.
+**Alternatives:** DSCP through qWAVE or a Group Policy QoS rule on Windows.
+**Why:** Osplay measured that marking halves Wi-Fi loss on a Mac. On Windows, qWAVE marks only for administrators or with a policy the installer would have to add.
+**Trade-offs:** Windows input datagrams get no Wi-Fi priority.
+**Revisit if:** Windows loss measurements in Phase 18 call for it; the installer could then add a QoS policy.
+
+---
+
+## 2026-11-03 — The mesh's C API covers lifecycle, discovery and pairing only
+**Chosen:** `osdrop_mesh_*` creates and destroys the mesh, feeds discovery, pairs, disconnects and reports peer state, statistics and log lines. Application messages, motion and transfer streams stay inside `core`, where Phases 8–14 consume them.
+**Alternatives:** Raw message and stream functions for the platforms.
+**Why:** The roster, layout, crossing and transfer engines live in `core`; platforms will never build protocol messages themselves, so a raw channel would be dead API.
+**Trade-offs:** Phases 8–14 extend this API with typed functions as they arrive.
+**Revisit if:** A platform feature needs a message `core` does not interpret.

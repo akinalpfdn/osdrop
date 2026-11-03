@@ -21,3 +21,9 @@ A set of `core` instances keeps exactly one encrypted session per pair and carri
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- One I/O thread for the mesh; timer at the next deadline; Asio 1.38.2 vendored.
+- Peer unresponsive after 750 ms (input stops), session ends after 10 s.
+- Lower device ID dials; the same rule resolves duplicates (Bye 7).
+- Protocol fixes: transfer types 0x81-0x88, SessionSetup.listen_port, Bye 7.
+- Traffic marking on macOS only.
+- Mesh C API: lifecycle, discovery, pairing, state; messages stay inside core.
