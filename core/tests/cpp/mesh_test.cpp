@@ -344,6 +344,46 @@ TEST(Mesh, AFullTransferQueueNeitherDelaysControlNorGrowsWithoutBound) {
         << "every chunk arrived";
 }
 
+TEST(Mesh, APausedStreamHoldsItsSenderBackAndResumesInOrder) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.bandwidth_bytes_per_ms = 10'000;
+    const auto [low, high] = ordered_pair(network);
+    auto& sender = network.node(high);
+    auto& receiver = network.node(low);
+    const auto stream = receiver.mesh.open_transfer(sender.mesh.device_id(), network.now);
+    ASSERT_TRUE(stream.has_value());
+    network.run_for(milliseconds(10));
+    ASSERT_EQ(sender.observer.transfers_opened.size(), 1U);
+
+    receiver.mesh.pause_transfer(sender.mesh.device_id(), stream.value(), true, network.now);
+    const std::vector<std::uint8_t> data(protocol::kMaxChunkData, 0x42);
+    std::uint64_t sent = 0;
+    while (sender.mesh
+               .send_transfer(receiver.mesh.device_id(), stream.value(),
+                              protocol::ContentChunk{.request_id = 1, .offset = sent, .data = data},
+                              network.now)
+               .has_value()) {
+        sent += data.size();
+        ASSERT_LT(sent, std::uint64_t{8} * 1024 * 1024) << "the stream never refused";
+    }
+    network.run_for(milliseconds(1'000));
+    EXPECT_TRUE(receiver.observer.transfer_messages.empty()) << "nothing read while paused";
+    EXPECT_EQ(sender.observer.writable.size(), 0U) << "the sender stays held back";
+
+    receiver.mesh.pause_transfer(sender.mesh.device_id(), stream.value(), false, network.now);
+    network.run_for(milliseconds(1'000));
+    ASSERT_EQ(receiver.observer.transfer_messages.size(), sent / data.size());
+    std::uint64_t expected = 0;
+    for (const auto& [id, message] : receiver.observer.transfer_messages) {
+        EXPECT_EQ(std::get<protocol::ContentChunk>(message).offset, expected);
+        expected += data.size();
+    }
+    EXPECT_EQ(sender.observer.writable.size(), 1U);
+}
+
 TEST(Mesh, ForgedAndReplayedTransferHellosAreRefused) {
     SimulatedMeshNetwork network;
     build(network, 2);

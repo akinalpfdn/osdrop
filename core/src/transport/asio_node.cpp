@@ -78,6 +78,8 @@ public:
         std::size_t queued = 0;
         std::size_t write_offset = 0;
         bool writing = false;
+        bool reading = false;     ///< a read is in progress
+        bool read_paused = false; ///< the mesh wants no more bytes for now
         /// Closed by the mesh or by the peer: nothing more goes to the mesh.
         bool closing = false;
         std::array<std::uint8_t, kReadBufferBytes> read_buffer{};
@@ -270,6 +272,17 @@ public:
         return it == connections_.end() ? 0 : it->second->queued;
     }
 
+    void pause_reading(mesh::ConnectionId id, bool paused) override {
+        const ConnectionPtr connection = find(id);
+        if (!connection) {
+            return;
+        }
+        connection->read_paused = paused;
+        if (!paused && !connection->reading && !connection->closing && connection->connect_done) {
+            read_next(connection);
+        }
+    }
+
     void close(mesh::ConnectionId id) override {
         const ConnectionPtr connection = find(id);
         if (!connection) {
@@ -412,9 +425,11 @@ private:
     }
 
     void read_next(const ConnectionPtr& connection) {
+        connection->reading = true;
         connection->socket.async_read_some(
             asio::buffer(connection->read_buffer),
             [this, connection](const asio::error_code& error, std::size_t size) {
+                connection->reading = false;
                 if (connection->closing) {
                     return;
                 }
@@ -426,7 +441,7 @@ private:
                 mesh_.on_bytes(connection->id, std::span(connection->read_buffer).first(size),
                                now());
                 reschedule();
-                if (!connection->closing) {
+                if (!connection->closing && !connection->read_paused) {
                     read_next(connection);
                 }
             });

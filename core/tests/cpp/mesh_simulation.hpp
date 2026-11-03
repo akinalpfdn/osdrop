@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -174,6 +175,7 @@ public:
     void set_input_destination(ConnectionId /*id*/, std::uint16_t /*port*/) override {}
     void accept_input_source(ConnectionId /*id*/) override {}
     std::size_t queued_bytes(ConnectionId id) const override;
+    void pause_reading(ConnectionId id, bool paused) override;
     void close(ConnectionId id) override;
     std::uint16_t listen_port() const override { return 49'152; }
 
@@ -300,10 +302,12 @@ public:
                 deliver(event);
             }
         }
+        // Held events stay ahead of everything not yet due, so TCP data keeps its order.
         for (Event& event : held) {
-            event.at = now + milliseconds(1);
-            queue_.push_back(std::move(event));
+            event.at = now;
         }
+        queue_.insert(queue_.begin(), std::make_move_iterator(held.begin()),
+                      std::make_move_iterator(held.end()));
         for (auto& simulated : nodes_) {
             if (!simulated->frozen && now >= simulated->mesh.next_wakeup()) {
                 simulated->mesh.on_timer(now);
@@ -415,6 +419,15 @@ public:
         enqueue_ordered(std::move(event));
     }
 
+    /// A paused end receives nothing; what is sent to it waits (and counts as queued).
+    void pause(std::size_t node_index, ConnectionId id, bool paused) {
+        if (paused) {
+            paused_.insert(Endpoint{.node = node_index, .id = id});
+        } else {
+            paused_.erase(Endpoint{.node = node_index, .id = id});
+        }
+    }
+
     [[nodiscard]] std::size_t queued(std::size_t node_index, ConnectionId id) const {
         const auto it = queued_.find(Endpoint{.node = node_index, .id = id});
         return it == queued_.end() ? 0 : it->second;
@@ -477,10 +490,12 @@ private:
 
     void schedule(Event event) { queue_.push_back(std::move(event)); }
 
-    /// TCP data and closes for a frozen node wait; datagrams for it are lost.
+    /// TCP data and closes for a frozen node or a paused end wait; datagrams for a frozen node
+    /// are lost.
     [[nodiscard]] bool holds(const Event& event) const {
         return (event.kind == Event::Kind::Bytes || event.kind == Event::Kind::Close) &&
-               event.target.node != kRaw && nodes_.at(event.target.node)->frozen;
+               event.target.node != kRaw &&
+               (nodes_.at(event.target.node)->frozen || paused_.contains(event.target));
     }
 
     /// TCP: in order per direction of a connection.
@@ -558,6 +573,7 @@ private:
     std::map<Endpoint, TimePoint> last_ordered_;
     std::map<Endpoint, TimePoint> link_free_;
     std::map<Endpoint, std::size_t> queued_;
+    std::set<Endpoint> paused_;
     std::map<std::size_t, Endpoint> raw_;
     std::map<std::size_t, bool> raw_open_;
     std::size_t next_raw_ = 1;
@@ -590,6 +606,10 @@ inline void SimulatedTransport::send(ConnectionId id, std::span<const std::uint8
 inline void SimulatedTransport::send_datagram(ConnectionId id,
                                               std::span<const std::uint8_t> datagram) {
     network_->send_datagram(node_, id, datagram);
+}
+
+inline void SimulatedTransport::pause_reading(ConnectionId id, bool paused) {
+    network_->pause(node_, id, paused);
 }
 
 inline void SimulatedTransport::close(ConnectionId id) {
