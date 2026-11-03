@@ -7,6 +7,8 @@
     <AssemblyName>Osdrop</AssemblyName>
     <RootNamespace>Osdrop.App</RootNamespace>
     <SatelliteResourceLanguages>en;tr</SatelliteResourceLanguages>
+    <!-- Function pointers and fixed buffers for the engine's C API (Interop/). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +18,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Osdrop.Localization\Osdrop.Localization.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Osdrop.App.Tests" />
+  </ItemGroup>
+
+  <!-- The native engine from the CMake build (docs/BUILDING.md); override with
+       -p:OsdropNativeBin=<folder> for another preset. -->
+  <PropertyGroup>
+    <OsdropNativeBin Condition="'$(OsdropNativeBin)' == ''">$(MSBuildThisFileDirectory)..\..\build\debug\bin</OsdropNativeBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(OsdropNativeBin)\OsdropEngine.dll" Link="OsdropEngine.dll" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(OsdropNativeBin)\OsdropEngine.dll')" />
   </ItemGroup>
 
 </Project>
