@@ -1,5 +1,5 @@
 # Phase 007 (MVP-07) — Crypto and handshake
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 6. Depends on: Phase 5
 
