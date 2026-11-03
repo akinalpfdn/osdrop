@@ -327,3 +327,48 @@ choices the plan leaves open are logged here.
 **Why:** DEVPLAN keeps the final UI for Phases 16 and 17; Phase 10 needs only enough to pair, revoke and see the mesh on real hardware.
 **Trade-offs:** Replaced later; strings and view models carry over.
 **Revisit if:** The final UI starts earlier.
+
+---
+
+## 2026-11-03 — Received files are not marked
+**Chosen:** User decision: received files get no quarantine attribute on macOS and no Mark of the Web on Windows.
+**Alternatives:** Marking them as AirDrop and browsers do (DEVPLAN's default).
+**Why:** The files come from the user's own computers in their own group, paired with a code; the user does not want Gatekeeper and SmartScreen prompts on their own files.
+**Trade-offs:** A file that was itself downloaded on the sending computer loses its mark on the way; malware moved between one's own computers opens without the system's warning.
+**Revisit if:** Groups come to include computers of other people.
+
+---
+
+## 2026-11-03 — Links inside folders are recreated only within their item
+**Chosen:** User decision: a link inside a sent folder is recreated when its target names another entry of the same item, with the target rewritten to the mapped names; other links are skipped and counted, as are links Windows does not let the user create. A path offered as an item is followed when it is a link.
+**Alternatives:** Following links on the sending side; recreating every link as it was; skipping all links.
+**Why:** Following links can pull in whole trees from elsewhere, or loop. Recreating any target lets a sender plant links to places outside the destination. Within the item, links keep working after the copy, as in a Finder or Explorer copy of the folder.
+**Trade-offs:** Links to things outside the item do not arrive; the user is told how many.
+**Revisit if:** Users need links to shared locations (a network drive both computers mount).
+
+---
+
+## 2026-11-03 — File work on its own thread; the receiver pauses its stream
+**Chosen:** Reading, hashing, writing and scanning run on one file thread per computer; results come back to the I/O thread. A receiver whose disk falls behind stops reading the stream (a new `pause_reading` in the transport), so TCP holds the sender back.
+**Alternatives:** File I/O on the I/O thread; ranged requests as a window; a pool of file threads.
+**Why:** The I/O thread carries input, and disk writes can block for tens of milliseconds under writeback. Pausing the socket bounds the receiver's memory without protocol changes, whereas ranged windows would make the sender hash the whole file for every range (ContentEnd covers the whole entry).
+**Trade-offs:** One thread serializes all transfers' file work; a slow scan of a huge folder delays other transfers' reads.
+**Revisit if:** Several simultaneous transfers stay below the throughput target (Phase 18).
+
+---
+
+## 2026-11-03 — A failed transfer removes everything it created
+**Chosen:** On any failure, cancellation from either side, lost peer or quit, the receiver removes the temporaries and every file, link and folder the transfer created, newest first, before reporting the end.
+**Alternatives:** Removing only the file being written and keeping finished ones.
+**Why:** The phase's acceptance asks that cancelling leaves nothing behind, and a half-copied folder looks complete in Finder and Explorer while it is not.
+**Trade-offs:** A large folder cancelled near its end must be sent again in full; there is no resume.
+**Revisit if:** Users ask to resume large transfers.
+
+---
+
+## 2026-11-03 — The sender checks that a file did not change since the scan
+**Chosen:** Before ContentEnd the sender compares the file's size and modification time with the manifest and sends IO_ERROR when they differ; digests computed once are reused for later requests of the entry.
+**Alternatives:** Trusting the digest alone; snapshotting files before sending.
+**Why:** The digest is computed from what is read, so it cannot tell a file that changed while it was being read; size and time can, at no cost. Reusing digests keeps a ranged request from rereading the whole file.
+**Trade-offs:** A change that keeps both size and time (rare; tools that restore times) is caught by the receiver only when a cached digest no longer matches.
+**Revisit if:** Snapshots become available (APFS clones, VSS) for the drag source.

@@ -302,6 +302,8 @@ final class GroupController {
             statistics[device] = stats
         case .log(let level, let message):
             log(level, message)
+        case .offerReady, .transferProgress, .transferFinished:
+            break  // the drag and drop feature moves files (DEVPLAN, Phase 14)
         }
     }
 

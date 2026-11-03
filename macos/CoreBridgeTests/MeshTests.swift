@@ -1,4 +1,5 @@
 import CoreBridge
+import Foundation
 import Testing
 
 /// Two meshes on loopback, as the app drives them: they pair with a code, form a group, share
@@ -94,6 +95,58 @@ struct MeshTests {
         #expect(throws: CoreError.invalidArgument) { try mac.setLayout([]) }
     }
 
+    @Test("A member fetches a folder another member offers")
+    func movesFiles() async throws {
+        let source = FileManager.default.temporaryDirectory.appending(path: "osdrop-source-\(UUID())")
+        let destination = FileManager.default.temporaryDirectory.appending(path: "osdrop-destination-\(UUID())")
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        let folder = source.appending(path: "Photos")
+        try FileManager.default.createDirectory(at: folder.appending(path: "2024"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let content = Data((0..<200_000).map { UInt8(truncatingIfNeeded: $0) })
+        try content.write(to: folder.appending(path: "2024/beach.raw"))
+
+        let mac = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Mac"))
+        let other = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Other Mac"))
+        let macEvents = Self.listen(to: mac)
+        let otherEvents = Self.listen(to: other)
+        let connection = try other.pair(host: "127.0.0.1", port: mac.listenPort)
+        #expect(await macEvents.wait { Self.code(in: $0) != nil })
+        let macCode = try #require(Self.code(in: await macEvents.events))
+        try other.confirmPairing(connection, accepted: true)
+        try mac.confirmPairing(macCode.connection, accepted: true)
+        #expect(
+            await otherEvents.wait { events in
+                events.contains { if case .peerConnected = $0 { true } else { false } }
+            })
+
+        let item = TransferItem(kind: .drag, objectID: 1, index: 0)
+        try mac.offer(item, files: [folder], to: [other.deviceID])
+        #expect(
+            await macEvents.wait { events in
+                events.contains {
+                    if case .offerReady(item, .success(let summary)) = $0 {
+                        summary.totalBytes == 200_000
+                    } else {
+                        false
+                    }
+                }
+            })
+        let id = try other.receive(item, from: mac.deviceID, into: destination)
+        #expect(
+            await otherEvents.wait { events in
+                events.contains { if case .transferFinished(id, .success) = $0 { true } else { false } }
+            })
+        let finished = await otherEvents.events.compactMap { event -> ReceivedItem? in
+            if case .transferFinished(_, .success(let received)) = event { received } else { nil }
+        }
+        #expect(finished.first?.items.map(\.lastPathComponent) == ["Photos"])
+        #expect(try Data(contentsOf: destination.appending(path: "Photos/2024/beach.raw")) == content)
+    }
+
     @Test("Commands and stored states are checked")
     func checksArguments() throws {
         #expect(throws: CoreError.badMagic) {
@@ -107,5 +160,11 @@ struct MeshTests {
         #expect(throws: CoreError.invalidState) { try mesh.leaveGroup() }
         #expect(throws: CoreError.invalidArgument) { try mesh.setScreens([]) }
         #expect(try mesh.members().isEmpty)
+        let item = TransferItem(kind: .drag, objectID: 1, index: 0)
+        #expect(throws: CoreError.invalidArgument) { try mesh.offer(item, files: [], to: []) }
+        #expect(throws: CoreError.notPermitted) {
+            try mesh.receive(item, from: mesh.deviceID, into: FileManager.default.temporaryDirectory)
+        }
+        #expect(throws: CoreError.valueOutOfRange) { try mesh.withdraw(.clipboard, objectID: 0) }
     }
 }

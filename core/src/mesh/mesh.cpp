@@ -827,6 +827,15 @@ void Mesh::close_transfer(const DeviceId& device, std::uint32_t stream_id, TimeP
     settle(now);
 }
 
+void Mesh::pause_transfer(const DeviceId& device, std::uint32_t stream_id, bool paused,
+                          TimePoint now) {
+    now_ = now;
+    if (const Connection* connection = transfer_of(device, stream_id); connection != nullptr) {
+        transport_.pause_reading(connection->id, paused);
+    }
+    settle(now);
+}
+
 void Mesh::disconnect(const DeviceId& device, protocol::ByeReason reason, TimePoint now) {
     now_ = now;
     if (const auto it = peers_.find(device); it != peers_.end()) {

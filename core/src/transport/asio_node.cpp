@@ -27,6 +27,7 @@
 #include <deque>
 #include <exception>
 #include <future>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -78,6 +79,9 @@ public:
         std::size_t queued = 0;
         std::size_t write_offset = 0;
         bool writing = false;
+        bool reading = false;     ///< a read is in progress
+        bool dropped = false;     ///< the connection failed: nothing more is written
+        bool read_paused = false; ///< the mesh wants no more bytes for now
         /// Closed by the mesh or by the peer: nothing more goes to the mesh.
         bool closing = false;
         std::array<std::uint8_t, kReadBufferBytes> read_buffer{};
@@ -270,6 +274,17 @@ public:
         return it == connections_.end() ? 0 : it->second->queued;
     }
 
+    void pause_reading(mesh::ConnectionId id, bool paused) override {
+        const ConnectionPtr connection = find(id);
+        if (!connection) {
+            return;
+        }
+        connection->read_paused = paused;
+        if (!paused && !connection->reading && !connection->closing && connection->connect_done) {
+            read_next(connection);
+        }
+    }
+
     void close(mesh::ConnectionId id) override {
         const ConnectionPtr connection = find(id);
         if (!connection) {
@@ -412,9 +427,11 @@ private:
     }
 
     void read_next(const ConnectionPtr& connection) {
+        connection->reading = true;
         connection->socket.async_read_some(
             asio::buffer(connection->read_buffer),
             [this, connection](const asio::error_code& error, std::size_t size) {
+                connection->reading = false;
                 if (connection->closing) {
                     return;
                 }
@@ -426,7 +443,7 @@ private:
                 mesh_.on_bytes(connection->id, std::span(connection->read_buffer).first(size),
                                now());
                 reschedule();
-                if (!connection->closing) {
+                if (!connection->closing && !connection->read_paused) {
                     read_next(connection);
                 }
             });
@@ -467,6 +484,10 @@ private:
                          front.size() - connection->write_offset),
             [this, connection](const asio::error_code& error, std::size_t size) {
                 connection->writing = false;
+                if (connection->dropped) {
+                    connection->queue.clear(); // the buffer it wrote from is free to go now
+                    return;
+                }
                 if (error) {
                     connection->queue.clear();
                     connection->queued = 0;
@@ -498,11 +519,22 @@ private:
         }
         connection->closing = true;
         connections_.erase(connection->id);
-        connection->queue.clear();
-        connection->queued = 0;
+        drop_queue(*connection);
         close_sockets(*connection);
         mesh_.on_closed(connection->id, reason, now());
         reschedule();
+    }
+
+    /// Forgets what waits to be written. A write in progress still reads the front buffer, so that
+    /// one stays until its handler runs.
+    static void drop_queue(Connection& connection) {
+        if (connection.writing && !connection.queue.empty()) {
+            connection.queue.erase(std::next(connection.queue.begin()), connection.queue.end());
+        } else {
+            connection.queue.clear();
+        }
+        connection.queued = 0;
+        connection.dropped = true;
     }
 
     static void close_sockets(Connection& connection) {

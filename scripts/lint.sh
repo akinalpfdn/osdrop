@@ -46,6 +46,9 @@ python3 scripts/check_localization.py
 echo "==> protocol fixtures"
 python3 protocol/tools/generate_fixtures.py --check
 
+echo "==> Unicode tables"
+uvx --python 3.13 python core/tools/generate_unicode_tables.py --check
+
 tidy_extra=()
 if [[ "$(uname -s)" == "Darwin" ]]; then
     # The PyPI clang-tidy does not know where Xcode's SDK lives.

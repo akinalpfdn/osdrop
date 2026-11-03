@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <span>
 #include <vector>
 
@@ -35,6 +36,8 @@ struct GroupState {
 
     [[nodiscard]] bool in_group() const { return !protocol::is_zero(group_id); }
     [[nodiscard]] Permissions permissions_for(const DeviceId& device) const;
+    /// The members this computer accepts files from.
+    [[nodiscard]] std::set<DeviceId> file_senders() const;
     bool operator==(const GroupState&) const = default;
 };
 

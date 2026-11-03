@@ -88,6 +88,8 @@ public:
     /// The datagram being delivered came from the peer: reply to its source.
     virtual void accept_input_source(ConnectionId id) = 0;
     [[nodiscard]] virtual std::size_t queued_bytes(ConnectionId id) const = 0;
+    /// Stops or resumes reading from a TCP connection; while stopped, TCP holds the peer back.
+    virtual void pause_reading(ConnectionId id, bool paused) = 0;
     /// Closes once queued bytes are written. Mesh::on_closed is not called for it.
     virtual void close(ConnectionId id) = 0;
     [[nodiscard]] virtual std::uint16_t listen_port() const = 0;
@@ -192,6 +194,9 @@ public:
                                               const protocol::TransferMessage& message,
                                               TimePoint now);
     void close_transfer(const DeviceId& device, std::uint32_t stream_id, TimePoint now);
+    /// Stops taking messages from a stream (the receiver cannot keep up) or resumes.
+    void pause_transfer(const DeviceId& device, std::uint32_t stream_id, bool paused,
+                        TimePoint now);
     /// Ends the session with a peer; it is not redialled until discovered again.
     void disconnect(const DeviceId& device, protocol::ByeReason reason, TimePoint now);
     /// Ends every session (sleep, quit); nothing is redialled until discovered again.
