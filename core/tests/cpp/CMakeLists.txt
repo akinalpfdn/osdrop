@@ -25,6 +25,7 @@ add_executable(osdrop_core_tests
     noise_vectors_test.cpp
     protocol_codec_test.cpp
     protocol_fixture_test.cpp
+    session_engine_test.cpp
     version_test.cpp)
 # Tests reach internal headers; only the C header is public API.
 target_include_directories(osdrop_core_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
