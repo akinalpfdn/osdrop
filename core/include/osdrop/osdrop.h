@@ -89,9 +89,9 @@ typedef enum osdrop_result {
     OSDROP_ERROR_IN_ANOTHER_GROUP =
         30,                           /* the peer belongs to another group; one must leave first */
     OSDROP_ERROR_INVALID_LAYOUT = 31, /* monitors overlap, or a computer touches no other */
-    OSDROP_ERROR_CANCELLED = 32,        /* a transfer was cancelled on either side */
-    OSDROP_ERROR_IO = 33,               /* a file could not be read or written */
-    OSDROP_ERROR_NO_SPACE = 34,         /* not enough free space for a transfer */
+    OSDROP_ERROR_CANCELLED = 32,      /* a transfer was cancelled on either side */
+    OSDROP_ERROR_IO = 33,             /* a file could not be read or written */
+    OSDROP_ERROR_NO_SPACE = 34,       /* not enough free space for a transfer */
     OSDROP_ERROR_INTEGRITY_FAILED = 35, /* received content does not match the sender's digest */
     OSDROP_ERROR_NOT_FOUND = 36,        /* the offered item or file no longer exists */
     OSDROP_RESULT_MAX_ENUM = 0x7FFFFFFF
@@ -255,6 +255,29 @@ typedef struct osdrop_session_stats {
     uint64_t stale_motion_dropped;
 } osdrop_session_stats;
 
+/* NOLINTBEGIN(cppcoreguidelines-use-enum-class,performance-enum-size) */
+typedef enum osdrop_object_kind {
+    OSDROP_OBJECT_DRAG = 1,      /* object_id: the drag ID; item_index: the item in the DragOffer */
+    OSDROP_OBJECT_CLIPBOARD = 2, /* object_id: the clip ID; item_index: the format code */
+    OSDROP_OBJECT_KIND_MAX_ENUM = 0x7FFFFFFF
+} osdrop_object_kind;
+/* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
+
+/* One item a transfer moves (PROTOCOL.md "Transfer streams"). */
+typedef struct osdrop_object_ref {
+    osdrop_object_kind kind;
+    uint64_t object_id; /* not 0 */
+    uint32_t item_index;
+} osdrop_object_ref;
+
+typedef struct osdrop_transfer_progress {
+    uint64_t transfer_id;
+    uint64_t bytes_done;
+    uint64_t bytes_total;
+    uint64_t files_done;
+    uint64_t files_total;
+} osdrop_transfer_progress;
+
 /* Every callback may be NULL; `context` is passed back unchanged. */
 typedef struct osdrop_mesh_callbacks {
     void* context;
@@ -287,6 +310,22 @@ typedef struct osdrop_mesh_callbacks {
     void (*stats)(void* context, const uint8_t* device_id, const osdrop_session_stats* stats);
     /* One line, NUL-terminated; never contains keys, keystrokes or file contents. */
     void (*log)(void* context, osdrop_log_level level, const char* message);
+    /*
+     * An offered item was scanned: OSDROP_OK with the bytes of its files, its entries and the
+     * entries that cannot travel (left out), or why it cannot be sent.
+     */
+    void (*offer_ready)(void* context, const osdrop_object_ref* item, osdrop_result result,
+                        uint64_t total_bytes, uint64_t entry_count, uint64_t skipped);
+    /* At most every 100 ms while a transfer this computer receives makes progress. */
+    void (*transfer_progress)(void* context, const osdrop_transfer_progress* progress);
+    /*
+     * The end of a transfer this computer receives. OSDROP_OK: `items` are the item's top-level
+     * files and folders as created (absolute UTF-8 paths, NUL-terminated, valid during the call),
+     * `skipped_links` the links not recreated. Otherwise the reason, after everything the
+     * transfer created was removed.
+     */
+    void (*transfer_finished)(void* context, uint64_t transfer_id, osdrop_result result,
+                              const char* const* items, size_t item_count, uint64_t skipped_links);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -429,6 +468,31 @@ osdrop_result osdrop_mesh_layout(osdrop_mesh* mesh, osdrop_layout_computer* out,
  */
 osdrop_result osdrop_mesh_set_layout(osdrop_mesh* mesh, const osdrop_placement* placements,
                                      size_t count);
+
+/*
+ * Transfers (DEVPLAN, Phase 13). File work runs on a thread of its own; results arrive through the
+ * offer_ready, transfer_progress and transfer_finished callbacks.
+ *
+ * osdrop_mesh_offer offers local files and folders (`path_count` absolute UTF-8 paths) as one
+ * item to the members in `audience` (`audience_count` device IDs of OSDROP_DEVICE_ID_SIZE bytes,
+ * one after another). Links inside folders travel as links; a path that is itself a link is
+ * followed. It replaces an earlier offer of the same item, and scanning starts at once.
+ */
+osdrop_result osdrop_mesh_offer(osdrop_mesh* mesh, const osdrop_object_ref* item,
+                                const char* const* paths, size_t path_count,
+                                const uint8_t* audience, size_t audience_count);
+/* Withdraws every item of an object; members fetching them get CANCELLED. */
+osdrop_result osdrop_mesh_withdraw(osdrop_mesh* mesh, osdrop_object_kind kind, uint64_t object_id);
+/*
+ * Fetches an item a member offered into the folder `destination` (absolute UTF-8). Names the
+ * folder already holds are numbered ("name (2)"). NOT_PERMITTED when the member may not send this
+ * computer files, INVALID_STATE when it is not connected.
+ */
+osdrop_result osdrop_mesh_receive(osdrop_mesh* mesh, const uint8_t* device_id,
+                                  const osdrop_object_ref* item, const char* destination,
+                                  uint64_t* out_transfer_id);
+/* Ends a transfer with CANCELLED; what it created is removed. Unknown IDs are ignored. */
+osdrop_result osdrop_mesh_cancel_transfer(osdrop_mesh* mesh, uint64_t transfer_id);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.
