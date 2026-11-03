@@ -33,3 +33,8 @@ Copy on one computer and paste on another, for text, images and files.
   folder up to a size cap (default 512 MB, a setting in Phase 16) and put on the pasteboard as real
   file URLs once complete; Finder then pastes them at once with its own progress. Copies above the
   cap put no files on the pasteboard and suggest drag and drop.
+- User decision: on the Mac, text, RTF, HTML and images copied on another computer are also fetched
+  in the background (within size caps) and written to the pasteboard as real data once they arrive,
+  instead of lazy data providers: macOS asks for lazy data at once, and a provider would block the
+  main thread on the network. Windows keeps delayed rendering (its render requests come on a
+  window thread of Osdrop's own).
