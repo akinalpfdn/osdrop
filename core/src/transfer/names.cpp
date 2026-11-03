@@ -132,6 +132,9 @@ std::u32string mapped_code_points(std::string_view name, TargetPlatform target) 
     }
     if (length_on(code_points, target) > limit_of(target)) {
         code_points = fit(code_points, {}, target);
+        if (target == TargetPlatform::Windows) {
+            make_windows_safe(code_points); // the cut may end on a dot or a space
+        }
     }
     return code_points;
 }
