@@ -42,6 +42,33 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
   process and service. On other hosts it builds the portable parts only (`portable` preset).
 - The WPF shell loads the engine DLL through P/Invoke.
 
+## Core networking
+
+Built in Phases 5–7 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
+it with a simulated clock and network; one Asio layer drives it in the apps.
+
+| Layer | Directory | Role |
+|-------|-----------|------|
+| Protocol | `protocol/` | Strict decoders and canonical encoders for every message ([`PROTOCOL.md`](PROTOCOL.md)) |
+| Crypto | `crypto/` | Noise XX, cipher states, session and stream keys, input datagram sealing, pairing code |
+| Session | `session/` | `SessionEngine`: one control connection from Hello to Bye — handshake, pairing confirmation, capabilities, ports, heartbeats, peer loss, clock offset, latest-wins input |
+| Mesh | `mesh/` | `Mesh`: every connection of one computer — who dials, duplicate resolution, reconnects with backoff, transfer streams with their tokens and keys |
+| Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
+
+- **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
+  Commands from other threads are queued to it in order; those that return a result wait for it.
+  The timer is set to the mesh's next deadline instead of ticking, so an idle group costs a few
+  wakeups per second per peer (heartbeats).
+- **Peer loss.** A silent peer is reported unresponsive after 750 ms, so input to and from it stops
+  well within the one-second budget; its session survives a Wi-Fi stall and ends only after 10 s.
+- **Backpressure.** A transfer stream refuses messages while 4 MiB are queued for writing and
+  reports itself writable again below 1 MiB, so a file never fills memory or delays the control
+  connection, which has its own TCP connection.
+- **Traffic marking.** On macOS, input sockets are marked as interactive voice and control
+  connections as signaling, so Wi-Fi gives them priority. Windows has no unprivileged equivalent;
+  sockets stay unmarked there.
+
 ## macOS input layer
 
 Built in Phase 1 (`macos/Osdrop/Services/Input`):

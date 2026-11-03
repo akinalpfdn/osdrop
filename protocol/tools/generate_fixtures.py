@@ -127,9 +127,9 @@ def capabilities(features: int, streams: int, reserved: bytes = bytes(3)) -> byt
     return control(0x04, u32(features) + u8(streams) + reserved)
 
 
-def session_setup(port: int = 50_123, input_token: bytes = INPUT_TOKEN,
+def session_setup(port: int = 50_123, listen_port: int = 49_152, input_token: bytes = INPUT_TOKEN,
                   transfer_token: bytes = TRANSFER_TOKEN) -> bytes:
-    return control(0x05, u16(port) + input_token + transfer_token)
+    return control(0x05, u16(port) + u16(listen_port) + input_token + transfer_token)
 
 
 def member(device_id: bytes, epoch: int, platform: int, name: str | bytes, reserved: int = 0) -> bytes:
@@ -257,6 +257,8 @@ def control_fixtures() -> list[Fixture]:
         Fixture("control/error_unknown_code.bin", "control", v, 0x09, "Error with a code from a newer version",
                 control(0x09, u16(999))),
         Fixture("control/bye_revoked.bin", "control", v, 0x0A, "Bye: revoked", control(0x0A, u8(6))),
+        Fixture("control/bye_duplicate.bin", "control", v, 0x0A, "Bye: duplicate connection",
+                control(0x0A, u8(7))),
         Fixture("control/roster_two_members.bin", "control", v, 0x10, "two members and a revocation",
                 roster(roster_two, [revocation(LAPTOP_ID, 1)])),
         Fixture("control/roster_repaired_member.bin", "control", v, 0x10,
@@ -328,6 +330,8 @@ def control_fixtures() -> list[Fixture]:
                 control(0x08, version=2)),
         Fixture("malformed/control_type_0.bin", "control", e, UNKNOWN_TYPE, "type 0x00", control(0x00)),
         Fixture("malformed/control_type_7f.bin", "control", e, UNKNOWN_TYPE, "type 0x7F", control(0x7F)),
+        Fixture("malformed/control_transfer_type.bin", "control", e, UNKNOWN_TYPE,
+                "type 0x88, a transfer type", control(0x88, u32(4))),
         Fixture("malformed/control_too_large.bin", "control", e, TOO_LARGE, "65537-byte message",
                 max_size_drag_offer() + b"n"),
 
@@ -382,6 +386,8 @@ def control_fixtures() -> list[Fixture]:
                 "last reserved byte is 1", capabilities(0x1F, 4, b"\x00\x00\x01")),
         Fixture("malformed/session_setup_port_0.bin", "control", e, VALUE_OUT_OF_RANGE, "UDP port 0",
                 session_setup(port=0)),
+        Fixture("malformed/session_setup_listen_port_0.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "listen port 0", session_setup(listen_port=0)),
         Fixture("malformed/session_setup_zero_input_token.bin", "control", e, VALUE_OUT_OF_RANGE,
                 "input token all zeros", session_setup(input_token=ZERO_ID)),
         Fixture("malformed/session_setup_zero_transfer_token.bin", "control", e, VALUE_OUT_OF_RANGE,
@@ -390,7 +396,7 @@ def control_fixtures() -> list[Fixture]:
                 session_setup()[:-1]),
         Fixture("malformed/error_code_0.bin", "control", e, VALUE_OUT_OF_RANGE, "code 0", control(0x09, u16(0))),
         Fixture("malformed/bye_reason_0.bin", "control", e, VALUE_OUT_OF_RANGE, "reason 0", control(0x0A, u8(0))),
-        Fixture("malformed/bye_reason_7.bin", "control", e, VALUE_OUT_OF_RANGE, "reason 7", control(0x0A, u8(7))),
+        Fixture("malformed/bye_reason_8.bin", "control", e, VALUE_OUT_OF_RANGE, "reason 8", control(0x0A, u8(8))),
         Fixture("malformed/heartbeat_with_body.bin", "control", e, TRAILING_BYTES, "Heartbeat with a body",
                 control(0x08, b"\x00")),
         Fixture("malformed/ping_truncated.bin", "control", e, TRUNCATED, "send time cut short",
@@ -626,7 +632,7 @@ def transfer(message_type: int, body: bytes = b"", magic: bytes = MAGIC, version
 
 
 def transfer_hello(token: bytes = TRANSFER_TOKEN, stream_id: int = 1) -> bytes:
-    return transfer(0x01, token + u32(stream_id))
+    return transfer(0x81, token + u32(stream_id))
 
 
 def object_ref(kind: int = 1, object_id: int = 9, item_index: int = 0, reserved: bytes = bytes(3)) -> bytes:
@@ -634,7 +640,7 @@ def object_ref(kind: int = 1, object_id: int = 9, item_index: int = 0, reserved:
 
 
 def manifest_request(request_id: int = 3, obj: bytes | None = None) -> bytes:
-    return transfer(0x02, u32(request_id) + (object_ref() if obj is None else obj))
+    return transfer(0x82, u32(request_id) + (object_ref() if obj is None else obj))
 
 
 def entry(path: str | bytes, kind: int = 1, flags: int = 0, byte_count: int = 0,
@@ -644,20 +650,20 @@ def entry(path: str | bytes, kind: int = 1, flags: int = 0, byte_count: int = 0,
 
 def manifest(entries: list[bytes], request_id: int = 3, is_last: int = 1, count: int | None = None,
              reserved: int = 0) -> bytes:
-    return transfer(0x03, u32(request_id) + u8(is_last) + u8(reserved)
+    return transfer(0x83, u32(request_id) + u8(is_last) + u8(reserved)
                     + u16(len(entries) if count is None else count) + b"".join(entries))
 
 
 def content_request(request_id: int = 4, obj: bytes | None = None, entry_index: int = 2, offset: int = 0,
                     length: int = 2 ** 64 - 1) -> bytes:
-    return transfer(0x04, u32(request_id) + (object_ref() if obj is None else obj) + u32(entry_index)
+    return transfer(0x84, u32(request_id) + (object_ref() if obj is None else obj) + u32(entry_index)
                     + u64(offset) + u64(length))
 
 
 def content_chunk(data: bytes, request_id: int = 4, offset: int = 65_504,
                   declared_length: int | None = None) -> bytes:
     length = len(data) if declared_length is None else declared_length
-    return transfer(0x05, u32(request_id) + u64(offset) + u32(length) + data)
+    return transfer(0x85, u32(request_id) + u64(offset) + u32(length) + data)
 
 
 def transfer_fixtures() -> list[Fixture]:
@@ -672,41 +678,43 @@ def transfer_fixtures() -> list[Fixture]:
         entry("Photos 2026/latest", kind=3, byte_count=len("İstanbul.heic".encode())),
     ]
     return [
-        Fixture("transfer/transfer_hello.bin", "transfer", v, 0x01, "TransferHello", transfer_hello()),
-        Fixture("transfer/manifest_request_drag.bin", "transfer", v, 0x02, "manifest of dragged item 1",
+        Fixture("transfer/transfer_hello.bin", "transfer", v, 0x81, "TransferHello", transfer_hello()),
+        Fixture("transfer/manifest_request_drag.bin", "transfer", v, 0x82, "manifest of dragged item 1",
                 manifest_request(obj=object_ref(item_index=1))),
-        Fixture("transfer/manifest_request_last_item.bin", "transfer", v, 0x02, "dragged item 1023",
+        Fixture("transfer/manifest_request_last_item.bin", "transfer", v, 0x82, "dragged item 1023",
                 manifest_request(obj=object_ref(item_index=1023))),
-        Fixture("transfer/manifest_request_clipboard_files.bin", "transfer", v, 0x02,
+        Fixture("transfer/manifest_request_clipboard_files.bin", "transfer", v, 0x82,
                 "manifest of the clipboard's files", manifest_request(obj=clipboard_files)),
-        Fixture("transfer/manifest_single_file.bin", "transfer", v, 0x03, "a file item's single entry",
+        Fixture("transfer/manifest_single_file.bin", "transfer", v, 0x83, "a file item's single entry",
                 manifest([entry("Report.pdf", byte_count=482_113)])),
-        Fixture("transfer/manifest_tree.bin", "transfer", v, 0x03,
+        Fixture("transfer/manifest_tree.bin", "transfer", v, 0x83,
                 "a folder with a subfolder, an executable and a link, not the last part",
                 manifest(tree, is_last=0)),
-        Fixture("transfer/content_request_drag.bin", "transfer", v, 0x04, "entry 2 of dragged item 0, to the end",
+        Fixture("transfer/content_request_drag.bin", "transfer", v, 0x84, "entry 2 of dragged item 0, to the end",
                 content_request()),
-        Fixture("transfer/content_request_clipboard_text.bin", "transfer", v, 0x04, "the clipboard's plain text",
+        Fixture("transfer/content_request_clipboard_text.bin", "transfer", v, 0x84, "the clipboard's plain text",
                 content_request(obj=clipboard_text, entry_index=0, length=1)),
-        Fixture("transfer/content_request_clipboard_file.bin", "transfer", v, 0x04,
+        Fixture("transfer/content_request_clipboard_file.bin", "transfer", v, 0x84,
                 "entry 3 of the clipboard's files, resumed at 1 MiB",
                 content_request(obj=clipboard_files, entry_index=3, offset=1 << 20, length=1 << 30)),
-        Fixture("transfer/content_chunk.bin", "transfer", v, 0x05, "a short chunk", content_chunk(pattern(9, 100))),
-        Fixture("transfer/content_chunk_max.bin", "transfer", v, 0x05, "a 65504-byte chunk",
+        Fixture("transfer/content_chunk.bin", "transfer", v, 0x85, "a short chunk", content_chunk(pattern(9, 100))),
+        Fixture("transfer/content_chunk_max.bin", "transfer", v, 0x85, "a 65504-byte chunk",
                 content_chunk(pattern(5, MAX_CHUNK))),
-        Fixture("transfer/content_end.bin", "transfer", v, 0x06, "ContentEnd",
-                transfer(0x06, u32(4) + u64(3_100_200) + DIGEST)),
-        Fixture("transfer/transfer_error_stream.bin", "transfer", v, 0x07, "error for the whole stream",
-                transfer(0x07, u32(0) + u16(28))),
-        Fixture("transfer/transfer_cancel.bin", "transfer", v, 0x08, "TransferCancel", transfer(0x08, u32(4))),
+        Fixture("transfer/content_end.bin", "transfer", v, 0x86, "ContentEnd",
+                transfer(0x86, u32(4) + u64(3_100_200) + DIGEST)),
+        Fixture("transfer/transfer_error_stream.bin", "transfer", v, 0x87, "error for the whole stream",
+                transfer(0x87, u32(0) + u16(28))),
+        Fixture("transfer/transfer_cancel.bin", "transfer", v, 0x88, "TransferCancel", transfer(0x88, u32(4))),
 
         Fixture("malformed/transfer_empty.bin", "transfer", e, TRUNCATED, "empty input", b""),
         Fixture("malformed/transfer_bad_magic.bin", "transfer", e, BAD_MAGIC, "magic is od",
-                transfer(0x08, u32(4), magic=b"od")),
+                transfer(0x88, u32(4), magic=b"od")),
         Fixture("malformed/transfer_version_2.bin", "transfer", e, UNSUPPORTED_VERSION, "version 2",
-                transfer(0x08, u32(4), version=2)),
-        Fixture("malformed/transfer_unknown_type.bin", "transfer", e, UNKNOWN_TYPE, "type 0x09",
-                transfer(0x09, u32(4))),
+                transfer(0x88, u32(4), version=2)),
+        Fixture("malformed/transfer_unknown_type.bin", "transfer", e, UNKNOWN_TYPE, "type 0x89",
+                transfer(0x89, u32(4))),
+        Fixture("malformed/transfer_control_type.bin", "transfer", e, UNKNOWN_TYPE,
+                "type 0x01, a control type", transfer(0x01, TRANSFER_TOKEN + u32(1))),
         Fixture("malformed/transfer_too_large.bin", "transfer", e, TOO_LARGE, "65537-byte message",
                 content_chunk(bytes(MAX_TRANSFER + 1 - 20))),
         Fixture("malformed/transfer_hello_zero_token.bin", "transfer", e, VALUE_OUT_OF_RANGE, "token all zeros",
@@ -798,15 +806,15 @@ def transfer_fixtures() -> list[Fixture]:
         Fixture("malformed/content_chunk_short.bin", "transfer", e, TRUNCATED, "data shorter than declared",
                 content_chunk(bytes(10), declared_length=11)),
         Fixture("malformed/content_end_id_0.bin", "transfer", e, VALUE_OUT_OF_RANGE, "request_id 0",
-                transfer(0x06, u32(0) + u64(1) + DIGEST)),
+                transfer(0x86, u32(0) + u64(1) + DIGEST)),
         Fixture("malformed/content_end_short_digest.bin", "transfer", e, TRUNCATED, "31-byte digest",
-                transfer(0x06, u32(4) + u64(1) + DIGEST[:31])),
+                transfer(0x86, u32(4) + u64(1) + DIGEST[:31])),
         Fixture("malformed/transfer_error_code_0.bin", "transfer", e, VALUE_OUT_OF_RANGE, "code 0",
-                transfer(0x07, u32(4) + u16(0))),
+                transfer(0x87, u32(4) + u16(0))),
         Fixture("malformed/transfer_cancel_id_0.bin", "transfer", e, VALUE_OUT_OF_RANGE, "request_id 0",
-                transfer(0x08, u32(0))),
+                transfer(0x88, u32(0))),
         Fixture("malformed/transfer_cancel_trailing.bin", "transfer", e, TRAILING_BYTES, "one extra byte",
-                transfer(0x08, u32(4) + b"\x00")),
+                transfer(0x88, u32(4) + b"\x00")),
     ]
 
 

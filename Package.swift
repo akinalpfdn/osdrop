@@ -16,7 +16,11 @@ let package = Package(
             sources: ["src", "third_party/monocypher/monocypher.c"],
             publicHeadersPath: "include",
             cSettings: [.headerSearchPath("third_party/monocypher")],
-            cxxSettings: [.headerSearchPath("src"), .headerSearchPath("third_party/monocypher")]
+            cxxSettings: [
+                .headerSearchPath("src"), .headerSearchPath("third_party/monocypher"),
+                .headerSearchPath("third_party/asio/include"),
+                .define("ASIO_STANDALONE"), .define("ASIO_NO_DEPRECATED"),
+            ]
         ),
         .target(
             name: "CoreBridge",

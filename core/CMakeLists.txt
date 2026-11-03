@@ -35,6 +35,7 @@ target_include_directories(osdrop_monocypher PUBLIC third_party/monocypher)
 add_library(osdrop_core STATIC
     src/capi/discovery_capi.cpp
     src/capi/identity_capi.cpp
+    src/capi/mesh_capi.cpp
     src/capi/protocol_capi.cpp
     src/capi/version.cpp
     src/crypto/input_crypto.cpp
@@ -45,7 +46,13 @@ add_library(osdrop_core STATIC
     src/protocol/input_codec.cpp
     src/protocol/text.cpp
     src/protocol/transfer_codec.cpp
-    src/protocol/wire.cpp)
+    src/mesh/mesh.cpp
+    src/mesh/transfer_channel.cpp
+    src/protocol/wire.cpp
+    src/session/control_framer.cpp
+    src/session/session_engine.cpp
+    src/transport/asio_node.cpp
+    src/transport/traffic_class.cpp)
 add_library(osdrop::core ALIAS osdrop_core)
 
 target_include_directories(osdrop_core
@@ -54,6 +61,19 @@ target_include_directories(osdrop_core
 target_compile_features(osdrop_core PUBLIC cxx_std_20)
 set_target_properties(osdrop_core PROPERTIES CXX_EXTENSIONS OFF)
 target_link_libraries(osdrop_core PRIVATE osdrop_monocypher osdrop::warnings)
+
+# Asio is header-only; SYSTEM keeps its headers out of Osdrop's warning policy. The tests use it
+# too, so it is an interface target rather than settings on osdrop_core.
+find_package(Threads REQUIRED)
+add_library(osdrop_asio INTERFACE)
+target_include_directories(osdrop_asio SYSTEM INTERFACE third_party/asio/include)
+target_compile_definitions(osdrop_asio INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
+target_link_libraries(osdrop_asio INTERFACE Threads::Threads)
+if(WIN32)
+    target_compile_definitions(osdrop_asio INTERFACE _WIN32_WINNT=0x0A00 WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(osdrop_asio INTERFACE ws2_32 mswsock)
+endif()
+target_link_libraries(osdrop_core PRIVATE osdrop_asio)
 
 if(OSDROP_CORE_BUILD_TESTS)
     enable_testing()

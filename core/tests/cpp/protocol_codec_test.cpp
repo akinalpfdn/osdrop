@@ -80,7 +80,8 @@ std::vector<ControlMessage> boundary_messages() {
         protocol::PairingConfirm{.decision = protocol::PairingDecision::Rejected},
         protocol::Capabilities{.features = protocol::kKnownFeatures,
                                .max_transfer_streams = protocol::kMaxTransferStreams},
-        protocol::SessionSetup{.udp_port = 65535, .input_token = token, .transfer_token = id(1)},
+        protocol::SessionSetup{
+            .udp_port = 65535, .listen_port = 1, .input_token = token, .transfer_token = id(1)},
         protocol::Ping{.ping_id = 0, .send_time_us = std::numeric_limits<std::uint64_t>::max()},
         protocol::Pong{.ping_id = 0xFFFF'FFFF,
                        .ping_send_time_us = 1,
@@ -88,7 +89,7 @@ std::vector<ControlMessage> boundary_messages() {
                        .reply_time_us = 3},
         protocol::Heartbeat{},
         protocol::PeerError{.code = 0xFFFF},
-        protocol::Bye{.reason = protocol::ByeReason::Revoked},
+        protocol::Bye{.reason = protocol::ByeReason::Duplicate},
         protocol::RosterState{.group_id = token, .members = members, .revocations = revocations},
         protocol::ScreenReport{.monitors = monitors},
         protocol::LayoutState{.revision = std::numeric_limits<std::uint64_t>::max(),

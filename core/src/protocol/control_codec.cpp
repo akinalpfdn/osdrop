@@ -47,7 +47,8 @@ Check validate(const Capabilities& m) {
 }
 
 Check validate(const SessionSetup& m) {
-    return range(m.udp_port != 0 && !is_zero(m.input_token) && !is_zero(m.transfer_token));
+    return range(m.udp_port != 0 && m.listen_port != 0 && !is_zero(m.input_token) &&
+                 !is_zero(m.transfer_token));
 }
 
 Check validate(const Ping& /*m*/) {
@@ -64,7 +65,7 @@ Check validate(const PeerError& m) {
 }
 
 Check validate(const Bye& m) {
-    return range(enum_in(m.reason, 1, 6));
+    return range(enum_in(m.reason, 1, 7));
 }
 
 Check validate(const RosterState& m) {
@@ -266,7 +267,8 @@ Decoded read_capabilities(BodyReader& b) {
 Decoded read_session_setup(BodyReader& b) {
     SessionSetup m;
     Reader& r = b.raw();
-    if (!r.u16(m.udp_port) || !read_array(r, m.input_token) || !read_array(r, m.transfer_token)) {
+    if (!r.u16(m.udp_port) || !r.u16(m.listen_port) || !read_array(r, m.input_token) ||
+        !read_array(r, m.transfer_token)) {
         return decode_failure(Error::Truncated);
     }
     return finish(b, m);
@@ -589,6 +591,7 @@ void write_body(Writer& w, const ControlMessage& message) {
                    },
                    [&](const SessionSetup& m) {
                        w.u16(m.udp_port);
+                       w.u16(m.listen_port);
                        w.bytes(m.input_token);
                        w.bytes(m.transfer_token);
                    },

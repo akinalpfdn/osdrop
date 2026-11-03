@@ -3,6 +3,11 @@
 
 Usage: run_clang_tidy.py <build-dir> <path-prefix>... [-- <extra clang-tidy args>]
 The clang-tidy version is read from scripts/lint.sh so there is a single pin.
+
+Vendored code (any `third_party/` directory) is exempt from linting. Header filtering keeps its
+ordinary diagnostics out, but the static analyzer can still report inside it when a path starts in
+first-party code (Asio's Windows thread start-up, under MSVC's headers); such reports are printed
+and do not fail the run.
 """
 
 from __future__ import annotations
@@ -39,6 +44,23 @@ def sources(build_dir: Path, prefixes: list[str]) -> list[str]:
     return sorted(found)
 
 
+DIAGNOSTIC = re.compile(r"^(?P<path>.+?):\d+:\d+: (?:error|warning): ")
+
+
+def blocking(output: str) -> tuple[int, int]:
+    """(diagnostics in first-party files, diagnostics in vendored files) found in `output`."""
+    first_party = vendored = 0
+    for line in output.splitlines():
+        match = DIAGNOSTIC.match(line)
+        if not match:
+            continue
+        if "/third_party/" in match.group("path").replace("\\", "/"):
+            vendored += 1
+        else:
+            first_party += 1
+    return first_party, vendored
+
+
 def main() -> int:
     args = sys.argv[1:]
     extra: list[str] = []
@@ -52,7 +74,16 @@ def main() -> int:
     if not files:
         sys.exit(f"no sources matched {args[1:]} in {build_dir}")
     command = ["uvx", f"clang-tidy@{pinned_version()}", "-p", str(build_dir), "--quiet", *extra, *files]
-    return subprocess.call(command, cwd=ROOT)
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    if result.returncode == 0:
+        return 0
+    first_party, vendored = blocking(result.stdout + result.stderr)
+    if vendored > 0 and first_party == 0:
+        print(f"Ignored {vendored} diagnostic(s) in vendored third-party code.", file=sys.stderr)
+        return 0
+    return result.returncode
 
 
 if __name__ == "__main__":

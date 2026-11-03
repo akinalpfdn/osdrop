@@ -94,6 +94,21 @@ typedef enum osdrop_platform {
     OSDROP_PLATFORM_MAX_ENUM = 0x7FFFFFFF
 } osdrop_platform;
 
+typedef enum osdrop_log_level {
+    OSDROP_LOG_DEBUG = 1,
+    OSDROP_LOG_INFO = 2,
+    OSDROP_LOG_WARNING = 3,
+    OSDROP_LOG_ERROR = 4,
+    OSDROP_LOG_LEVEL_MAX_ENUM = 0x7FFFFFFF
+} osdrop_log_level;
+
+typedef enum osdrop_trust {
+    OSDROP_TRUST_TRUSTED = 1, /* a member: the session continues without a code */
+    OSDROP_TRUST_UNKNOWN = 2, /* a first pairing: both users compare a code */
+    OSDROP_TRUST_BLOCKED = 3, /* refused; the peer is told NOT_TRUSTED */
+    OSDROP_TRUST_MAX_ENUM = 0x7FFFFFFF
+} osdrop_trust;
+
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
 
 /*
@@ -186,6 +201,93 @@ osdrop_result osdrop_advertisement_to_txt(const osdrop_advertisement* advertisem
  * user to update the other computer. */
 osdrop_result osdrop_advertisement_from_txt(const osdrop_txt_record* record,
                                             osdrop_advertisement* out_advertisement);
+
+/*
+ * The mesh (PROTOCOL.md "Session flow"): one encrypted session with every member of this
+ * computer's group, on an I/O thread owned by core. Callbacks run on that thread; they must return
+ * quickly and must not call osdrop_mesh_* functions themselves (post to another queue instead).
+ * Every other function may be called from any thread.
+ */
+typedef struct osdrop_mesh osdrop_mesh;
+
+/* A peer as its Hello and handshake describe it. */
+typedef struct osdrop_peer {
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    uint8_t public_key[OSDROP_KEY_SIZE];
+    osdrop_platform platform;
+    uint8_t protocol_minor;
+    uint8_t has_group;
+    uint8_t group_id[OSDROP_GROUP_ID_SIZE];
+    char name[OSDROP_TXT_VALUE_SIZE]; /* NUL-terminated UTF-8 */
+} osdrop_peer;
+
+typedef struct osdrop_session_stats {
+    uint32_t rtt_us;
+    int64_t clock_offset_us; /* the peer's clock minus this computer's */
+    uint64_t datagrams_rejected;
+    uint64_t stale_motion_dropped;
+} osdrop_session_stats;
+
+/* Every callback may be NULL except `trust`; `context` is passed back unchanged. */
+typedef struct osdrop_mesh_callbacks {
+    void* context;
+    /* Decide from in-memory data: the session waits for the answer. */
+    osdrop_trust (*trust)(void* context, const osdrop_peer* peer);
+    /* A first pairing: show `code` (000000-999999); answer with osdrop_mesh_confirm_pairing. */
+    void (*pairing_code)(void* context, uint64_t connection, uint32_t code,
+                         const osdrop_peer* peer);
+    /* Both users confirmed: store the peer as trusted. Its session continues. */
+    void (*paired)(void* context, const osdrop_peer* peer);
+    void (*pairing_failed)(void* context, uint64_t connection, osdrop_result reason);
+    void (*peer_connected)(void* context, const osdrop_peer* peer, uint32_t features);
+    /* `reason` is OSDROP_OK for an orderly end. */
+    void (*peer_disconnected)(void* context, const uint8_t* device_id, osdrop_result reason);
+    /* 0: silent for 750 ms, input to and from it stops; 1: heard from again. */
+    void (*peer_responsive)(void* context, const uint8_t* device_id, uint8_t responsive);
+    void (*stats)(void* context, const uint8_t* device_id, const osdrop_session_stats* stats);
+    /* One line, NUL-terminated; never contains keys, keystrokes or file contents. */
+    void (*log)(void* context, osdrop_log_level level, const char* message);
+} osdrop_mesh_callbacks;
+
+typedef struct osdrop_mesh_config {
+    const uint8_t* secret_key; /* OSDROP_KEY_SIZE bytes, from osdrop_identity_generate */
+    const char* device_name;   /* NUL-terminated UTF-8, 1 to 64 bytes */
+    osdrop_platform platform;
+    const uint8_t* group_id;      /* OSDROP_GROUP_ID_SIZE bytes, or NULL when in no group */
+    uint32_t features;            /* Capabilities bits (PROTOCOL.md) */
+    uint8_t max_transfer_streams; /* 1 to 8 */
+    uint16_t listen_port;         /* 0: any; a taken port falls back to any */
+} osdrop_mesh_config;
+
+/*
+ * Starts listening and the I/O thread. `random` and `callbacks` are copied; their contexts must
+ * stay valid until osdrop_mesh_destroy returns.
+ */
+osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
+                                 const osdrop_random_source* random,
+                                 const osdrop_mesh_callbacks* callbacks, osdrop_mesh** out_mesh);
+
+/* Ends every session (Bye: application quit) and joins the I/O thread; NULL is ignored. */
+void osdrop_mesh_destroy(osdrop_mesh* mesh);
+
+osdrop_result osdrop_mesh_listen_port(const osdrop_mesh* mesh, uint16_t* out_port);
+osdrop_result osdrop_mesh_device_id(const osdrop_mesh* mesh, uint8_t* out_device_id);
+
+/* From discovery: a computer advertising `group_id` (NULL: none) at `host`:`port`. */
+osdrop_result osdrop_mesh_peer_discovered(osdrop_mesh* mesh, const uint8_t* device_id,
+                                          const uint8_t* group_id, const char* host, uint16_t port);
+osdrop_result osdrop_mesh_peer_lost(osdrop_mesh* mesh, const uint8_t* device_id);
+/* The group this computer advertises in Hello and connects to; NULL: none. */
+osdrop_result osdrop_mesh_set_group(osdrop_mesh* mesh, const uint8_t* group_id);
+
+/* Dials `host`:`port` to pair, whatever its group; the connection identifies later callbacks. */
+osdrop_result osdrop_mesh_pair(osdrop_mesh* mesh, const char* host, uint16_t port,
+                               uint64_t* out_connection);
+osdrop_result osdrop_mesh_confirm_pairing(osdrop_mesh* mesh, uint64_t connection, uint8_t accepted);
+/* Ends the session with one peer; it is not dialled again until discovered again. */
+osdrop_result osdrop_mesh_disconnect(osdrop_mesh* mesh, const uint8_t* device_id);
+/* Ends every session before sleep (peers see PEER_SLEEPING) or quitting. */
+osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping);
 
 #ifdef __cplusplus
 } /* extern "C" */

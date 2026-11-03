@@ -94,7 +94,7 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x02 | HandshakeMessage | Noise XX messages 1–3, plaintext |
 | 0x03 | PairingConfirm | once per side after the handshake |
 | 0x04 | Capabilities | after pairing |
-| 0x05 | SessionSetup | after pairing: the sender's UDP port and tokens |
+| 0x05 | SessionSetup | after pairing: the sender's ports and tokens |
 | 0x06 | Ping | RTT and clock offset |
 | 0x07 | Pong | reply to Ping |
 | 0x08 | Heartbeat | keeps an idle session alive |
@@ -161,6 +161,7 @@ data model) clear the bits it refuses for this peer.
 | Field | Type | Values |
 |-------|------|--------|
 | udp_port | u16 | 1–65535: the sender's input socket for this session |
+| listen_port | u16 | 1–65535: the sender's TCP listener, where the peer opens transfer streams |
 | input_token | bytes[16] | proves an InputHello comes from this session's peer |
 | transfer_token | bytes[16] | proves a TransferHello comes from this session's peer |
 
@@ -196,7 +197,7 @@ No body.
 
 | Field | Type | Values |
 |-------|------|--------|
-| reason | u8 | 1 user disconnected, 2 application quit, 3 going to sleep, 4 error, 5 leaving the group, 6 revoked |
+| reason | u8 | 1 user disconnected, 2 application quit, 3 going to sleep, 4 error, 5 leaving the group, 6 revoked, 7 duplicate connection (see "Session flow") |
 
 ### 0x10 RosterState
 
@@ -482,32 +483,34 @@ applied.
 A transfer stream is a TCP connection from the receiving side to the sending side's control
 listener. It uses the control channel's framing (maximum plaintext 65536 bytes). The first frame
 is a TransferHello in clear; every later frame is encrypted with the stream's keys. A transfer
-message has the common prefix and a type:
+message has the common prefix and a type. Transfer types (0x81–0x88) never overlap control types
+(below 0x80), so the listener tells a transfer stream from a control connection by the type of the
+first frame.
 
 | Type | Name | Direction |
 |-----:|------|-----------|
-| 0x01 | TransferHello | receiver → sender, plaintext |
-| 0x02 | ManifestRequest | receiver → sender |
-| 0x03 | Manifest | sender → receiver |
-| 0x04 | ContentRequest | receiver → sender |
-| 0x05 | ContentChunk | sender → receiver |
-| 0x06 | ContentEnd | sender → receiver |
-| 0x07 | TransferError | both |
-| 0x08 | TransferCancel | receiver → sender |
+| 0x81 | TransferHello | receiver → sender, plaintext |
+| 0x82 | ManifestRequest | receiver → sender |
+| 0x83 | Manifest | sender → receiver |
+| 0x84 | ContentRequest | receiver → sender |
+| 0x85 | ContentChunk | sender → receiver |
+| 0x86 | ContentEnd | sender → receiver |
+| 0x87 | TransferError | both |
+| 0x88 | TransferCancel | receiver → sender |
 
 Objects: `object_kind` 1 is a drag (`object_id` = drag_id, `item_index` = the item in the
 DragOffer, 0–1023), 2 is a clipboard announcement (`object_id` = clip_id, `item_index` = the
 format code, 1–5). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
 a dragged item.
 
-### 0x01 TransferHello
+### 0x81 TransferHello
 
 | Field | Type | Values |
 |-------|------|--------|
 | transfer_token | bytes[16] | from the sender's SessionSetup |
 | stream_id | u32 | not 0; odd when the session's initiator opens the stream, even when the responder does; never reused within a session. Selects the stream's keys. |
 
-### 0x02 ManifestRequest
+### 0x82 ManifestRequest
 
 | Field | Type | Values |
 |-------|------|--------|
@@ -517,7 +520,7 @@ a dragged item.
 | object_id | u64 | not 0 |
 | item_index | u32 | |
 
-### 0x03 Manifest
+### 0x83 Manifest
 
 One part of the list of entries an item consists of. A file item has one entry; a folder lists
 every folder, file and link inside it, parents before children.
@@ -544,7 +547,7 @@ entry:
 A link's content is its target path as UTF-8 bytes, requested like a file's; receivers decide
 whether to create the link (DEVPLAN, Phase 13).
 
-### 0x04 ContentRequest
+### 0x84 ContentRequest
 
 | Field | Type | Values |
 |-------|------|--------|
@@ -557,7 +560,7 @@ whether to create the link (DEVPLAN, Phase 13).
 | offset | u64 | first byte wanted |
 | length | u64 | bytes wanted, 1 or more; may run past the end, which ends the content |
 
-### 0x05 ContentChunk
+### 0x85 ContentChunk
 
 | Field | Type | Values |
 |-------|------|--------|
@@ -568,7 +571,7 @@ whether to create the link (DEVPLAN, Phase 13).
 
 Chunks of one request arrive in order and without gaps.
 
-### 0x06 ContentEnd
+### 0x86 ContentEnd
 
 | Field | Type | Values |
 |-------|------|--------|
@@ -576,18 +579,86 @@ Chunks of one request arrive in order and without gaps.
 | byte_count | u64 | bytes sent for the request |
 | digest | bytes[32] | BLAKE2b-256 of the whole entry (or clipboard format), not only the requested range |
 
-### 0x07 TransferError
+### 0x87 TransferError
 
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | 0 when the error concerns the whole stream |
 | code | u16 | an error code, 1 or more |
 
-### 0x08 TransferCancel
+### 0x88 TransferCancel
 
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | not 0 |
+
+## Session flow
+
+### Connections
+
+- Every computer runs one TCP listener, the port in its SRV record. It accepts control connections
+  and transfer streams; the type of the first frame tells them apart.
+- Two members of a group keep exactly one session. The member with the lower device ID (compared
+  byte by byte) dials as soon as it discovers the other; the higher one dials too only when no
+  session exists 3 s after discovery. A computer dials only peers that advertise its own,
+  non-empty group.
+- When a second connection between the same pair authenticates, both sides keep the same one: if
+  the same side dialled both, the newer one; otherwise the one the lower device ID dialled. The
+  other is closed with Bye 7, which ends it without an error and without a reconnect.
+- A dialled peer must authenticate with the static key of the device ID it advertised; any other key
+  is refused with NOT_TRUSTED.
+- After a connection ends with an error, the dialling side tries again after 250 ms, doubling up to
+  30 s, until a session is established. A peer that refused (NOT_TRUSTED, PAIRING_REJECTED,
+  UNSUPPORTED_VERSION) or that this computer disconnected on purpose is not dialled again until it
+  is discovered again.
+
+### Control connection
+
+1. Both sides send Hello.
+2. The dialler sends HandshakeMessage step 1 once the listener's Hello arrived; steps 2 and 3
+   follow.
+3. Each side decides about the authenticated peer: a member gets PairingConfirm *accepted* at once;
+   an unknown computer gets the pairing code shown and PairingConfirm after the user's answer; a
+   refused one gets Error NOT_TRUSTED.
+4. When both have accepted, each side sends Capabilities and SessionSetup. The session is
+   *established* once the peer's two have arrived.
+5. Application messages (types 0x10 and above) travel only in an established session.
+
+Before the handshake completes only Hello, HandshakeMessage and Error travel, in plaintext; after
+it every frame is encrypted. A message that is malformed or arrives in the wrong state ends the
+session, and the peer is told with Error (UNSUPPORTED_VERSION for another major version,
+UNEXPECTED_MESSAGE otherwise); a frame that fails authentication ends it without a reply. Error
+codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED and UNSUPPORTED_VERSION are shown as
+such, any other code as a generic peer error. Bye 3 (going to sleep) ends the session with
+PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
+error; every other reason with CONNECTION_CLOSED.
+
+| Timing | Value |
+|--------|-------|
+| Hello through handshake message 3 | 10 s |
+| The user's answer to a pairing code | 120 s |
+| Heartbeat after sending nothing for | 250 ms |
+| Peer reported unresponsive, and input to and from it stopped, after silence of | 750 ms |
+| Session closed with TIMED_OUT after silence of | 10 s |
+| Ping (round trip and clock offset) | every 1 s |
+| First complete frame on an accepted connection | 10 s |
+
+### Input datagrams
+
+Once the peer's SessionSetup arrives, a side sends InputHello with the peer's `input_token` to the
+peer's `udp_port` at the address of the control connection: every 250 ms until the peer's
+InputHello arrives, then every 5 s. A valid InputHello tells the receiver where to send input
+datagrams, so it also follows the peer to a new address. PointerMotion is accepted only in an
+established session and only when its sequence is higher than that of the last one applied.
+
+### Transfer streams
+
+The side that receives data opens the stream: a TCP connection to the peer's `listen_port` at the
+address of the control connection, whose first frame is TransferHello with the token from the
+peer's SessionSetup and a stream ID of its own parity. The accepting side closes the connection
+unless the token belongs to an established session, the parity is the opener's and the ID was not
+used before in that session. Ending a session ends its streams. A side accepts no more messages
+for a stream while 4 MiB are waiting to be written to it, and continues once less than 1 MiB is.
 
 ## Encryption
 
