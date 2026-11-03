@@ -11,6 +11,7 @@ DEVPLAN reference: Phase 13. Depends on: Phase 7, Phase 8
 - [ ] Portable name mapping in `core` (NFC, Windows-invalid characters, reserved names, trailing dots and spaces, case collisions within one tree, path length), replacing the Phase 4 function.
 - [ ] Platform readers and writers (long paths on Windows), a free-space check before writing, removal of partial files on failure.
 - [ ] Marking of received files (quarantine on macOS, Mark of the Web on Windows), decided with the user at the start of the phase.
+- [ ] Symbolic links inside folders arrive as link entries whose content is the target; whether a receiver recreates, follows or skips them is decided with the user at the start of the phase.
 - [ ] Receiver-side enforcement of the "files" permission.
 
 ## Acceptance Criteria

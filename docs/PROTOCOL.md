@@ -1,16 +1,688 @@
 # Osdrop wire protocol
 
-> Status: not yet specified. Phase 5 replaces this page with the authoritative, field-by-field
-> specification and the binary fixtures in `protocol/fixtures/`. Until then the fixed decisions
-> are in [`DEVPLAN.md`](../DEVPLAN.md) → Protocol Requirements.
+Version 1.0. This document is authoritative: `core/src/protocol/` implements it, and
+`protocol/tools/generate_fixtures.py` independently encodes the binary fixtures in
+`protocol/fixtures/` from it. Both implementations must agree byte for byte.
 
-## Fixed decisions
+The protocol is not frozen before the first release. A phase that changes a message changes this
+document, the fixture generator and the codec in the same pull request. From the first release on,
+changes are additive and raise the minor version.
 
-- All integers little-endian. Every message, datagram and transfer frame starts with a 2-byte magic
-  and a 1-byte protocol version.
-- Discovery: Bonjour / DNS-SD service type `_osdrop._tcp`.
-- Control channel: TCP, 4-byte length prefix, encrypted after the Noise XX handshake. Keys,
-  buttons and scroll travel here with the cursor position they belong to.
-- Input datagrams: UDP, pointer motion only, latest wins, AEAD-encrypted with a replay window.
-- Transfer streams: separate TCP connections for file data, ranged reads, per-file hashes.
-- Hand-written fixed binary layouts; no protobuf or JSON on the wire.
+## Conventions
+
+- All integers are **little-endian**, unsigned unless written `i32`/`i64`.
+- `bytes[N]` is exactly N bytes.
+- `string` is `u8 length` followed by that many bytes: at most **64 bytes**, valid UTF-8 (no
+  overlong forms or surrogates), no control characters (U+0000–U+001F, U+007F–U+009F).
+- `type_id` is `u8 length` followed by 1–128 bytes of a Uniform Type Identifier: ASCII letters,
+  digits, `.`, `-` and `_` only.
+- `name` is `u16 length` followed by 1–255 bytes: one file or folder name, valid UTF-8, no control
+  characters, no `/`, not `.` or `..`. Senders write names in Unicode Normalization Form C;
+  receivers normalize again before using a name, so decoders do not check the form.
+- `path` is `u16 length` followed by 1–1024 bytes: names (as above) joined with `/`, relative,
+  no empty component.
+- `coord` is an `i32` in 1/16 of a point (macOS points, Windows device-independent pixels),
+  from −2^28 to 2^28 (±16,777,216 points), so the sum of three coordinates fits an `i32`.
+- `device_id` is `bytes[16]`: the first 16 bytes of BLAKE2b-256 over the device's static public
+  key.
+- Fields marked *reserved* are written as 0 and must be 0 when read.
+- Decoders are strict: a message must be exactly as long as its fields; trailing bytes, unknown
+  enum values and out-of-range values are errors. Counts are bounded, but a message with variable
+  parts must also fit its channel's size limit; an encoder fails with `TOO_LARGE` otherwise. An
+  encoder refuses to produce anything a decoder would reject.
+- Times are microseconds on the sender's monotonic clock (`*_us`).
+
+## Layers
+
+```
+Discovery          Bonjour / DNS-SD  _osdrop._tcp
+Control (TCP)      frame = u32 length | payload
+                   payload = control message           (before the handshake completes)
+                   payload = AEAD(control message)     (after)
+Input (UDP)        datagram = input header (12 bytes, in clear) | AEAD(input body)
+Transfer (TCP)     a separate connection per transfer stream, same framing as control:
+                   first frame TransferHello in clear, then AEAD(transfer message)
+```
+
+The messages below are defined in plaintext; "Encryption" specifies how they are protected on the
+wire. The protocol fixtures are plaintext.
+
+### Common prefix
+
+Every control message, input datagram and transfer message starts with the same three bytes:
+
+| Offset | Field | Type | Value |
+|-------:|-------|------|-------|
+| 0 | magic | bytes[2] | `4F 44` ("OD") |
+| 2 | version | u8 | protocol major version, **1** |
+
+A receiver that reads a different version stops decoding (`UNSUPPORTED_VERSION`) and the session
+ends with "update the other computer". The prefix never changes across versions.
+
+## Discovery
+
+Service type `_osdrop._tcp`; the SRV record carries the TCP port of the control listener, which
+also accepts transfer connections. TXT record keys:
+
+| Key | Value |
+|-----|-------|
+| `pv` | protocol major version, decimal (`1`) |
+| `pm` | protocol minor version, decimal (`0`) |
+| `id` | device ID, 32 lowercase hex digits |
+| `name` | device name (UTF-8, as `string`) |
+| `os` | `macos` or `windows` |
+| `grp` | group ID, 32 lowercase hex digits (never all zeros), or empty when the computer is in no group |
+
+Numbers are decimal without sign or leading zeros. A record with a different `pv` is still
+parsed, so the UI can ask the user to update the other computer.
+
+## Control channel (TCP)
+
+Each frame is `u32 length` followed by `length` bytes of payload, 1 ≤ length ≤ **65536** for
+plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
+
+| Offset | Field | Type |
+|-------:|-------|------|
+| 0 | magic | bytes[2] |
+| 2 | version | u8 |
+| 3 | type | u8 |
+| 4 | body | type-specific, to the end of the payload |
+
+| Type | Name | When |
+|-----:|------|------|
+| 0x01 | Hello | first message on a control connection, plaintext |
+| 0x02 | HandshakeMessage | Noise XX messages 1–3, plaintext |
+| 0x03 | PairingConfirm | once per side after the handshake |
+| 0x04 | Capabilities | after pairing |
+| 0x05 | SessionSetup | after pairing: the sender's UDP port and tokens |
+| 0x06 | Ping | RTT and clock offset |
+| 0x07 | Pong | reply to Ping |
+| 0x08 | Heartbeat | keeps an idle session alive |
+| 0x09 | Error | before closing on an error |
+| 0x0A | Bye | orderly close |
+| 0x10 | RosterState | the sender's view of the group |
+| 0x11 | ScreenReport | the sender's own monitors |
+| 0x12 | LayoutState | the sender's view of the shared arrangement |
+| 0x20 | Enter | controller → endpoint: input now goes to the endpoint |
+| 0x21 | Leave | controller → endpoint: input left the endpoint |
+| 0x22 | Refuse | endpoint → controller: the endpoint does not take input |
+| 0x23 | KeyEvent | controller → endpoint |
+| 0x24 | ButtonEvent | controller → endpoint |
+| 0x25 | ScrollEvent | controller → endpoint |
+| 0x26 | ReleaseAll | controller → endpoint: release every key and button |
+| 0x27 | CursorReport | endpoint → controller: where the cursor really is |
+| 0x28 | LocalTakeover | endpoint → controller: the endpoint's own user took over |
+| 0x30 | DragProbe | controller → computer under the cursor: is a drag in progress there? |
+| 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
+| 0x32 | DragResult | drop target → source and controller |
+| 0x40 | ClipboardAnnounce | the sender's clipboard changed |
+
+### 0x01 Hello
+
+| Field | Type | Values |
+|-------|------|--------|
+| platform | u8 | 1 macOS, 2 Windows |
+| protocol_minor | u8 | minor version of the sender (0) |
+| reserved | u16 | 0 |
+| group_id | bytes[16] | the sender's group, all zeros when in no group |
+| device_name | string | 1–64 bytes |
+
+### 0x02 HandshakeMessage
+
+| Field | Type | Values |
+|-------|------|--------|
+| step | u8 | 1, 2 or 3 (Noise XX message number) |
+| reserved | u8 | 0 |
+| payload_length | u16 | 1–1024 |
+| payload | bytes[payload_length] | Noise handshake message |
+
+### 0x03 PairingConfirm
+
+| Field | Type | Values |
+|-------|------|--------|
+| decision | u8 | 1 accepted, 2 rejected |
+
+Each side sends exactly one: at once when it already trusts the peer, after its user decides
+otherwise (as in Osplay).
+
+### 0x04 Capabilities
+
+| Field | Type | Values |
+|-------|------|--------|
+| features | u32 | bit 0 takes control (injects input); bit 1 drag source; bit 2 drag target; bit 3 clipboard; bit 4 files. Other bits reserved. |
+| max_transfer_streams | u8 | 1–8 |
+| reserved | bytes[3] | 0 |
+
+A feature bit says what the sender can do and allows; each computer's local permissions (DEVPLAN,
+data model) clear the bits it refuses for this peer.
+
+### 0x05 SessionSetup
+
+| Field | Type | Values |
+|-------|------|--------|
+| udp_port | u16 | 1–65535: the sender's input socket for this session |
+| input_token | bytes[16] | proves an InputHello comes from this session's peer |
+| transfer_token | bytes[16] | proves a TransferHello comes from this session's peer |
+
+Tokens are random and never all zeros.
+
+### 0x06 Ping
+
+| Field | Type |
+|-------|------|
+| ping_id | u32 |
+| send_time_us | u64 |
+
+### 0x07 Pong
+
+| Field | Type |
+|-------|------|
+| ping_id | u32 |
+| ping_send_time_us | u64 |
+| receive_time_us | u64 |
+| reply_time_us | u64 |
+
+### 0x08 Heartbeat
+
+No body.
+
+### 0x09 Error
+
+| Field | Type | Values |
+|-------|------|--------|
+| code | u16 | an error code from "Error codes", 1 or more |
+
+### 0x0A Bye
+
+| Field | Type | Values |
+|-------|------|--------|
+| reason | u8 | 1 user disconnected, 2 application quit, 3 going to sleep, 4 error, 5 leaving the group, 6 revoked |
+
+### 0x10 RosterState
+
+The sender's view of the group as a two-phase set: members added by pairing, and revocations that
+remove them for good. Receivers merge by union (DEVPLAN, data model).
+
+| Field | Type | Values |
+|-------|------|--------|
+| group_id | bytes[16] | not all zeros |
+| member_count | u8 | 1–64 |
+| revocation_count | u8 | 0–255 |
+| members | member × member_count | |
+| revocations | revocation × revocation_count | |
+
+member:
+
+| Field | Type | Values |
+|-------|------|--------|
+| device_id | bytes[16] | |
+| public_key | bytes[32] | X25519 static public key |
+| epoch | u32 | 1 or more; each new pairing of the same device has a higher epoch |
+| platform | u8 | 1 macOS, 2 Windows |
+| reserved | u8 | 0 |
+| name | string | 1–64 bytes |
+
+revocation:
+
+| Field | Type | Values |
+|-------|------|--------|
+| device_id | bytes[16] | |
+| epoch | u32 | 1 or more |
+
+No two members share (device_id, epoch); neither do two revocations. Whether `device_id` matches
+`public_key` is checked by the group logic, not the codec.
+
+### 0x11 ScreenReport
+
+| Field | Type | Values |
+|-------|------|--------|
+| monitor_count | u8 | 1–16 |
+| monitors | monitor × monitor_count | |
+
+monitor:
+
+| Field | Type | Values |
+|-------|------|--------|
+| key | bytes[16] | stable identity of the monitor on its computer |
+| x | coord | frame in the computer's own desktop space |
+| y | coord | |
+| width | coord | 16 (one point) to 16 × 32768 |
+| height | coord | as width |
+| pixel_width | u16 | 1–32768 |
+| pixel_height | u16 | 1–32768 |
+| flags | u8 | bit 0 primary display. Other bits reserved. |
+| reserved | u8 | 0 |
+
+Keys are unique; exactly one monitor is primary.
+
+### 0x12 LayoutState
+
+| Field | Type | Values |
+|-------|------|--------|
+| revision | u64 | the arrangement with the higher (revision, author) wins |
+| author | device_id | the member that made this revision |
+| placement_count | u8 | 1–64 |
+| placements | placement × placement_count | |
+
+placement:
+
+| Field | Type | Values |
+|-------|------|--------|
+| device_id | bytes[16] | |
+| x | coord | where the device's desktop origin sits in the shared arrangement |
+| y | coord | |
+| flags | u8 | bit 0 detached (not reachable by crossing). Other bits reserved. |
+| reserved | bytes[3] | 0 |
+
+Device IDs are unique.
+
+### Input control messages
+
+Every input message carries a `control_id`: the controller picks a new non-zero value with each
+Enter, and the endpoint ignores input messages and datagrams with any other value. A Leave or a
+new Enter ends the previous control_id.
+
+`modifiers` lists held modifier keys in HID order: bit 0 left Control (usage 0xE0), bit 1 left
+Shift, bit 2 left Option/Alt, bit 3 left Command/Windows, bit 4 right Control, bit 5 right Shift,
+bit 6 right Option/Alt, bit 7 right Command/Windows (0xE7).
+
+Positions (`x`, `y`) are in the endpoint's own desktop space.
+
+#### 0x20 Enter
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| x | coord | entry point |
+| y | coord | |
+| modifiers | u8 | held when crossing |
+| reserved | bytes[3] | 0 |
+| drag_id | u32 | 0, or the drag carried across (see DragOffer) |
+
+#### 0x21 Leave
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| reason | u8 | 1 crossed on, 2 returned to the controller, 3 released by hotkey, 4 controller lost its input |
+
+#### 0x22 Refuse
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| reason | u8 | 1 locked, 2 asleep, 3 not permitted, 4 busy |
+
+#### 0x23 KeyEvent
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| page | u16 | 7 keyboard, 12 consumer |
+| usage | u16 | not 0 |
+| action | u8 | 1 down, 2 up, 3 repeat |
+| reserved | u8 | 0 |
+
+#### 0x24 ButtonEvent
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| button | u8 | 0 left, 1 right, 2 middle, 3–31 others |
+| action | u8 | 1 down, 2 up |
+| click_count | u8 | 1 or more: which click of a multi-click this is, an up repeating its down's count |
+| reserved | u8 | 0 |
+| x | coord | the endpoint moves the cursor here first |
+| y | coord | |
+
+The controller counts clicks from the timing it captured, with its own double-click settings, so
+network delay never splits a double-click. macOS endpoints set the event's click state from
+`click_count`; Windows derives double-clicks from the injected events itself.
+
+#### 0x25 ScrollEvent
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| unit | u8 | 1 lines (wheels), 2 points (trackpads, continuous wheels) |
+| phase | u8 | 0 none, 1 may begin, 2 began, 3 changed, 4 ended, 5 cancelled |
+| momentum | u8 | 0 none, 1 began, 2 changed, 3 ended |
+| reserved | u8 | 0 |
+| dx | i32 | 1/256 of a unit; positive moves content right |
+| dy | i32 | 1/256 of a unit; positive moves content down |
+| x | coord | where the scroll happens |
+| y | coord | |
+
+#### 0x26 ReleaseAll
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+
+#### 0x27 CursorReport
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| x | coord | |
+| y | coord | |
+
+#### 0x28 LocalTakeover
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+
+### Drag messages
+
+A drag starts on its **source** computer and may cross to a **target**. The controller asks the
+computer under the cursor whether a drag is in progress when the cursor reaches a crossing edge
+with a button held (DragProbe); the answer describes the items. The controller passes the offer to
+the target in Enter (`drag_id`) and forwards the DragOffer. When the drop ends, the target reports
+the outcome to the source (and to the controller when it is another computer). Contents travel on
+transfer streams.
+
+#### 0x30 DragProbe
+
+| Field | Type | Values |
+|-------|------|--------|
+| probe_id | u32 | not 0 |
+| x | coord | where the cursor reached the edge |
+| y | coord | |
+
+#### 0x31 DragOffer
+
+| Field | Type | Values |
+|-------|------|--------|
+| probe_id | u32 | the DragProbe answered, or 0 when forwarded to a target (drag_id is then not 0) |
+| drag_id | u32 | 0 when no drag is in progress, otherwise unique per source |
+| item_count | u16 | 0 when drag_id is 0, otherwise 1–1024; the message must still fit in 65536 bytes |
+| items | item × item_count | |
+
+item:
+
+| Field | Type | Values |
+|-------|------|--------|
+| kind | u8 | 1 file, 2 folder |
+| reserved | u8 | 0 |
+| byte_count | u64 | the file's size, or the total of the files inside the folder |
+| content_type | type_id | |
+| name | name | |
+
+#### 0x32 DragResult
+
+| Field | Type | Values |
+|-------|------|--------|
+| drag_id | u32 | not 0 |
+| outcome | u8 | 1 dropped (the source ends its drag as a copy), 2 cancelled (the source's drag slides back), 3 failed |
+
+### 0x40 ClipboardAnnounce
+
+Formats only; contents travel on a transfer stream when someone pastes (DEVPLAN, clipboard).
+
+| Field | Type | Values |
+|-------|------|--------|
+| clip_id | u64 | not 0; a new value for every change |
+| format_count | u8 | 1–5 |
+| formats | format × format_count | |
+
+format:
+
+| Field | Type | Values |
+|-------|------|--------|
+| format | u8 | 1 plain text (UTF-8), 2 rich text (RTF), 3 HTML (UTF-8), 4 image (PNG), 5 files |
+| reserved | bytes[3] | 0 |
+| byte_count | u64 | size of the content in this format; for files, the total |
+
+Formats are unique.
+
+## Input datagrams (UDP)
+
+A datagram is at most **1200 bytes**. It consists of a header that travels in clear (it is the
+AEAD's associated data and its sequence number forms the nonce) followed by the body, which is
+encrypted and followed by a 16-byte tag on the wire.
+
+Input header (12 bytes):
+
+| Offset | Field | Type | Values |
+|-------:|-------|------|--------|
+| 0 | magic | bytes[2] | `4F 44` |
+| 2 | version | u8 | 1 |
+| 3 | type | u8 | see below |
+| 4 | sequence | u64 | per sender and session, starts at 0, +1 per datagram |
+
+| Type | Name | Direction |
+|-----:|------|-----------|
+| 0x01 | InputHello | to the peer's input socket, until it answers |
+| 0x02 | PointerMotion | controller → endpoint |
+
+### 0x01 InputHello
+
+| Field | Type |
+|-------|------|
+| input_token | bytes[16], from the peer's SessionSetup |
+
+The receiver learns the sender's UDP endpoint from the first valid InputHello and answers with its
+own.
+
+### 0x02 PointerMotion
+
+| Field | Type | Values |
+|-------|------|--------|
+| control_id | u32 | not 0 |
+| x | coord | the new cursor position in the endpoint's desktop space |
+| y | coord | |
+| capture_time_us | u64 | controller clock when the movement was captured |
+
+Motion is latest-wins: a receiver drops a datagram whose sequence is lower than the last one it
+applied.
+
+## Transfer streams (TCP)
+
+A transfer stream is a TCP connection from the receiving side to the sending side's control
+listener. It uses the control channel's framing (maximum plaintext 65536 bytes). The first frame
+is a TransferHello in clear; every later frame is encrypted with the stream's keys. A transfer
+message has the common prefix and a type:
+
+| Type | Name | Direction |
+|-----:|------|-----------|
+| 0x01 | TransferHello | receiver → sender, plaintext |
+| 0x02 | ManifestRequest | receiver → sender |
+| 0x03 | Manifest | sender → receiver |
+| 0x04 | ContentRequest | receiver → sender |
+| 0x05 | ContentChunk | sender → receiver |
+| 0x06 | ContentEnd | sender → receiver |
+| 0x07 | TransferError | both |
+| 0x08 | TransferCancel | receiver → sender |
+
+Objects: `object_kind` 1 is a drag (`object_id` = drag_id, `item_index` = the item in the
+DragOffer, 0–1023), 2 is a clipboard announcement (`object_id` = clip_id, `item_index` = the
+format code, 1–5). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
+a dragged item.
+
+### 0x01 TransferHello
+
+| Field | Type | Values |
+|-------|------|--------|
+| transfer_token | bytes[16] | from the sender's SessionSetup |
+| stream_id | u32 | not 0; unique per session and direction, selects the stream's keys |
+
+### 0x02 ManifestRequest
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+| object_kind | u8 | 1 drag, 2 clipboard |
+| reserved | bytes[3] | 0 |
+| object_id | u64 | not 0 |
+| item_index | u32 | |
+
+### 0x03 Manifest
+
+One part of the list of entries an item consists of. A file item has one entry; a folder lists
+every folder, file and link inside it, parents before children.
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+| is_last | u8 | 0 or 1 |
+| reserved | u8 | 0 |
+| entry_count | u16 | 1–4096; the message must still fit in 65536 bytes, so senders split long lists by size |
+| entries | entry × entry_count | |
+
+entry:
+
+| Field | Type | Values |
+|-------|------|--------|
+| path | path | relative to the item; a file item's single entry is its name |
+| kind | u8 | 1 file, 2 folder, 3 symbolic link |
+| flags | u8 | bit 0 executable, files only. Other bits reserved. |
+| reserved | u16 | 0 |
+| byte_count | u64 | file: its size. folder: 0. link: the length of its target, 1–4096 |
+| modified_us | i64 | modification time, microseconds since 1970-01-01 UTC |
+
+A link's content is its target path as UTF-8 bytes, requested like a file's; receivers decide
+whether to create the link (DEVPLAN, Phase 13).
+
+### 0x04 ContentRequest
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+| object_kind | u8 | 1 drag, 2 clipboard |
+| reserved | bytes[3] | 0 |
+| object_id | u64 | not 0 |
+| item_index | u32 | |
+| entry_index | u32 | the entry in the item's manifest; 0 for clipboard formats 1–4 |
+| offset | u64 | first byte wanted |
+| length | u64 | bytes wanted, 1 or more; may run past the end, which ends the content |
+
+### 0x05 ContentChunk
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+| offset | u64 | of the first byte in `data` |
+| data_length | u32 | 1–65504 |
+| data | bytes[data_length] | |
+
+Chunks of one request arrive in order and without gaps.
+
+### 0x06 ContentEnd
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+| byte_count | u64 | bytes sent for the request |
+| digest | bytes[32] | BLAKE2b-256 of the whole entry (or clipboard format), not only the requested range |
+
+### 0x07 TransferError
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | 0 when the error concerns the whole stream |
+| code | u16 | an error code, 1 or more |
+
+### 0x08 TransferCancel
+
+| Field | Type | Values |
+|-------|------|--------|
+| request_id | u32 | not 0 |
+
+## Encryption
+
+Implemented in Phase 6; this is the design it implements.
+
+### Handshake
+
+Noise Protocol Framework revision 34, pattern **`Noise_XX_25519_ChaChaPoly_BLAKE2b`**, prologue
+`"Osdrop control v1"`. The prologue makes a handshake with any other protocol that uses the same
+pattern (Osplay among them) fail. The connecting side is the **initiator**; between two members,
+the one with the lower device ID connects. Static keys are the devices' identities. A DH result of
+all zeros aborts the handshake. Handshake payloads are empty in version 1.
+
+### Pairing code
+
+```
+digest = BLAKE2b-256("Osdrop pairing code v1" || handshake_hash)
+code   = (first 8 bytes of digest as u64 little-endian) mod 1000000, shown with leading zeros
+```
+
+### Session keys
+
+From the final chaining key `ck`, using Noise's HKDF (HMAC-BLAKE2b, two outputs, each truncated to
+32 bytes); first output initiator → responder, second responder → initiator:
+
+| Keys | Derivation | Use |
+|------|------------|-----|
+| control | Noise `Split()` | control channel, as Noise transport messages |
+| input | HKDF(ck, "Osdrop input keys v1") | input datagrams |
+| transfer base | HKDF(ck, "Osdrop transfer keys v1") | per-stream keys below |
+
+A transfer stream's keys, for the direction whose base key is `base`:
+`BLAKE2b-256(key = base, message = "Osdrop transfer stream v1" || stream_id (u32 LE))`.
+
+### Control channel and transfer streams after the handshake
+
+Each frame payload is `ChaCha20-Poly1305(key, nonce, ad = empty, message) || tag`; the nonce is the
+per-direction frame counter (0, 1, 2, …) as 32 zero bits followed by the 64-bit counter
+little-endian. A replayed, reordered or altered frame fails authentication and ends the connection.
+
+### Input datagrams
+
+```
+datagram = input header (12 bytes, clear)
+         | ChaCha20-Poly1305(input key of the sender's direction,
+                             nonce = 32 zero bits || sequence (u64 LE),
+                             ad = input header, plaintext = input body)
+         | tag (16 bytes)
+```
+
+A sender never repeats a sequence number. A receiver keeps a sliding window of the last 1024
+sequence numbers and drops datagrams older than the window or already seen (`REPLAYED`).
+
+## Error codes
+
+Decoding and encoding report these codes, which are also the values of `osdrop_result` in
+`core/include/osdrop/osdrop.h` (values never change; new codes are appended):
+
+| Code | Name | Meaning |
+|-----:|------|---------|
+| 0 | OK | |
+| 1 | INVALID_ARGUMENT | null pointer or unknown enum passed to the API |
+| 2 | BUFFER_TOO_SMALL | the output buffer cannot hold the result |
+| 3 | TRUNCATED | input ends before a field |
+| 4 | BAD_MAGIC | the first two bytes are not "OD" |
+| 5 | UNSUPPORTED_VERSION | the version byte is not 1 |
+| 6 | UNKNOWN_TYPE | unknown message or datagram type |
+| 7 | TRAILING_BYTES | input continues after the last field |
+| 8 | VALUE_OUT_OF_RANGE | a field violates its documented range, a reserved field is not 0, or a count or uniqueness rule is broken |
+| 9 | INVALID_STRING | a string, type ID, name or path breaks its rules |
+| 10 | TOO_LARGE | input is larger than the largest valid message or datagram |
+| 11 | DECRYPTION_FAILED | authentication failed: wrong key, altered or forged data |
+| 12 | HANDSHAKE_OUT_OF_ORDER | a handshake step was used out of order, or after a failure |
+| 13 | REPLAYED | an input datagram was already received or is older than the replay window |
+| 14 | NONCE_EXHAUSTED | a cipher reached its last nonce |
+| 15 | INVALID_KEY | an all-zero secret key, or a peer key producing an all-zero shared secret |
+| 16 | RANDOM_UNAVAILABLE | the platform's random source failed |
+| 17 | TIMED_OUT | the handshake or the peer stopped responding |
+| 18 | CONNECTION_CLOSED | the peer ended the session (Bye) or the connection closed |
+| 19 | PEER_ERROR | the peer sent an Error message |
+| 20 | UNEXPECTED_MESSAGE | a valid message arrived in a state where it is not allowed |
+| 21 | NOT_TRUSTED | the peer is not a member of this computer's group |
+| 22 | PAIRING_REJECTED | a user rejected the pairing code |
+| 23 | PEER_BUSY | the peer refused because it is busy |
+| 24 | INVALID_STATE | the command is not valid in the current state |
+| 25 | NETWORK | a socket could not be opened, connected or used |
+| 26 | INTERNAL | the core could not allocate memory or start its I/O thread |
+| 27 | PEER_SLEEPING | the peer closed the session with Bye 3 (going to sleep); it is expected back |
+| 28 | NOT_PERMITTED | this computer's local permissions refuse the request from this peer |
+
+## Fixtures
+
+`protocol/fixtures/manifest.tsv` lists every fixture: file, kind (`control`, `input` or
+`transfer`), expected outcome (`valid` with the message type, or `error` with the error code) and a
+description. `protocol/tools/generate_fixtures.py` writes the binary files; CI fails if they differ
+from what the generator produces. The C++ and Swift test suites both read the manifest and must
+reach the same outcome for every file; valid fixtures must also re-encode to identical bytes.
+Discovery TXT records are covered by unit tests, not fixtures.
