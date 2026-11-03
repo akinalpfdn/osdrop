@@ -20,7 +20,15 @@ if(NOT TARGET osdrop::warnings)
 endif()
 
 add_library(osdrop_core STATIC
-    src/capi/version.cpp)
+    src/capi/discovery_capi.cpp
+    src/capi/protocol_capi.cpp
+    src/capi/version.cpp
+    src/protocol/advertisement.cpp
+    src/protocol/control_codec.cpp
+    src/protocol/input_codec.cpp
+    src/protocol/text.cpp
+    src/protocol/transfer_codec.cpp
+    src/protocol/wire.cpp)
 add_library(osdrop::core ALIAS osdrop_core)
 
 target_include_directories(osdrop_core
