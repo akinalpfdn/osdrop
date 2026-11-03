@@ -40,6 +40,16 @@ enum class SessionState : std::uint8_t {
 };
 
 enum class TrustDecision : std::uint8_t { Trusted = 1, Unknown = 2, Blocked = 3 };
+
+/// What a computer decides about an authenticated peer.
+struct TrustVerdict {
+    TrustDecision decision = TrustDecision::Blocked;
+    /// Sent to the peer in Error when the decision is Blocked.
+    Error refusal = Error::NotTrusted;
+    /// The Capabilities features this computer announces to the peer: its own, cleared of what
+    /// it does not allow this peer (local permissions).
+    std::uint32_t features = protocol::kKnownFeatures;
+};
 enum class LogLevel : std::uint8_t { Debug = 1, Info = 2, Warning = 3, Error = 4 };
 
 struct SessionStats {
@@ -57,7 +67,7 @@ public:
     virtual void on_state(SessionState state, std::optional<Error> reason) = 0;
     virtual void on_peer_hello(const protocol::Hello& hello) = 0;
     /// The peer's static key is authenticated. Decide from in-memory data: the engine waits.
-    [[nodiscard]] virtual TrustDecision on_trust_query(const crypto::Key& peer_static_key) = 0;
+    [[nodiscard]] virtual TrustVerdict on_trust_query(const crypto::Key& peer_static_key) = 0;
     /// First pairing: show the code; the user's answer goes to SessionEngine::confirm_pairing
     /// (later, not from this callback).
     virtual void on_pairing_code(std::uint32_t code) = 0;
@@ -66,6 +76,8 @@ public:
     /// The peer's capabilities are known and its input socket and listener announced; application
     /// messages may flow.
     virtual void on_established(const protocol::Capabilities& peer) = 0;
+    /// An established peer announced new capabilities (its permissions for this computer changed).
+    virtual void on_capabilities(const protocol::Capabilities& peer) = 0;
     /// The peer fell silent for unresponsive_after (false) or was heard from again (true).
     virtual void on_responsive(bool responsive) = 0;
     /// An application message (RosterState and later types) from an established peer.
@@ -126,6 +138,8 @@ public:
                                              TimePoint now);
     /// One pointer position over the input socket; Established only.
     [[nodiscard]] Status<Error> send_motion(const protocol::PointerMotion& motion, TimePoint now);
+    /// Changes the features announced to the peer; sent at once when established.
+    void update_features(std::uint32_t features, TimePoint now);
     /// Sends Bye (when the channel is encrypted) and closes.
     void close(protocol::ByeReason reason, TimePoint now);
 
@@ -170,6 +184,7 @@ private:
     void handle_peer_error(const protocol::PeerError& error);
     void handle_bye(const protocol::Bye& bye);
     void send(const protocol::ControlMessage& message, TimePoint now);
+    [[nodiscard]] protocol::Capabilities offered_capabilities() const;
     [[nodiscard]] bool seal_and_send(const protocol::InputDatagram& datagram);
     void send_input_hello();
     void fail(Error reason, bool tell_peer, TimePoint now);
@@ -201,6 +216,7 @@ private:
     std::optional<protocol::ByeReason> peer_bye_;
 
     TrustDecision trust_ = TrustDecision::Unknown;
+    std::uint32_t features_ = protocol::kKnownFeatures; ///< mask for what this peer is offered
     bool local_decision_made_ = false;
     bool local_accepted_ = false;
     bool peer_accepted_ = false;

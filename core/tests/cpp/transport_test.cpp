@@ -73,9 +73,9 @@ public:
     std::uint64_t next_offset = 0;
     std::size_t writable = 0;
 
-    mesh::TrustDecision on_trust_query(const osdrop::crypto::Key& /*key*/,
-                                       const protocol::Hello& /*hello*/) override {
-        return mesh::TrustDecision::Trusted;
+    mesh::TrustVerdict on_trust_query(const osdrop::crypto::Key& /*key*/,
+                                      const protocol::Hello& /*hello*/) override {
+        return {.decision = mesh::TrustDecision::Trusted};
     }
     void on_pairing_code(mesh::ConnectionId /*connection*/, std::uint32_t /*code*/,
                          const osdrop::crypto::Key& /*key*/,
@@ -87,10 +87,12 @@ public:
                            const protocol::Capabilities& /*capabilities*/) override {
         update([&] { ++connected; });
     }
-    void on_peer_disconnected(const mesh::DeviceId& /*device*/,
-                              std::optional<Error> /*reason*/) override {
+    void on_peer_disconnected(const mesh::DeviceId& /*device*/, std::optional<Error> /*reason*/,
+                              std::optional<protocol::ByeReason> /*bye*/) override {
         update([&] { --connected; });
     }
+    void on_peer_capabilities(const mesh::DeviceId& /*device*/,
+                              const protocol::Capabilities& /*capabilities*/) override {}
     void on_peer_responsive(const mesh::DeviceId& /*device*/, bool /*responsive*/) override {}
     void on_message(const mesh::DeviceId& /*device*/,
                     const protocol::ControlMessage& /*message*/) override {

@@ -133,6 +133,8 @@ public:
     }
 
     [[nodiscard]] std::uint16_t port() const { return listen_port_; }
+    /// Before the I/O thread starts.
+    void attach(const std::function<void(mesh::Mesh&)>& setup) { setup(mesh_); }
     [[nodiscard]] mesh::DeviceId device_id() const { return mesh_.device_id(); }
 
     // --- Commands (any thread) ---
@@ -564,9 +566,13 @@ AsioNode::~AsioNode() = default;
 
 Expected<std::unique_ptr<AsioNode>, Error>
 AsioNode::create(mesh::MeshConfig config, crypto::KeyPair identity, crypto::RandomSource& random,
-                 mesh::MeshObserver& observer, NodeOptions options) {
+                 mesh::MeshObserver& observer, NodeOptions options,
+                 const std::function<void(mesh::Mesh&)>& attach) {
     using Result = Expected<std::unique_ptr<AsioNode>, Error>;
     auto impl = std::make_unique<Impl>(std::move(config), std::move(identity), random, observer);
+    if (attach) {
+        impl->attach(attach);
+    }
     if (const auto listening = impl->listen(options.listen_port); !listening) {
         return Result::failure(listening.error());
     }
@@ -583,6 +589,19 @@ mesh::DeviceId AsioNode::device_id() const {
     return impl_->device_id();
 }
 
+void AsioNode::run(std::function<void(mesh::Mesh&, TimePoint)> work) {
+    impl_->post([moved = std::move(work)](mesh::Mesh& mesh, TimePoint now) { moved(mesh, now); });
+}
+
+bool AsioNode::run_and_wait(std::function<void(mesh::Mesh&, TimePoint)> work) {
+    return impl_->run_sync<bool>(
+        [moved = std::move(work)](mesh::Mesh& mesh, TimePoint now) {
+            moved(mesh, now);
+            return true;
+        },
+        false);
+}
+
 void AsioNode::peer_discovered(const mesh::DeviceId& device, const protocol::Id& group,
                                const mesh::PeerAddress& address) {
     // Init-captures copy into non-const members, so moving the closure never copies a string.
@@ -595,10 +614,6 @@ void AsioNode::peer_lost(const mesh::DeviceId& device) {
     impl_->post([device](mesh::Mesh& mesh, TimePoint now) { mesh.peer_lost(device, now); });
 }
 
-void AsioNode::set_group(const protocol::Id& group) {
-    impl_->post([group](mesh::Mesh& mesh, TimePoint now) { mesh.set_group(group, now); });
-}
-
 void AsioNode::send_motion(const mesh::DeviceId& device, const protocol::PointerMotion& motion) {
     impl_->post([device, motion](mesh::Mesh& mesh, TimePoint now) {
         static_cast<void>(mesh.send_motion(device, motion, now)); // a lost position is replaced
@@ -608,12 +623,6 @@ void AsioNode::send_motion(const mesh::DeviceId& device, const protocol::Pointer
 void AsioNode::close_transfer(const mesh::DeviceId& device, std::uint32_t stream_id) {
     impl_->post([device, stream_id](mesh::Mesh& mesh, TimePoint now) {
         mesh.close_transfer(device, stream_id, now);
-    });
-}
-
-void AsioNode::disconnect(const mesh::DeviceId& device, protocol::ByeReason reason) {
-    impl_->post([device, reason](mesh::Mesh& mesh, TimePoint now) {
-        mesh.disconnect(device, reason, now);
     });
 }
 

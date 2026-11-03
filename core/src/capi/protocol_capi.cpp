@@ -42,6 +42,8 @@ static_assert(static_cast<int>(Error::NetworkError) == OSDROP_ERROR_NETWORK);
 static_assert(static_cast<int>(Error::Internal) == OSDROP_ERROR_INTERNAL);
 static_assert(static_cast<int>(Error::PeerSleeping) == OSDROP_ERROR_PEER_SLEEPING);
 static_assert(static_cast<int>(Error::NotPermitted) == OSDROP_ERROR_NOT_PERMITTED);
+static_assert(static_cast<int>(Error::GroupFull) == OSDROP_ERROR_GROUP_FULL);
+static_assert(static_cast<int>(Error::InAnotherGroup) == OSDROP_ERROR_IN_ANOTHER_GROUP);
 static_assert(OSDROP_PROTOCOL_VERSION == protocol::kVersion);
 static_assert(OSDROP_PROTOCOL_MINOR == protocol::kMinorVersion);
 static_assert(OSDROP_MAX_CONTROL_MESSAGE_SIZE == protocol::kMaxControlMessageSize);

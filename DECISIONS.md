@@ -210,3 +210,48 @@ choices the plan leaves open are logged here.
 **Why:** The roster, layout, crossing and transfer engines live in `core`; platforms will never build protocol messages themselves, so a raw channel would be dead API.
 **Trade-offs:** Phases 8–14 extend this API with typed functions as they arrive.
 **Revisit if:** A platform feature needs a message `core` does not interpret.
+
+---
+
+## 2026-11-03 — The roster keeps one pairing and one revocation per device
+**Chosen:** For each device the roster keeps its newest pairing and its newest revoked epoch; the device is a member while the pairing's epoch is higher. A revocation therefore covers every pairing up to its epoch.
+**Alternatives:** A plain two-phase set of (device ID, epoch) pairs, where each revocation names one pairing.
+**Why:** Merging stays a per-device maximum, so it converges in any order (property-tested over random operations and merges), and the roster never grows with re-pairings. A plain set would let an older, never-revoked pairing of the same device keep it in the group after its newest pairing was revoked.
+**Trade-offs:** Revocations of devices that never come back are kept forever (20 bytes each; 255 fit in one message, more are split).
+**Revisit if:** Groups accumulate enough revocations for the roster sync to matter.
+
+---
+
+## 2026-11-03 — Core decides trust; platforms only store the group state
+**Chosen:** The group layer in `core` answers every trust query from its roster and hands its state to the platform as versioned bytes for the Keychain or DPAPI. The C API's trust callback, `osdrop_mesh_set_group` and `osdrop_mesh_disconnect` are gone; `group_changed`, `left_group`, members, revoke, leave and permissions replace them.
+**Alternatives:** Keeping the roster in each platform and asking it per connection, as Phase 7's callback did.
+**Why:** The merge and revocation rules are security decisions that must be identical on both platforms and are tested once in `core`. The platforms already store the identity key; the state belongs next to it.
+**Trade-offs:** The state format is versioned, and a state from a newer Osdrop is refused rather than read.
+**Revisit if:** A platform needs to inspect the roster without starting the mesh.
+
+---
+
+## 2026-11-03 — Only members speak for the group
+**Chosen:** A RosterState is merged only from a current member and only for this computer's group. A computer in no group adopts a roster only from the computer it has just paired with, and only if it lists both of them with this computer's own key. A peer that advertises this group but is missing from the roster is refused with NOT_TRUSTED until a member's roster names it.
+**Alternatives:** Accepting rosters from anyone who advertises the group ID.
+**Why:** The group ID is public in every Bonjour record, so it proves nothing; trust comes only from users confirming a code with some member.
+**Trade-offs:** A new member is refused by members that have not yet heard of it, for as long as the introduction takes to arrive; the mesh then dials it again.
+**Revisit if:** Introductions turn out to be slow in practice (Phase 18 measurements).
+
+---
+
+## 2026-11-03 — Permissions are announced and enforced
+**Chosen:** A computer clears the Capabilities bits of features it denies a member and sends Capabilities again in the established session when they change; independently, it refuses Enter (Refuse 3), drops input, forwarded drag offers and clipboard announcements, and answers clipboard requests with NOT_PERMITTED.
+**Alternatives:** Only announcing (trusting peers to comply), or only enforcing (peers learn by being refused).
+**Why:** Announcing lets a well-behaved peer avoid offering what will be refused (no wall at an edge the user is not allowed through); enforcing covers peers that do not comply.
+**Trade-offs:** Capabilities is no longer a one-time setup message; receivers must replace it.
+**Revisit if:** Another feature needs per-member permissions.
+
+---
+
+## 2026-11-03 — At most 8 members, one pairing prompt at a time
+**Chosen:** A group takes at most 8 members (GROUP_FULL beyond that), and a computer shows one pairing code at a time (PEER_BUSY for others meanwhile). Two members adding computers at once may take a group past 8; nobody is removed then.
+**Alternatives:** No limit; a strict limit enforced by removing members after a merge.
+**Why:** Every member keeps a session with every other, so the mesh grows quadratically; 8 covers a desk or a small studio. One prompt at a time keeps a stranger on the LAN from flooding the user with codes. Removing members after a merge would be surprising and order-dependent.
+**Trade-offs:** The limit can be exceeded by concurrent pairings.
+**Revisit if:** Users ask for larger groups.

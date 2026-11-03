@@ -35,6 +35,8 @@ enum class Error : std::uint8_t {
     Internal = 26,
     PeerSleeping = 27,
     NotPermitted = 28,
+    GroupFull = 29,
+    InAnotherGroup = 30,
 };
 
 } // namespace osdrop

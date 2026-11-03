@@ -33,7 +33,8 @@ public:
             .platform = protocol::Platform::Windows,
             .device_name = "Test",
             .group_id = {},
-            .capabilities = protocol::Capabilities{.features = 0, .max_transfer_streams = 1},
+            .capabilities = protocol::Capabilities{.features = protocol::kKnownFeatures,
+                                                   .max_transfer_streams = 1},
             .tunables = {}};
     }
 
@@ -44,10 +45,16 @@ public:
         }
     }
     void on_peer_hello(const protocol::Hello& /*hello*/) override {}
-    session::TrustDecision on_trust_query(const crypto::Key& /*key*/) override { return trust; }
+    session::TrustVerdict on_trust_query(const crypto::Key& /*key*/) override {
+        return {.decision = trust, .refusal = refusal, .features = features};
+    }
     void on_pairing_code(std::uint32_t code) override { codes.push_back(code); }
     void on_paired() override {}
-    void on_established(const protocol::Capabilities& /*peer*/) override { established = true; }
+    void on_established(const protocol::Capabilities& peer) override {
+        established = true;
+        peer_capabilities = peer;
+    }
+    void on_capabilities(const protocol::Capabilities& peer) override { peer_capabilities = peer; }
     void on_responsive(bool responsive) override { responsiveness.push_back(responsive); }
     void on_message(const protocol::ControlMessage& /*message*/) override {}
     void on_motion(const protocol::PointerMotion& /*motion*/) override {}
@@ -73,6 +80,9 @@ public:
     crypto::KeyPair identity;
     session::SessionEngine engine;
     session::TrustDecision trust = session::TrustDecision::Trusted;
+    Error refusal = Error::NotTrusted;
+    std::uint32_t features = protocol::kKnownFeatures;
+    std::optional<protocol::Capabilities> peer_capabilities;
     std::optional<Error> close_reason;
     std::vector<std::uint32_t> codes;
     bool established = false;
@@ -199,6 +209,29 @@ TEST(SessionEngine, BlockedPeersAreToldWhy) {
     pair.connect();
     EXPECT_EQ(pair.listener.close_reason, Error::NotTrusted);
     EXPECT_EQ(pair.dialer.close_reason, Error::NotTrusted);
+}
+
+TEST(SessionEngine, ARefusalCarriesItsReasonToThePeer) {
+    Pair pair;
+    pair.listener.trust = session::TrustDecision::Blocked;
+    pair.listener.refusal = Error::InAnotherGroup;
+    pair.connect();
+    EXPECT_EQ(pair.listener.close_reason, Error::InAnotherGroup);
+    EXPECT_EQ(pair.dialer.close_reason, Error::InAnotherGroup);
+}
+
+TEST(SessionEngine, AnnouncedFeaturesFollowPermissionsAndCanChangeLater) {
+    Pair pair;
+    pair.listener.features = protocol::kFeatureTakesControl | protocol::kFeatureDragSource;
+    pair.connect();
+    ASSERT_TRUE(pair.dialer.peer_capabilities.has_value());
+    EXPECT_EQ(pair.dialer.peer_capabilities->features,
+              protocol::kFeatureTakesControl | protocol::kFeatureDragSource);
+    EXPECT_EQ(pair.listener.peer_capabilities->features, protocol::kKnownFeatures);
+
+    pair.listener.engine.update_features(protocol::kFeatureClipboard, pair.now);
+    pair.pump();
+    EXPECT_EQ(pair.dialer.peer_capabilities->features, protocol::kFeatureClipboard);
 }
 
 TEST(SessionEngine, AFirstPairingWaitsForBothUsersAndTimesOutWithoutAnswer) {

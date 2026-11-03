@@ -1,7 +1,7 @@
 # Security model
 
-> Status: the cryptography is implemented (Phase 6) and documented below. Group membership and the
-> Windows input process follow in Phases 3, 7 and 8; until then their fixed decisions are in
+> Status: the cryptography (Phase 6) and group membership (Phase 8) are implemented and documented
+> below. The Windows input process follows in Phases 3 and 4; until then its fixed decisions are in
 > [`DEVPLAN.md`](../DEVPLAN.md) → Protocol Requirements → Security model.
 
 ## Goals
@@ -62,6 +62,34 @@ The wire format of everything below is in [`PROTOCOL.md`](PROTOCOL.md) → Encry
   window of 1024; older or repeated ones are dropped. A forged datagram never moves the window.
 - **Secrets in memory.** Key pairs, cipher states, session keys and intermediate HMAC and HKDF
   values are overwritten when they are no longer needed.
+
+## Group membership
+
+The rules are in [`PROTOCOL.md`](PROTOCOL.md) → Group membership; the code is in
+`core/src/group/`.
+
+- **Who is trusted.** A computer trusts exactly the members of its roster, identified by static
+  key: the device ID is the key's fingerprint, and a roster entry whose ID does not match its key
+  discards the whole roster. Core makes every trust decision; the platforms only store the state.
+- **Who may change the roster.** Only current members, over their authenticated sessions. A
+  computer outside the group cannot add itself by claiming the group's public ID, and a computer
+  joins a group only from the roster of the computer it has just paired with, with its own key in
+  it.
+- **Introductions.** Pairing with any member is enough: the others trust the new computer because
+  a member they already trust names it. Its user confirmed the code on both computers; no member
+  accepts a stranger on another member's word alone, since rosters travel only between members.
+- **Revocation.** A revoked epoch wins over every pairing up to it, in any merge order, so a member
+  that was offline cannot bring a revoked computer back; only a new pairing, confirmed with a code,
+  can. Each member refuses the revoked computer as soon as it has met any member that knows of the
+  revocation. The revoked computer is told (Bye 6) and leaves the group, but a modified client
+  could keep trying; members refuse it with NOT_TRUSTED.
+- **Leaving.** A computer that leaves revokes itself, so the others stop dialling it.
+- **Permissions.** Each computer enforces its own: it advertises only what it allows and refuses or
+  drops what it denies, whatever the peer sends.
+- **Limits.** One pairing prompt at a time (PEER_BUSY) and at most 8 members (GROUP_FULL) keep a
+  stranger on the LAN from flooding the user with codes or growing a group without bound.
+- **Stored state.** The group ID, roster and permissions are stored by the platform next to the
+  identity key (Keychain, DPAPI). A state written by a newer Osdrop is refused, not overwritten.
 
 ## Non-goals
 

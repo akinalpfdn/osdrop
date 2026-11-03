@@ -6,6 +6,7 @@
 // every byte on the wire.
 
 #include "crypto_test_support.hpp"
+#include "group/group.hpp"
 #include "mesh/mesh.hpp"
 
 #include <algorithm>
@@ -46,9 +47,9 @@ public:
     std::vector<std::pair<std::uint32_t, std::optional<Error>>> transfers_closed;
     std::size_t connects = 0;
 
-    mesh::TrustDecision on_trust_query(const crypto::Key& /*key*/,
-                                       const protocol::Hello& /*hello*/) override {
-        return trust;
+    mesh::TrustVerdict on_trust_query(const crypto::Key& /*key*/,
+                                      const protocol::Hello& /*hello*/) override {
+        return {.decision = trust};
     }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
                          const protocol::Hello& /*hello*/) override {
@@ -66,10 +67,13 @@ public:
         connected.insert(device);
         ++connects;
     }
-    void on_peer_disconnected(const DeviceId& device, std::optional<Error> reason) override {
+    void on_peer_disconnected(const DeviceId& device, std::optional<Error> reason,
+                              std::optional<protocol::ByeReason> /*bye*/) override {
         connected.erase(device);
         disconnects.emplace_back(device, reason);
     }
+    void on_peer_capabilities(const DeviceId& /*device*/,
+                              const protocol::Capabilities& /*capabilities*/) override {}
     void on_peer_responsive(const DeviceId& device, bool responsive) override {
         responsiveness.emplace_back(device, responsive);
     }
@@ -95,6 +99,25 @@ public:
     }
     void on_stats(const DeviceId& /*device*/, const session::SessionStats& /*stats*/) override {}
     void on_log(mesh::LogLevel /*level*/, std::string_view /*message*/) override {}
+};
+
+/// Records what the group layer reports to the platform.
+class RecordingGroupObserver final : public group::GroupObserver {
+public:
+    std::optional<group::GroupState> stored; ///< what the platform would have saved last
+    std::vector<std::pair<ConnectionId, std::uint32_t>> codes;
+    std::vector<std::pair<ConnectionId, Error>> failures;
+    std::vector<std::optional<Error>> left;
+
+    void on_state_changed(const group::GroupState& state) override { stored = state; }
+    void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
+                         const protocol::Hello& /*hello*/) override {
+        codes.emplace_back(connection, code);
+    }
+    void on_pairing_failed(ConnectionId connection, Error reason) override {
+        failures.emplace_back(connection, reason);
+    }
+    void on_left_group(std::optional<Error> reason) override { left.push_back(reason); }
 };
 
 class SimulatedNode;
@@ -134,18 +157,41 @@ private:
 
 class SimulatedNode {
 public:
+    /// With a group state, a Group answers trust and sits between the mesh and `observer`.
     SimulatedNode(SimulatedMeshNetwork& network, std::size_t index, mesh::MeshConfig config,
-                  std::uint64_t seed)
-        : random(seed), transport(network, index),
-          mesh(std::move(config), key_pair(random), random, observer, transport),
-          address{"node" + std::to_string(index), 49'152} {}
+                  std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt)
+        : random(seed), identity(key_pair(random)), transport(network, index),
+          group(group_state ? std::make_unique<group::Group>(
+                                  group::GroupConfig{.platform = config.platform,
+                                                     .device_name = config.device_name},
+                                  identity, *group_state, random, group_observer, observer)
+                            : nullptr),
+          mesh(with_group(std::move(config), group_state), identity, random,
+               group ? static_cast<mesh::MeshObserver&>(*group) : observer, transport),
+          address{"node" + std::to_string(index), 49'152} {
+        if (group) {
+            group->attach(mesh);
+        }
+    }
 
     SeededRandom random;
+    crypto::KeyPair identity;
     RecordingMeshObserver observer;
+    RecordingGroupObserver group_observer;
     SimulatedTransport transport;
+    std::unique_ptr<group::Group> group;
     mesh::Mesh mesh;
     mesh::PeerAddress address;
     bool frozen = false; ///< power loss: processes and sends nothing
+
+private:
+    static mesh::MeshConfig with_group(mesh::MeshConfig config,
+                                       const std::optional<group::GroupState>& state) {
+        if (state) {
+            config.group_id = state->group_id;
+        }
+        return config;
+    }
 };
 
 class SimulatedMeshNetwork {
@@ -168,9 +214,12 @@ public:
         return config;
     }
 
-    SimulatedNode& add(const mesh::MeshConfig& node_config) {
+    SimulatedNode& add(const mesh::MeshConfig& node_config,
+                       std::optional<group::GroupState> group_state = std::nullopt,
+                       std::optional<std::uint64_t> seed = std::nullopt) {
         const std::size_t index = nodes_.size();
-        nodes_.push_back(std::make_unique<SimulatedNode>(*this, index, node_config, 7 + index));
+        nodes_.push_back(std::make_unique<SimulatedNode>(*this, index, node_config,
+                                                         seed.value_or(7 + index), group_state));
         return *nodes_.back();
     }
     SimulatedNode& node(std::size_t index) { return *nodes_.at(index); }
