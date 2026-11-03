@@ -138,3 +138,21 @@ choices the plan leaves open are logged here.
 **Why:** Each decoder keeps its own coverage feedback and iteration rate; a single target would spend most of its time on prefixes that only one decoder accepts.
 **Trade-offs:** Two minutes of CI time instead of one.
 **Revisit if:** CI time becomes a constraint.
+
+---
+
+## 2026-11-03 — Crypto code copied from Osplay
+**Chosen:** `core/src/crypto/{primitives,noise}` and the replay window and datagram sealing (now `input_crypto`), the identity C API, the random-source adapter, the Noise vector file and its extraction script, the crypto fuzz target and the Swift `DeviceIdentity`/`SystemRandom` wrappers are copied from Osplay commit `35046970f99c145d1b3e549d2362897c114af733`. Changes: the `osdrop` namespace, the `Osdrop control v1` prologue (Osplay's is empty), Osdrop's labels, keys for input datagrams and transfer streams instead of media, keyed BLAKE2b for per-stream keys, and session keys wiped on destruction. Monocypher 4.0.3 is vendored unmodified, checked against the release archive's SHA-256.
+**Alternatives:** A new implementation; libsodium or the platforms' crypto libraries.
+**Why:** The Osplay code reproduces the published Noise vectors and has been fuzzed; one C library builds identically on both platforms. The user chose copying with provenance (2026-11-02).
+**Trade-offs:** A fix in either project must be checked against the other.
+**Revisit if:** Monocypher publishes a security release, or Osplay changes these files.
+
+---
+
+## 2026-11-03 — Transfer stream IDs are split by handshake role
+**Chosen:** The session's initiator opens transfer streams with odd IDs and the responder with even IDs; an ID is never reused within a session. Each direction of a stream uses the key derived from its sender's transfer base key and the stream ID.
+**Alternatives:** IDs unique per direction only (the first draft); a random 16-byte stream nonce in TransferHello.
+**Why:** With IDs unique only per direction, both sides could open a stream 1; frames each side sends would then use the same key on two connections whose counters both start at 0, reusing ChaCha20-Poly1305 nonces. Parity makes (direction, stream ID) unique without extra bytes on the wire.
+**Trade-offs:** The session layer must enforce the parity; the codec cannot, as it does not know the role.
+**Revisit if:** Streams need to be opened by a third party (not planned).
