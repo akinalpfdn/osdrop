@@ -39,7 +39,23 @@ enum Tunables {
         static let promiseTimeout: Duration = .seconds(120)
     }
 
+    enum KeyStore {
+        static let keychainService = "com.akinalpfdn.osdrop"
+        static let identityAccount = "identity"
+        static let groupAccount = "group"
+        /// Shown in Keychain Access.
+        static let itemLabel = "Osdrop"
+    }
+
+    enum Settings {
+        static let layoutStateKey = "layoutState"
+        static let listenPortKey = "listenPort"
+    }
+
     enum Permissions {
+        /// System Settings › Privacy & Security › Local Network.
+        static let localNetworkSettings = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")
         /// macOS posts no reliable notification when Accessibility access changes, so it is
         /// re-read on this interval while the app runs.
         static let accessibilityPollInterval: Duration = .seconds(2)

@@ -41,6 +41,18 @@ public struct MeshPeer: Sendable, Equatable {
     public let groupID: GroupID?
     public let name: String
 
+    public init(
+        deviceID: DeviceID, publicKey: [UInt8], platform: PeerPlatform, protocolMinor: UInt8, groupID: GroupID?,
+        name: String
+    ) {
+        self.deviceID = deviceID
+        self.publicKey = publicKey
+        self.platform = platform
+        self.protocolMinor = protocolMinor
+        self.groupID = groupID
+        self.name = name
+    }
+
     init(_ peer: osdrop_peer) {
         deviceID = DeviceID(field: peer.device_id)
         publicKey = CArray.bytes(of: peer.public_key)
@@ -85,6 +97,19 @@ public struct GroupMember: Sendable, Equatable, Identifiable {
     public let isConnected: Bool
 
     public var id: DeviceID { deviceID }
+
+    public init(
+        deviceID: DeviceID, publicKey: [UInt8], platform: PeerPlatform, name: String,
+        permissions: MemberPermissions, isSelf: Bool, isConnected: Bool
+    ) {
+        self.deviceID = deviceID
+        self.publicKey = publicKey
+        self.platform = platform
+        self.name = name
+        self.permissions = permissions
+        self.isSelf = isSelf
+        self.isConnected = isConnected
+    }
 
     init(_ member: osdrop_member) {
         deviceID = DeviceID(field: member.device_id)
