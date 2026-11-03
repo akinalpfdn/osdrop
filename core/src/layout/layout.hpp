@@ -88,7 +88,7 @@ private:
     void place_self();
     /// A new revision of the document by this computer.
     void publish(Placements placements);
-    void send(const DeviceId& device, const protocol::ControlMessage& message);
+    void send(const DeviceId& device, protocol::ControlMessage message);
     void send_document(std::optional<DeviceId> except);
     void persist();
 

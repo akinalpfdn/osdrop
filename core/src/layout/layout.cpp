@@ -21,11 +21,11 @@ void Layout::persist() {
     observer_.on_layout_changed(state_);
 }
 
-void Layout::send(const DeviceId& device, const protocol::ControlMessage& message) {
+void Layout::send(const DeviceId& device, protocol::ControlMessage message) {
     if (mesh_ == nullptr) {
         return;
     }
-    mesh_->defer([device, message](mesh::Mesh& mesh, TimePoint now) {
+    mesh_->defer([device, message = std::move(message)](mesh::Mesh& mesh, TimePoint now) {
         static_cast<void>(mesh.send_message(device, message, now)); // gone peers sync later
     });
 }
