@@ -36,7 +36,8 @@ struct LayoutDocument {
     DeviceId author{};
     Placements placements;
 
-    /// Takes `other` if it is newer by (revision, author). Returns whether this changed.
+    /// Takes `other` if it is newer by (revision, author); for the same revision and author, the
+    /// smaller placements. Returns whether this changed.
     bool merge(const LayoutDocument& other);
 
     [[nodiscard]] static LayoutDocument from_message(const protocol::LayoutState& message);

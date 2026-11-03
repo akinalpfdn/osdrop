@@ -74,10 +74,27 @@ std::vector<std::vector<std::size_t>> touching_groups(const std::vector<Attached
     return groups;
 }
 
+/// Placements as comparable values, for a deterministic tie break.
+std::vector<std::tuple<DeviceId, std::int64_t, std::int64_t, bool>>
+canonical(const Placements& placements) {
+    std::vector<std::tuple<DeviceId, std::int64_t, std::int64_t, bool>> values;
+    values.reserve(placements.size());
+    for (const auto& [device, placement] : placements) {
+        values.emplace_back(device, placement.offset.x, placement.offset.y, placement.detached);
+    }
+    return values;
+}
+
 } // namespace
 
 bool LayoutDocument::merge(const LayoutDocument& other) {
-    if (std::tie(other.revision, other.author) > std::tie(revision, author)) {
+    const auto key = [](const LayoutDocument& document) {
+        return std::tie(document.revision, document.author);
+    };
+    // One author never writes two documents with the same revision; should a faulty member do
+    // so, every member still keeps the same one.
+    if (key(other) > key(*this) ||
+        (key(other) == key(*this) && canonical(other.placements) < canonical(placements))) {
         *this = other;
         return true;
     }

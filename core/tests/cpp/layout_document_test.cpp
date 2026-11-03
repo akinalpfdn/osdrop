@@ -56,6 +56,18 @@ TEST(LayoutDocument, TheNewerRevisionWinsAndAuthorsBreakTies) {
     EXPECT_TRUE(document.placements.contains(kPc));
 }
 
+TEST(LayoutDocument, TheSameRevisionTwiceStillConverges) {
+    const LayoutDocument a{.revision = 4, .author = kPc, .placements = {{kMac, {}}}};
+    const LayoutDocument b{.revision = 4,
+                           .author = kPc,
+                           .placements = {{kMac, {.offset = at(5, 0), .detached = false}}}};
+    LayoutDocument a_then_b = a;
+    a_then_b.merge(b);
+    LayoutDocument b_then_a = b;
+    b_then_a.merge(a);
+    EXPECT_EQ(a_then_b, b_then_a);
+}
+
 TEST(LayoutDocument, MergesConvergeInEveryOrder) {
     for (std::uint32_t seed = 1; seed <= 200; ++seed) {
         SCOPED_TRACE(seed);
