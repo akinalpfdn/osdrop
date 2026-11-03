@@ -25,7 +25,7 @@ struct Outcome {
 template <typename Decoded, typename TypeOf, typename Encode>
 Outcome run(const Decoded& decoded, TypeOf type_of, Encode encode) {
     if (!decoded) {
-        return {.detail = static_cast<int>(decoded.error())};
+        return {.valid = false, .detail = static_cast<int>(decoded.error()), .reencoded = {}};
     }
     const auto encoded = encode(decoded.value());
     EXPECT_TRUE(encoded.has_value());
