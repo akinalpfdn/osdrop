@@ -14,7 +14,8 @@ struct MeshTests {
         func wait(for condition: @Sendable ([MeshEvent]) -> Bool) async -> Bool {
             for _ in 0..<500 {
                 if condition(events) { return true }
-                try? await Task.sleep(for: .milliseconds(10))  // polling a test recorder; cancellation ends the test anyway
+                // A cancelled sleep only ends the wait early; the test checks the condition anyway.
+                try? await Task.sleep(for: .milliseconds(10))
             }
             return condition(events)
         }
