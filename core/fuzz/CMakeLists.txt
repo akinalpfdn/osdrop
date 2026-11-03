@@ -2,7 +2,7 @@ set(OSDROP_FIXTURES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../protocol/fixtures")
 
 # One target per decoder, so each one's iteration rate and corpus stay its own. The crypto target
 # runs X25519 per input and is the slowest.
-set(OSDROP_FUZZ_TARGETS control input transfer discovery crypto group layout)
+set(OSDROP_FUZZ_TARGETS control input transfer discovery crypto group layout names)
 
 foreach(target IN LISTS OSDROP_FUZZ_TARGETS)
     # Replays the fixtures and seeds through each entry point in every test run.
