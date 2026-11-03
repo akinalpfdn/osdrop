@@ -505,7 +505,7 @@ a dragged item.
 | Field | Type | Values |
 |-------|------|--------|
 | transfer_token | bytes[16] | from the sender's SessionSetup |
-| stream_id | u32 | not 0; unique per session and direction, selects the stream's keys |
+| stream_id | u32 | not 0; odd when the session's initiator opens the stream, even when the responder does; never reused within a session. Selects the stream's keys. |
 
 ### 0x02 ManifestRequest
 
@@ -591,15 +591,20 @@ Chunks of one request arrive in order and without gaps.
 
 ## Encryption
 
-Implemented in Phase 6; this is the design it implements.
-
 ### Handshake
 
 Noise Protocol Framework revision 34, pattern **`Noise_XX_25519_ChaChaPoly_BLAKE2b`**, prologue
-`"Osdrop control v1"`. The prologue makes a handshake with any other protocol that uses the same
-pattern (Osplay among them) fail. The connecting side is the **initiator**; between two members,
-the one with the lower device ID connects. Static keys are the devices' identities. A DH result of
-all zeros aborts the handshake. Handshake payloads are empty in version 1.
+the 17 ASCII bytes `Osdrop control v1`. The prologue makes a handshake with any other protocol that
+uses the same pattern fail, Osplay (empty prologue) among them. The connecting side is the
+**initiator**; between two members, the one with the lower device ID connects. The three Noise
+messages travel as HandshakeMessage payloads, steps 1–3, after both Hello messages. The
+implementation is validated against the published XX vectors of cacophony and noise-c
+(`core/tests/data/`).
+
+- Static keys are the devices' identities. A DH result of all zeros (low-order peer key) aborts
+  the handshake.
+- Handshake payloads are empty in version 1.
+- Any failure (authentication, order, size) ends the handshake; it is never resumed.
 
 ### Pairing code
 
@@ -607,6 +612,8 @@ all zeros aborts the handshake. Handshake payloads are empty in version 1.
 digest = BLAKE2b-256("Osdrop pairing code v1" || handshake_hash)
 code   = (first 8 bytes of digest as u64 little-endian) mod 1000000, shown with leading zeros
 ```
+
+`handshake_hash` is the final Noise `h` (64 bytes). Any change to the transcript changes the code.
 
 ### Session keys
 
@@ -619,14 +626,20 @@ From the final chaining key `ck`, using Noise's HKDF (HMAC-BLAKE2b, two outputs,
 | input | HKDF(ck, "Osdrop input keys v1") | input datagrams |
 | transfer base | HKDF(ck, "Osdrop transfer keys v1") | per-stream keys below |
 
-A transfer stream's keys, for the direction whose base key is `base`:
-`BLAKE2b-256(key = base, message = "Osdrop transfer stream v1" || stream_id (u32 LE))`.
+A transfer stream's key for one direction, where `base` is that direction's transfer base key:
+`BLAKE2b-256(key = base, message = "Osdrop transfer stream v1" || stream_id (u32 LE))`, keyed
+BLAKE2b with a 32-byte key. Frames each side sends on the stream use the key of its own direction
+(initiator → responder or responder → initiator), whoever opened the stream. Because stream IDs are
+never reused within a session (odd for streams the initiator opens, even for the responder's), no
+two streams share a key.
 
 ### Control channel and transfer streams after the handshake
 
 Each frame payload is `ChaCha20-Poly1305(key, nonce, ad = empty, message) || tag`; the nonce is the
-per-direction frame counter (0, 1, 2, …) as 32 zero bits followed by the 64-bit counter
-little-endian. A replayed, reordered or altered frame fails authentication and ends the connection.
+frame counter of that direction on that connection (0, 1, 2, …) as 32 zero bits followed by the
+64-bit counter little-endian. A replayed, reordered or altered frame fails authentication and ends
+the connection. Counter 2^64−1 is reserved by Noise; reaching it ends the connection
+(`NONCE_EXHAUSTED`).
 
 ### Input datagrams
 

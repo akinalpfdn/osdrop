@@ -17,14 +17,20 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(osdrop_core_tests
     capi_discovery_test.cpp
+    capi_identity_test.cpp
     capi_protocol_test.cpp
+    crypto_primitives_test.cpp
+    input_crypto_test.cpp
+    noise_handshake_test.cpp
+    noise_vectors_test.cpp
     protocol_codec_test.cpp
     protocol_fixture_test.cpp
     version_test.cpp)
 # Tests reach internal headers; only the C header is public API.
 target_include_directories(osdrop_core_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(osdrop_core_tests PRIVATE
-    OSDROP_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../protocol/fixtures")
+    OSDROP_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../protocol/fixtures"
+    OSDROP_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
 target_link_libraries(osdrop_core_tests PRIVATE osdrop::core osdrop::warnings GTest::gtest_main)
 set_target_properties(osdrop_core_tests PROPERTIES CXX_EXTENSIONS OFF)
 

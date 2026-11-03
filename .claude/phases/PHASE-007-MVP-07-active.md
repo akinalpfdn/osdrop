@@ -1,5 +1,5 @@
 # Phase 007 (MVP-07) — Crypto and handshake
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 6. Depends on: Phase 5
 
@@ -19,3 +19,6 @@ Two `core` instances authenticate each other, show the same pairing code and der
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- Crypto copied from Osplay `35046970`; Monocypher 4.0.3 checked against the release archive.
+- Transfer stream IDs: odd from the initiator, even from the responder, never reused (prevents key and nonce reuse).
+- `derive_session_keys` is separate from the handshake so labels and HKDF order are checked against Python-computed values.

@@ -34,6 +34,7 @@ typedef struct osdrop_version {
 #define OSDROP_MAX_INPUT_PLAINTEXT_SIZE 1184
 #define OSDROP_DEVICE_ID_SIZE 16
 #define OSDROP_GROUP_ID_SIZE 16
+#define OSDROP_KEY_SIZE 32
 
 /*
  * Plain C enums: this header is consumed from C, Swift and C#. Each ends with a *_MAX_ENUM value
@@ -96,6 +97,16 @@ typedef enum osdrop_platform {
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
 
 /*
+ * Cryptographically secure random bytes from the platform (SecRandomCopyBytes on macOS,
+ * BCryptGenRandom on Windows). `fill` writes exactly `length` bytes and returns OSDROP_OK, or
+ * returns any other code to report failure. It may be called from any thread.
+ */
+typedef struct osdrop_random_source {
+    osdrop_result (*fill)(void* context, uint8_t* buffer, size_t length);
+    void* context;
+} osdrop_random_source;
+
+/*
  * Version of the core library that is actually linked. Comparing it with the
  * OSDROP_CORE_VERSION_* macros seen at compile time detects header/library mismatches.
  * Thread-safe; may be called from any thread.
@@ -119,6 +130,21 @@ osdrop_result osdrop_protocol_validate(osdrop_wire_kind kind, const uint8_t* dat
  */
 osdrop_result osdrop_protocol_reencode(osdrop_wire_kind kind, const uint8_t* data, size_t length,
                                        uint8_t* out, size_t capacity, size_t* out_length);
+
+/*
+ * Device identity: a static X25519 key pair. Platforms store the 32-byte secret (Keychain, DPAPI);
+ * core never persists it. All key buffers are OSDROP_KEY_SIZE bytes. Pure and thread-safe.
+ *
+ * osdrop_identity_generate creates a new key pair from `random`.
+ */
+osdrop_result osdrop_identity_generate(const osdrop_random_source* random, uint8_t* secret_key,
+                                       uint8_t* public_key);
+
+/* Imports a stored secret: rejects an all-zero one and derives its public key. */
+osdrop_result osdrop_identity_public_key(const uint8_t* secret_key, uint8_t* public_key);
+
+/* The device ID (OSDROP_DEVICE_ID_SIZE bytes, PROTOCOL.md "Conventions") of a public key. */
+osdrop_result osdrop_identity_device_id(const uint8_t* public_key, uint8_t* device_id);
 
 /*
  * Discovery (PROTOCOL.md "Discovery"): the Bonjour TXT record, so both platforms' DNS-SD code

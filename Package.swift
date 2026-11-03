@@ -13,9 +13,10 @@ let package = Package(
         .target(
             name: "OsdropCore",
             path: "core",
-            sources: ["src"],
+            sources: ["src", "third_party/monocypher/monocypher.c"],
             publicHeadersPath: "include",
-            cxxSettings: [.headerSearchPath("src")]
+            cSettings: [.headerSearchPath("third_party/monocypher")],
+            cxxSettings: [.headerSearchPath("src"), .headerSearchPath("third_party/monocypher")]
         ),
         .target(
             name: "CoreBridge",

@@ -26,7 +26,8 @@ must re-encode byte for byte. `scripts/lint.sh` fails when the files differ from
 writes.
 
 Each decoder (control messages, input datagrams, transfer messages, the TXT record) has a libFuzzer
-target in `core/fuzz/`. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
+target in `core/fuzz/`, and a fifth one feeds the Noise handshake reader and the input datagram
+opener, which must never accept a forgery. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
 UndefinedBehaviorSanitizer; every test build also replays the fixtures and `core/fuzz/seeds/`
 through the same entry points. To fuzz locally (Clang with libFuzzer, e.g. on Linux):
 

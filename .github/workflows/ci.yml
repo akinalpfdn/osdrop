@@ -82,13 +82,13 @@ jobs:
 
       - name: Build the fuzzers (Clang, libFuzzer, ASan, UBSan)
         run: |
-          cmake -S core -B build/fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++ \
-            -DOSDROP_CORE_BUILD_FUZZER=ON -DOSDROP_CORE_BUILD_TESTS=OFF
+          cmake -S core -B build/fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ -DOSDROP_CORE_BUILD_FUZZER=ON -DOSDROP_CORE_BUILD_TESTS=OFF
           cmake --build build/fuzz --parallel
 
       - name: Seed the corpora with the protocol fixtures and the fuzz seeds
         run: |
-          for kind in control input transfer discovery; do
+          for kind in control input transfer discovery crypto; do
             mkdir -p "build/corpus/$kind"
           done
           while IFS=$'\t' read -r file kind _; do
@@ -96,13 +96,15 @@ jobs:
             cp "protocol/fixtures/$file" "build/corpus/$kind/$(echo "$file" | tr / _)"
           done < protocol/fixtures/manifest.tsv
           cp core/fuzz/seeds/discovery_* build/corpus/discovery/
+          cp build/corpus/control/* build/corpus/input/* build/corpus/crypto/
 
-      - name: Fuzz each decoder for 30 seconds
+      - name: Fuzz each decoder and the crypto parsers for 30 seconds
         run: |
           build/fuzz/fuzz/osdrop_control_fuzzer -max_total_time=30 -max_len=65537 build/corpus/control
           build/fuzz/fuzz/osdrop_input_fuzzer -max_total_time=30 -max_len=1185 build/corpus/input
           build/fuzz/fuzz/osdrop_transfer_fuzzer -max_total_time=30 -max_len=65537 build/corpus/transfer
           build/fuzz/fuzz/osdrop_discovery_fuzzer -max_total_time=30 -max_len=512 build/corpus/discovery
+          build/fuzz/fuzz/osdrop_crypto_fuzzer -max_total_time=30 -max_len=2048 build/corpus/crypto
 
   windows:
     name: Windows
