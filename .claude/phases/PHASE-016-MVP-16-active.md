@@ -24,3 +24,12 @@ Copy on one computer and paste on another, for text, images and files.
 - Started while only one Mac is at hand (user, 2026-11-03: "devam edebilirsin"); the only phase whose
   dependencies are met. Branch stacked on Phase 13 (`feature/phase-13-transfer`); its PR targets
   that branch and is not merged until the stack is merged in order.
+- Spike (2026-11-04, M3 Air, macOS 26): Finder does not paste a file promise from the general
+  pasteboard ("nothing to paste"; it never asked for the name). It does paste a `public.file-url`
+  provided lazily by a data provider, but macOS asked for that URL 0.03 s after it was written,
+  before any paste (Handoff on, no clipboard manager running: Universal Clipboard most likely), so
+  "download when pasted" is "download when copied" on such Macs.
+- User decision: files copied on another computer are downloaded in the background into a staging
+  folder up to a size cap (default 512 MB, a setting in Phase 16) and put on the pasteboard as real
+  file URLs once complete; Finder then pastes them at once with its own progress. Copies above the
+  cap put no files on the pasteboard and suggest drag and drop.
