@@ -35,6 +35,7 @@ target_include_directories(osdrop_monocypher PUBLIC third_party/monocypher)
 add_library(osdrop_core STATIC
     src/capi/discovery_capi.cpp
     src/capi/identity_capi.cpp
+    src/capi/mesh_capi.cpp
     src/capi/protocol_capi.cpp
     src/capi/version.cpp
     src/crypto/input_crypto.cpp

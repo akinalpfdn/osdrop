@@ -18,6 +18,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(osdrop_core_tests
     capi_discovery_test.cpp
     capi_identity_test.cpp
+    capi_mesh_test.cpp
     capi_protocol_test.cpp
     crypto_primitives_test.cpp
     input_crypto_test.cpp
