@@ -1,3 +1,4 @@
+import Foundation
 import OsdropCore
 
 public enum PeerPlatform: Sendable, Equatable {
@@ -171,6 +172,83 @@ public enum MeshEvent: Sendable, Equatable {
     case peerResponsive(DeviceID, Bool)
     case statistics(DeviceID, SessionStatistics)
     case log(MeshLogLevel, String)
+    /// An offered item was scanned: its size, or why it cannot be sent.
+    case offerReady(TransferItem, Result<OfferSummary, CoreError>)
+    /// At most every 100 ms while a transfer this computer receives makes progress.
+    case transferProgress(TransferProgress)
+    /// The end of a transfer this computer receives; after a failure nothing it created is left.
+    case transferFinished(id: UInt64, Result<ReceivedItem, CoreError>)
+}
+
+/// One item a transfer moves (docs/PROTOCOL.md "Transfer streams").
+public struct TransferItem: Sendable, Hashable {
+    public enum Kind: Sendable, Hashable {
+        /// `objectID` is the drag ID, `index` the item in the drag.
+        case drag
+        /// `objectID` is the clip ID, `index` the format code.
+        case clipboard
+    }
+
+    public let kind: Kind
+    public let objectID: UInt64
+    public let index: UInt32
+
+    public init(kind: Kind, objectID: UInt64, index: UInt32) {
+        self.kind = kind
+        self.objectID = objectID
+        self.index = index
+    }
+
+    init(_ raw: osdrop_object_ref) {
+        self.init(
+            kind: raw.kind == OSDROP_OBJECT_CLIPBOARD ? .clipboard : .drag, objectID: raw.object_id,
+            index: raw.item_index)
+    }
+
+    var raw: osdrop_object_ref {
+        osdrop_object_ref(kind: kind.raw, object_id: objectID, item_index: index)
+    }
+}
+
+extension TransferItem.Kind {
+    var raw: osdrop_object_kind {
+        switch self {
+        case .drag: OSDROP_OBJECT_DRAG
+        case .clipboard: OSDROP_OBJECT_CLIPBOARD
+        }
+    }
+}
+
+/// What a scanned offer holds.
+public struct OfferSummary: Sendable, Equatable {
+    public let totalBytes: UInt64
+    public let entryCount: UInt64
+    /// Entries that cannot travel (names the protocol refuses, devices, long link targets).
+    public let skipped: UInt64
+}
+
+public struct TransferProgress: Sendable, Equatable {
+    public let id: UInt64
+    public let bytesDone: UInt64
+    public let bytesTotal: UInt64
+    public let filesDone: UInt64
+    public let filesTotal: UInt64
+
+    init(_ raw: osdrop_transfer_progress) {
+        id = raw.transfer_id
+        bytesDone = raw.bytes_done
+        bytesTotal = raw.bytes_total
+        filesDone = raw.files_done
+        filesTotal = raw.files_total
+    }
+}
+
+/// What a finished transfer created.
+public struct ReceivedItem: Sendable, Equatable {
+    /// The item's top-level files and folders, as created (names already taken are numbered).
+    public let items: [URL]
+    /// Links not recreated: they pointed outside the item.
+    public let skippedLinks: UInt64
 }
 
 /// A rectangle in 1/16 of a unit (docs/PROTOCOL.md "Conventions").

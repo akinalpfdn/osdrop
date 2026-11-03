@@ -192,6 +192,45 @@ public final class Mesh: Sendable {
             })
     }
 
+    // MARK: Transfers
+
+    /// Offers local files and folders as one item to the members in `audience`; scanning starts at
+    /// once and `.offerReady` follows. Replaces an earlier offer of the same item.
+    public func offer(_ item: TransferItem, files: [URL], to audience: [DeviceID]) throws(CoreError) {
+        var raw = item.raw
+        let ids = audience.flatMap(\.bytes)
+        try check(
+            withCStrings(files.map { $0.path(percentEncoded: false) }) { paths in
+                ids.withUnsafeBufferPointer { devices in
+                    handle.withPointer {
+                        osdrop_mesh_offer($0, &raw, paths, paths.count, devices.baseAddress, audience.count)
+                    }
+                }
+            })
+    }
+
+    /// Withdraws every item of an object; members fetching them get `.cancelled`.
+    public func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_withdraw($0, kind.raw, objectID) })
+    }
+
+    /// Fetches an item a member offered into `folder`; the transfer's ID. `.notPermitted` when the
+    /// member may not send this computer files.
+    public func receive(_ item: TransferItem, from device: DeviceID, into folder: URL) throws(CoreError) -> UInt64 {
+        var raw = item.raw
+        var id: UInt64 = 0
+        try check(
+            folder.path(percentEncoded: false).withCString { path in
+                handle.withPointer { osdrop_mesh_receive($0, device.bytes, &raw, path, &id) }
+            })
+        return id
+    }
+
+    /// Ends a transfer with `.cancelled`; what it created is removed.
+    public func cancelTransfer(_ id: UInt64) {
+        _ = handle.withPointer { osdrop_mesh_cancel_transfer($0, id) }
+    }
+
     private func check(_ result: osdrop_result?) throws(CoreError) {
         guard let result else { throw .invalidState }
         if let error = CoreError(result: result) { throw error }
@@ -279,6 +318,31 @@ private final class MeshCallbackBox: Sendable {
             let text = message.map { String(cString: $0) } ?? ""
             MeshCallbackBox.from(context)?.continuation.yield(.log(MeshLogLevel(level), text))
         }
+        callbacks.offer_ready = { context, item, result, totalBytes, entryCount, skipped in
+            guard let item = item?.pointee else { return }
+            let outcome: Result<OfferSummary, CoreError> =
+                if let error = CoreError(result: result) {
+                    .failure(error)
+                } else {
+                    .success(OfferSummary(totalBytes: totalBytes, entryCount: entryCount, skipped: skipped))
+                }
+            MeshCallbackBox.from(context)?.continuation.yield(.offerReady(TransferItem(item), outcome))
+        }
+        callbacks.transfer_progress = { context, progress in
+            guard let progress = progress?.pointee else { return }
+            MeshCallbackBox.from(context)?.continuation.yield(.transferProgress(TransferProgress(progress)))
+        }
+        callbacks.transfer_finished = { context, id, result, items, count, skippedLinks in
+            let outcome: Result<ReceivedItem, CoreError>
+            if let error = CoreError(result: result) {
+                outcome = .failure(error)
+            } else {
+                let paths = (0..<count).compactMap { index in items?[index].map { String(cString: $0) } }
+                outcome = .success(
+                    ReceivedItem(items: paths.map { URL(filePath: $0) }, skippedLinks: skippedLinks))
+            }
+            MeshCallbackBox.from(context)?.continuation.yield(.transferFinished(id: id, outcome))
+        }
         return callbacks
     }
 
@@ -286,6 +350,15 @@ private final class MeshCallbackBox: Sendable {
     static func from(_ context: UnsafeMutableRawPointer?) -> MeshCallbackBox? {
         context.map { Unmanaged<MeshCallbackBox>.fromOpaque($0).takeUnretainedValue() }
     }
+}
+
+/// Runs `body` with NUL-terminated copies of `strings`, freed afterwards.
+private func withCStrings<Result>(
+    _ strings: [String], _ body: ([UnsafePointer<CChar>?]) -> Result
+) -> Result {
+    let copies = strings.map { strdup($0) }
+    defer { copies.forEach { free($0) } }
+    return body(copies.map { $0.map { UnsafePointer($0) } })
 }
 
 private func deviceID(_ bytes: UnsafePointer<UInt8>) -> DeviceID {
