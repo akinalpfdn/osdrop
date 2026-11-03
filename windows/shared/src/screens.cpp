@@ -1,6 +1,7 @@
 #include <osdrop/win/screens.hpp>
 
 #include <algorithm>
+#include <iterator>
 #include <string>
 
 namespace osdrop::win {
