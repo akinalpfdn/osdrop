@@ -27,13 +27,14 @@ add_executable(osdrop_core_tests
     protocol_codec_test.cpp
     protocol_fixture_test.cpp
     session_engine_test.cpp
+    transport_test.cpp
     version_test.cpp)
 # Tests reach internal headers; only the C header is public API.
 target_include_directories(osdrop_core_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(osdrop_core_tests PRIVATE
     OSDROP_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../protocol/fixtures"
     OSDROP_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
-target_link_libraries(osdrop_core_tests PRIVATE osdrop::core osdrop::warnings GTest::gtest_main)
+target_link_libraries(osdrop_core_tests PRIVATE osdrop::core osdrop_asio osdrop::warnings GTest::gtest_main)
 set_target_properties(osdrop_core_tests PROPERTIES CXX_EXTENSIONS OFF)
 
 include(GoogleTest)
