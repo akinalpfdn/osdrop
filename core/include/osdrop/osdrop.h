@@ -80,7 +80,7 @@ typedef enum osdrop_result {
     OSDROP_ERROR_NOT_PERMITTED = 28,
     OSDROP_ERROR_GROUP_FULL = 29, /* the group already has the most computers allowed */
     OSDROP_ERROR_IN_ANOTHER_GROUP =
-        30, /* the peer belongs to another group; one must leave first */
+        30,                           /* the peer belongs to another group; one must leave first */
     OSDROP_ERROR_INVALID_LAYOUT = 31, /* monitors overlap, or a computer touches no other */
     OSDROP_RESULT_MAX_ENUM = 0x7FFFFFFF
 } osdrop_result;
@@ -256,6 +256,12 @@ typedef struct osdrop_mesh_callbacks {
     /* No longer in the group: OSDROP_OK when this computer left, NOT_TRUSTED when a member removed
      * it. */
     void (*left_group)(void* context, osdrop_result reason);
+    /*
+     * The arrangement or a member's screens changed: store the `size` bytes at `state` with the
+     * settings (UserDefaults, JSON) and pass them to osdrop_mesh_create next time; read the new
+     * arrangement with osdrop_mesh_layout. Valid during the call only.
+     */
+    void (*layout_changed)(void* context, const uint8_t* state, size_t size);
     /* A first pairing: show `code` (000000-999999); answer with osdrop_mesh_confirm_pairing. */
     void (*pairing_code)(void* context, uint64_t connection, uint32_t code,
                          const osdrop_peer* peer);
@@ -277,6 +283,8 @@ typedef struct osdrop_mesh_config {
     osdrop_platform platform;
     const uint8_t* group_state; /* the bytes last given to group_changed; NULL the first time */
     size_t group_state_size;
+    const uint8_t* layout_state; /* the bytes last given to layout_changed; NULL the first time */
+    size_t layout_state_size;
     uint32_t features;            /* Capabilities bits (PROTOCOL.md) */
     uint8_t max_transfer_streams; /* 1 to 8 */
     uint16_t listen_port;         /* 0: any; a taken port falls back to any */
@@ -335,6 +343,94 @@ osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* devi
                                           const osdrop_permissions* permissions);
 /* Ends every session before sleep (peers see PEER_SLEEPING) or quitting. */
 osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping);
+
+/*
+ * The shared arrangement (PROTOCOL.md "Arrangement"). Coordinates are int32 in 1/16 of a unit:
+ * logical (macOS points, Windows device-independent pixels) or native, the units the computer's
+ * own cursor moves in (macOS points, Windows physical pixels).
+ */
+#define OSDROP_MONITOR_KEY_SIZE 16
+#define OSDROP_MAX_MONITORS 16
+
+typedef struct osdrop_rect {
+    int32_t x;
+    int32_t y;
+    int32_t width;
+    int32_t height;
+} osdrop_rect;
+
+typedef struct osdrop_monitor {
+    uint8_t key[OSDROP_MONITOR_KEY_SIZE]; /* stable identity of the monitor on its computer */
+    osdrop_rect frame;                    /* logical, in the computer's own desktop */
+    osdrop_rect native;                   /* native; on macOS the same as `frame` */
+    uint16_t pixel_width;
+    uint16_t pixel_height;
+    uint8_t primary; /* exactly one monitor of a computer is primary */
+} osdrop_monitor;
+
+/* Where a computer's logical origin sits in the arrangement. */
+typedef struct osdrop_placement {
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    int32_t x;
+    int32_t y;
+    uint8_t detached; /* 1: kept out of crossings */
+} osdrop_placement;
+
+/* A computer of the arrangement with its monitors. */
+typedef struct osdrop_layout_computer {
+    uint8_t placed; /* 0: not in the arrangement yet; `placement` then holds only the device ID */
+    osdrop_placement placement;
+    uint8_t monitor_count; /* 1 to OSDROP_MAX_MONITORS */
+    osdrop_monitor monitors[OSDROP_MAX_MONITORS];
+} osdrop_layout_computer;
+
+/* NOLINTBEGIN(cppcoreguidelines-use-enum-class,performance-enum-size) */
+typedef enum osdrop_layout_problem_kind {
+    OSDROP_LAYOUT_OVERLAP = 1,     /* the monitors of two computers overlap */
+    OSDROP_LAYOUT_UNREACHABLE = 2, /* a computer touches no other and is not detached */
+    OSDROP_LAYOUT_PROBLEM_MAX_ENUM = 0x7FFFFFFF
+} osdrop_layout_problem_kind;
+/* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
+
+typedef struct osdrop_layout_problem {
+    osdrop_layout_problem_kind kind;
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    uint8_t other_device_id[OSDROP_DEVICE_ID_SIZE]; /* zeros for UNREACHABLE */
+} osdrop_layout_problem;
+
+/*
+ * This computer's monitors, at start and after every display change. VALUE_OUT_OF_RANGE for
+ * monitors a ScreenReport cannot carry (sizes, coordinates, not exactly one primary).
+ */
+osdrop_result osdrop_mesh_set_screens(osdrop_mesh* mesh, const osdrop_monitor* monitors,
+                                      size_t count);
+/*
+ * The members whose screens are known, this computer included, into `out` (room for
+ * `capacity`). `*out_count` is their number; BUFFER_TOO_SMALL when it exceeds `capacity`.
+ */
+osdrop_result osdrop_mesh_layout(osdrop_mesh* mesh, osdrop_layout_computer* out, size_t capacity,
+                                 size_t* out_count);
+/*
+ * A new arrangement from the editor, shared with every member. INVALID_LAYOUT when
+ * osdrop_layout_check finds problems with the members' screens; INVALID_ARGUMENT for a computer
+ * that is not a member or appears twice.
+ */
+osdrop_result osdrop_mesh_set_layout(osdrop_mesh* mesh, const osdrop_placement* placements,
+                                     size_t count);
+
+/*
+ * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.
+ * Computers that are not placed are left out. Writes at most `capacity` problems and their number
+ * to `*out_count`; BUFFER_TOO_SMALL when there are more.
+ */
+osdrop_result osdrop_layout_check(const osdrop_layout_computer* computers, size_t count,
+                                  osdrop_layout_problem* out, size_t capacity, size_t* out_count);
+/*
+ * Pure and thread-safe, for Windows, where monitors with different scales share no logical
+ * space: sets each monitor's frame x and y from the native rectangles and the frames' sizes (the
+ * logical sizes). Monitors that touch in physical pixels touch in the result.
+ */
+osdrop_result osdrop_layout_derive_frames(osdrop_monitor* monitors, size_t count);
 
 #ifdef __cplusplus
 } /* extern "C" */

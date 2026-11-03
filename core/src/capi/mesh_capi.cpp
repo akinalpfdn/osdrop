@@ -2,6 +2,10 @@
 #include "crypto/noise.hpp"
 #include "group/group.hpp"
 #include "group/group_state.hpp"
+#include "layout/document.hpp"
+#include "layout/layout.hpp"
+#include "layout/layout_state.hpp"
+#include "layout/screens.hpp"
 #include "mesh/mesh.hpp"
 #include "protocol/control_messages.hpp"
 #include "protocol/wire.hpp"
@@ -13,6 +17,7 @@
 #include <iterator>
 #include <memory>
 #include <new>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -22,6 +27,7 @@
 namespace {
 
 namespace group = osdrop::group;
+namespace layout = osdrop::layout;
 namespace mesh = osdrop::mesh;
 namespace protocol = osdrop::protocol;
 using osdrop::Error;
@@ -29,6 +35,10 @@ using osdrop::TimePoint;
 
 static_assert(OSDROP_LOG_DEBUG == static_cast<int>(mesh::LogLevel::Debug) &&
               OSDROP_LOG_ERROR == static_cast<int>(mesh::LogLevel::Error));
+static_assert(OSDROP_LAYOUT_OVERLAP == static_cast<int>(layout::ProblemKind::Overlap) &&
+              OSDROP_LAYOUT_UNREACHABLE == static_cast<int>(layout::ProblemKind::Unreachable));
+static_assert(OSDROP_MONITOR_KEY_SIZE == protocol::kIdSize &&
+              OSDROP_MAX_MONITORS == protocol::kMaxMonitors);
 
 osdrop_result to_result(Error error) {
     return static_cast<osdrop_result>(error);
@@ -83,15 +93,31 @@ osdrop_member describe(const group::MemberStatus& status) {
     return member;
 }
 
-/// Turns group events, and the mesh events the group passes on for members, into the platform's
-/// C callbacks. The group answers trust and handles pairing itself, so those mesh events never
-/// arrive here.
-class CallbackObserver final : public group::GroupObserver, public mesh::MeshObserver {
+std::set<layout::DeviceId> members_of(const group::GroupState& state) {
+    std::set<layout::DeviceId> members;
+    for (const group::Member& member : state.roster.members()) {
+        members.insert(member.device_id);
+    }
+    return members;
+}
+
+/// Turns group and layout events, and the mesh events passed on for members, into the platform's
+/// C callbacks, and tells the layout about group changes. The group answers trust and handles
+/// pairing itself, so those mesh events never arrive here.
+class CallbackObserver final : public group::GroupObserver,
+                               public layout::LayoutObserver,
+                               public mesh::MeshObserver {
 public:
     explicit CallbackObserver(const osdrop_mesh_callbacks& callbacks) : callbacks_(callbacks) {}
 
+    /// The layout to tell about group changes; set once, before the mesh starts.
+    void follow(layout::Layout& arrangement) { layout_ = &arrangement; }
+
     // --- group::GroupObserver ---
     void on_state_changed(const group::GroupState& state) override {
+        if (layout_ != nullptr) {
+            layout_->group_changed(state.group_id, members_of(state));
+        }
         if (callbacks_.group_changed != nullptr) {
             const std::vector<std::uint8_t> bytes = group::encode_state(state);
             callbacks_.group_changed(callbacks_.context, bytes.data(), bytes.size(),
@@ -113,6 +139,14 @@ public:
     void on_left_group(std::optional<Error> reason) override {
         if (callbacks_.left_group != nullptr) {
             callbacks_.left_group(callbacks_.context, reason ? to_result(*reason) : OSDROP_OK);
+        }
+    }
+
+    // --- layout::LayoutObserver ---
+    void on_layout_changed(const layout::LayoutState& state) override {
+        if (callbacks_.layout_changed != nullptr) {
+            const std::vector<std::uint8_t> bytes = layout::encode_layout(state);
+            callbacks_.layout_changed(callbacks_.context, bytes.data(), bytes.size());
         }
     }
 
@@ -176,6 +210,7 @@ public:
 
 private:
     osdrop_mesh_callbacks callbacks_;
+    layout::Layout* layout_ = nullptr;
 };
 
 bool valid_platform(osdrop_platform platform) {
@@ -191,16 +226,114 @@ std::string read_name(const char* text) {
     return name;
 }
 
+layout::Rect to_rect(const osdrop_rect& rect) {
+    return {.x = rect.x, .y = rect.y, .width = rect.width, .height = rect.height};
+}
+
+osdrop_rect to_c(const layout::Rect& rect) {
+    return {.x = static_cast<std::int32_t>(rect.x),
+            .y = static_cast<std::int32_t>(rect.y),
+            .width = static_cast<std::int32_t>(rect.width),
+            .height = static_cast<std::int32_t>(rect.height)};
+}
+
+/// Monitors a ScreenReport can carry, or why not.
+osdrop::Expected<layout::Screens, Error> to_screens(const osdrop_monitor* monitors,
+                                                    std::size_t count) {
+    using Result = osdrop::Expected<layout::Screens, Error>;
+    if (monitors == nullptr || count == 0) {
+        return Result::failure(Error::InvalidArgument);
+    }
+    if (count > OSDROP_MAX_MONITORS) {
+        return Result::failure(Error::ValueOutOfRange);
+    }
+    std::vector<layout::Monitor> list;
+    for (const osdrop_monitor& m : std::span(monitors, count)) {
+        if (m.primary > 1) {
+            return Result::failure(Error::InvalidArgument);
+        }
+        layout::Monitor monitor{.key = {},
+                                .frame = to_rect(m.frame),
+                                .native = to_rect(m.native),
+                                .pixel_width = m.pixel_width,
+                                .pixel_height = m.pixel_height,
+                                .primary = m.primary == 1};
+        std::ranges::copy(m.key, monitor.key.begin());
+        list.push_back(monitor);
+    }
+    layout::Screens screens(std::move(list));
+    if (const auto valid = protocol::encode_control(screens.to_report()); !valid) {
+        return Result::failure(valid.error());
+    }
+    return screens;
+}
+
+osdrop_monitor to_c(const layout::Monitor& monitor) {
+    osdrop_monitor out{.key = {},
+                       .frame = to_c(monitor.frame),
+                       .native = to_c(monitor.native),
+                       .pixel_width = monitor.pixel_width,
+                       .pixel_height = monitor.pixel_height,
+                       .primary = static_cast<std::uint8_t>(monitor.primary)};
+    std::ranges::copy(monitor.key, std::begin(out.key));
+    return out;
+}
+
+osdrop_layout_computer describe(const layout::DeviceId& device, const layout::Screens& screens,
+                                const layout::Placements& placements) {
+    osdrop_layout_computer computer{};
+    std::ranges::copy(device, std::begin(computer.placement.device_id));
+    if (const auto placed = placements.find(device); placed != placements.end()) {
+        computer.placed = 1;
+        computer.placement.x = static_cast<std::int32_t>(placed->second.offset.x);
+        computer.placement.y = static_cast<std::int32_t>(placed->second.offset.y);
+        computer.placement.detached = static_cast<std::uint8_t>(placed->second.detached);
+    }
+    const std::span<osdrop_monitor> out(computer.monitors);
+    const auto& monitors = screens.monitors();
+    computer.monitor_count = static_cast<std::uint8_t>(std::min(monitors.size(), out.size()));
+    std::ranges::transform(monitors.begin(), monitors.begin() + computer.monitor_count, out.begin(),
+                           [](const layout::Monitor& m) { return to_c(m); });
+    return computer;
+}
+
+/// A state the platform stored, or the empty one when there is none yet.
+template <typename State, typename Decode>
+osdrop::Expected<State, Error> stored(const std::uint8_t* bytes, std::size_t size, Decode decode) {
+    if (bytes == nullptr) {
+        return State{};
+    }
+    return decode(std::span<const std::uint8_t>(bytes, size));
+}
+
+/// Placements with unique devices and detached flags of 0 or 1.
+osdrop::Expected<layout::Placements, Error> to_placements(const osdrop_placement* placements,
+                                                          std::size_t count) {
+    using Result = osdrop::Expected<layout::Placements, Error>;
+    layout::Placements result;
+    for (const osdrop_placement& p : std::span(placements, count)) {
+        if (p.detached > 1 ||
+            !result
+                 .emplace(read_id(p.device_id), layout::Placement{.offset = {.x = p.x, .y = p.y},
+                                                                  .detached = p.detached == 1})
+                 .second) {
+            return Result::failure(Error::InvalidArgument);
+        }
+    }
+    return result;
+}
+
 } // namespace
 
-/// The C handle: the platform's callbacks, the group and the node that runs the mesh. The group
-/// lives on the I/O thread: every access goes through the node.
+/// The C handle: the platform's callbacks, the group, the layout and the node that runs the mesh.
+/// The group and the layout live on the I/O thread: every access goes through the node.
 struct osdrop_mesh {
     osdrop_mesh(const osdrop_random_source& random_source, const osdrop_mesh_callbacks& callbacks)
         : random(random_source), observer(callbacks) {}
 
     osdrop::capi::CallbackRandomSource random;
     CallbackObserver observer;
+    std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
     std::unique_ptr<osdrop::transport::AsioNode> node; // declared last: stopped first
 };
@@ -211,7 +344,8 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
                                  const osdrop_random_source* random,
                                  const osdrop_mesh_callbacks* callbacks, osdrop_mesh** out_mesh) {
     if (config == nullptr || config->secret_key == nullptr || config->device_name == nullptr ||
-        (config->group_state == nullptr && config->group_state_size != 0) || random == nullptr ||
+        (config->group_state == nullptr && config->group_state_size != 0) ||
+        (config->layout_state == nullptr && config->layout_state_size != 0) || random == nullptr ||
         random->fill == nullptr || callbacks == nullptr || out_mesh == nullptr) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
@@ -223,19 +357,20 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (const auto valid = protocol::check_string(name); !valid) {
         return to_result(valid.error());
     }
-    group::GroupState state;
-    if (config->group_state != nullptr) {
-        auto decoded = group::decode_state(
-            std::span<const std::uint8_t>(config->group_state, config->group_state_size));
-        if (!decoded) {
-            return to_result(decoded.error());
-        }
-        state = std::move(decoded.value());
+    auto state = stored<group::GroupState>(config->group_state, config->group_state_size,
+                                           group::decode_state);
+    if (!state) {
+        return to_result(state.error());
+    }
+    auto arrangement = stored<layout::LayoutState>(config->layout_state, config->layout_state_size,
+                                                   layout::decode_layout);
+    if (!arrangement) {
+        return to_result(arrangement.error());
     }
     mesh::MeshConfig mesh_config;
     mesh_config.platform = static_cast<protocol::Platform>(config->platform);
     mesh_config.device_name = name;
-    mesh_config.group_id = state.group_id;
+    mesh_config.group_id = state.value().group_id;
     mesh_config.capabilities = protocol::Capabilities{
         .features = config->features, .max_transfer_streams = config->max_transfer_streams};
     if (const auto encoded = protocol::encode_control(mesh_config.capabilities); !encoded) {
@@ -254,14 +389,24 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (!handle) {
         return OSDROP_ERROR_INTERNAL;
     }
+    // mesh → group → layout → callbacks
+    handle->layout = std::make_unique<layout::Layout>(
+        osdrop::crypto::device_id(identity.value().public_key()), std::move(arrangement.value()),
+        handle->observer, handle->observer);
+    handle->observer.follow(*handle->layout);
+    handle->layout->group_changed(state.value().group_id, members_of(state.value()));
     handle->group = std::make_unique<group::Group>(
         group::GroupConfig{.platform = mesh_config.platform, .device_name = name}, identity.value(),
-        std::move(state), handle->random, handle->observer, handle->observer);
+        std::move(state.value()), handle->random, handle->observer, *handle->layout);
     group::Group& member_layer = *handle->group;
+    layout::Layout& arrangement_layer = *handle->layout;
     auto node = osdrop::transport::AsioNode::create(
         std::move(mesh_config), std::move(identity.value()), handle->random, member_layer,
         osdrop::transport::NodeOptions{.listen_port = config->listen_port},
-        [&member_layer](mesh::Mesh& mesh) { member_layer.attach(mesh); });
+        [&member_layer, &arrangement_layer](mesh::Mesh& mesh) {
+            member_layer.attach(mesh);
+            arrangement_layer.attach(mesh);
+        });
     if (!node) {
         return to_result(node.error());
     }
@@ -409,6 +554,114 @@ osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* devi
         result = member_layer.set_permissions(device, wanted, now);
     }));
     return to_result(result);
+}
+
+osdrop_result osdrop_mesh_set_screens(osdrop_mesh* mesh, const osdrop_monitor* monitors,
+                                      size_t count) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    auto screens = to_screens(monitors, count);
+    if (!screens) {
+        return to_result(screens.error());
+    }
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    layout::Layout& arrangement = *mesh->layout;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& /*mesh*/, TimePoint now) {
+        result = arrangement.set_screens(std::move(screens.value()), now);
+    }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_mesh_layout(osdrop_mesh* mesh, osdrop_layout_computer* out, size_t capacity,
+                                 size_t* out_count) {
+    if (mesh == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    layout::LayoutState state;
+    const layout::Layout& arrangement = *mesh->layout;
+    if (!mesh->node->run_and_wait(
+            [&](mesh::Mesh& /*mesh*/, TimePoint /*now*/) { state = arrangement.state(); })) {
+        return OSDROP_ERROR_INTERNAL;
+    }
+    *out_count = state.screens.size();
+    if (state.screens.size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    std::ranges::transform(state.screens, out, [&](const auto& entry) {
+        return describe(entry.first, entry.second, state.document.placements);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_set_layout(osdrop_mesh* mesh, const osdrop_placement* placements,
+                                     size_t count) {
+    if (mesh == nullptr || placements == nullptr || count == 0) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    auto wanted = to_placements(placements, count);
+    if (!wanted) {
+        return to_result(wanted.error());
+    }
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    layout::Layout& arrangement = *mesh->layout;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& /*mesh*/, TimePoint now) {
+        result = arrangement.set_placements(std::move(wanted.value()), now);
+    }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_layout_check(const osdrop_layout_computer* computers, size_t count,
+                                  osdrop_layout_problem* out, size_t capacity, size_t* out_count) {
+    if ((computers == nullptr && count != 0) || (out == nullptr && capacity != 0) ||
+        out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    layout::Placements placements;
+    layout::ScreenMap screens;
+    for (const osdrop_layout_computer& computer : std::span(computers, count)) {
+        auto monitors = to_screens(computer.monitors, computer.monitor_count);
+        if (!monitors) {
+            return to_result(monitors.error());
+        }
+        const layout::DeviceId device = read_id(computer.placement.device_id);
+        if (computer.placed > 1 || computer.placement.detached > 1 ||
+            !screens.emplace(device, std::move(monitors.value())).second) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        if (computer.placed == 1) {
+            placements[device] = {.offset = {.x = computer.placement.x, .y = computer.placement.y},
+                                  .detached = computer.placement.detached == 1};
+        }
+    }
+    const std::vector<layout::Problem> problems = layout::check(placements, screens);
+    *out_count = problems.size();
+    const std::span<osdrop_layout_problem> output(out, out == nullptr ? 0 : capacity);
+    for (std::size_t i = 0; i < problems.size() && i < output.size(); ++i) {
+        output[i] =
+            osdrop_layout_problem{.kind = static_cast<osdrop_layout_problem_kind>(problems[i].kind),
+                                  .device_id = {},
+                                  .other_device_id = {}};
+        std::ranges::copy(problems[i].device, std::begin(output[i].device_id));
+        std::ranges::copy(problems[i].other, std::begin(output[i].other_device_id));
+    }
+    return problems.size() > capacity ? OSDROP_ERROR_BUFFER_TOO_SMALL : OSDROP_OK;
+}
+
+osdrop_result osdrop_layout_derive_frames(osdrop_monitor* monitors, size_t count) {
+    auto screens = to_screens(monitors, count);
+    if (!screens) {
+        return to_result(screens.error());
+    }
+    const std::vector<layout::Monitor> derived = layout::derive_frames(screens.value().monitors());
+    if (const auto valid = protocol::encode_control(layout::Screens(derived).to_report()); !valid) {
+        return to_result(valid.error());
+    }
+    const std::span<osdrop_monitor> output(monitors, count);
+    for (std::size_t i = 0; i < derived.size(); ++i) {
+        output[i].frame = to_c(derived[i].frame);
+    }
+    return OSDROP_OK;
 }
 
 osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping) {

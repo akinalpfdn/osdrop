@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <condition_variable>
@@ -50,6 +51,7 @@ struct Events {
     Bytes state;                  ///< the last group state handed over
     std::optional<GroupId> group; ///< the group to advertise with it
     std::vector<osdrop_result> left;
+    Bytes layout; ///< the last layout state handed over
     int log_lines = 0;
 
     bool wait_for(const std::function<bool()>& condition) {
@@ -85,6 +87,10 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
         auto* e = static_cast<Events*>(context);
         e->update([&] { e->left.push_back(reason); });
     };
+    callbacks.layout_changed = [](void* context, const uint8_t* state, size_t size) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->layout.assign(state, state + size); });
+    };
     callbacks.pairing_code = [](void* context, uint64_t connection, uint32_t code,
                                 const osdrop_peer* /*peer*/) {
         auto* e = static_cast<Events*>(context);
@@ -119,7 +125,8 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
 /// One computer. The same seed gives the same identity, so a computer can be started again with
 /// the state it stored.
 struct CMesh {
-    CMesh(std::uint64_t seed, const char* name, const Bytes& state = {}) : random{seed} {
+    CMesh(std::uint64_t seed, const char* name, const Bytes& state = {}, const Bytes& layout = {})
+        : random{seed} {
         const osdrop_random_source source{.fill = fill, .context = &random};
         std::array<std::uint8_t, OSDROP_KEY_SIZE> public_key{};
         EXPECT_EQ(osdrop_identity_generate(&source, secret.data(), public_key.data()), OSDROP_OK);
@@ -128,6 +135,8 @@ struct CMesh {
                                         .platform = OSDROP_PLATFORM_MACOS,
                                         .group_state = state.empty() ? nullptr : state.data(),
                                         .group_state_size = state.size(),
+                                        .layout_state = layout.empty() ? nullptr : layout.data(),
+                                        .layout_state_size = layout.size(),
                                         .features = 0x1F,
                                         .max_transfer_streams = 4,
                                         .listen_port = 0};
@@ -156,6 +165,19 @@ struct CMesh {
         uint8_t has_group = 0;
         EXPECT_EQ(osdrop_mesh_group_id(mesh, id.data(), &has_group), OSDROP_OK);
         return has_group == 1 ? std::optional(id) : std::nullopt;
+    }
+    [[nodiscard]] std::vector<osdrop_layout_computer> layout() const {
+        size_t count = 0;
+        const osdrop_result counted = osdrop_mesh_layout(mesh, nullptr, 0, &count);
+        EXPECT_EQ(counted, count == 0 ? OSDROP_OK : OSDROP_ERROR_BUFFER_TOO_SMALL);
+        std::vector<osdrop_layout_computer> list(count);
+        EXPECT_EQ(osdrop_mesh_layout(mesh, list.data(), list.size(), &count), OSDROP_OK);
+        list.resize(count);
+        return list;
+    }
+    [[nodiscard]] Bytes stored_layout() {
+        std::lock_guard lock(events.mutex);
+        return events.layout;
     }
     [[nodiscard]] Bytes stored_state() {
         std::lock_guard lock(events.mutex);
@@ -374,6 +396,115 @@ TEST(CapiMesh, GroupCommandsCheckTheirArguments) {
     EXPECT_EQ(osdrop_mesh_members(mac.mesh, nullptr, 1, &count), OSDROP_ERROR_INVALID_ARGUMENT);
 }
 
+osdrop_monitor monitor(std::uint8_t key, osdrop_rect frame, osdrop_rect native, uint8_t primary) {
+    return {.key = {key},
+            .frame = frame,
+            .native = native,
+            .pixel_width = static_cast<uint16_t>(native.width / 16),
+            .pixel_height = static_cast<uint16_t>(native.height / 16),
+            .primary = primary};
+}
+
+osdrop_rect points(int32_t x, int32_t y, int32_t width, int32_t height) {
+    return {.x = x * 16, .y = y * 16, .width = width * 16, .height = height * 16};
+}
+
+bool placed_side_by_side(const CMesh& computer) {
+    const auto computers = computer.layout();
+    return computers.size() == 2 &&
+           std::ranges::all_of(computers,
+                               [](const osdrop_layout_computer& c) { return c.placed == 1; });
+}
+
+TEST(CapiMesh, MembersShareTheirScreensAndOneArrangementThatIsStored) {
+    Bytes mac_state;
+    Bytes mac_layout;
+    {
+        CMesh mac(14, "Mac");
+        CMesh pc(15, "PC");
+        pair(pc, mac);
+        ASSERT_TRUE(grouped(mac, pc));
+        const osdrop_monitor built_in =
+            monitor(1, points(0, 0, 1470, 956), points(0, 0, 1470, 956), 1);
+        ASSERT_EQ(osdrop_mesh_set_screens(mac.mesh, &built_in, 1), OSDROP_OK);
+        // A 150% panel: 1280 x 800 points, 1920 x 1200 pixels.
+        const osdrop_monitor panel =
+            monitor(2, points(0, 0, 1280, 800), points(0, 0, 1920, 1200), 1);
+        ASSERT_EQ(osdrop_mesh_set_screens(pc.mesh, &panel, 1), OSDROP_OK);
+        ASSERT_TRUE(
+            wait_until([&] { return placed_side_by_side(mac) && placed_side_by_side(pc); }));
+
+        const auto computers = mac.layout();
+        for (const osdrop_layout_computer& c : computers) {
+            EXPECT_EQ(c.monitor_count, 1);
+            EXPECT_EQ(c.placement.detached, 0);
+        }
+        std::vector<osdrop_placement> placements;
+        for (const osdrop_layout_computer& c : computers) {
+            placements.push_back(c.placement);
+        }
+        // Overlapping them is refused; detaching one is fine.
+        std::vector<osdrop_placement> overlapping = placements;
+        overlapping[1].x = overlapping[0].x;
+        overlapping[1].y = overlapping[0].y;
+        EXPECT_EQ(osdrop_mesh_set_layout(mac.mesh, overlapping.data(), overlapping.size()),
+                  OSDROP_ERROR_INVALID_LAYOUT);
+        placements[1].detached = 1;
+        ASSERT_EQ(osdrop_mesh_set_layout(mac.mesh, placements.data(), placements.size()),
+                  OSDROP_OK);
+        ASSERT_TRUE(wait_until([&] {
+            const auto seen = pc.layout();
+            return seen.size() == 2 && seen[1].placement.detached == 1;
+        }));
+        mac_state = mac.stored_state();
+        mac_layout = mac.stored_layout();
+    }
+    ASSERT_FALSE(mac_layout.empty());
+    CMesh mac(14, "Mac", mac_state, mac_layout);
+    const auto restored = mac.layout();
+    ASSERT_EQ(restored.size(), 2U) << "both computers, the PC offline";
+    EXPECT_EQ(restored[1].placement.detached, 1);
+}
+
+TEST(CapiMesh, LayoutChecksAndWindowsFramesArePure) {
+    // A 150% laptop panel with a 100% monitor on its right, 300 pixels lower.
+    std::array<osdrop_monitor, 2> windows{
+        monitor(1, points(0, 0, 1280, 800), points(0, 0, 1920, 1200), 1),
+        monitor(2, points(0, 0, 2560, 1440), points(1920, 300, 2560, 1440), 0)};
+    ASSERT_EQ(osdrop_layout_derive_frames(windows.data(), windows.size()), OSDROP_OK);
+    EXPECT_EQ(windows[1].frame.x, 1280 * 16);
+    EXPECT_EQ(windows[1].frame.y, 200 * 16) << "300 laptop pixels are 200 points";
+
+    std::array<osdrop_layout_computer, 2> computers{};
+    computers[0] = {.placed = 1,
+                    .placement = {.device_id = {1}, .x = 0, .y = 0, .detached = 0},
+                    .monitor_count = 1,
+                    .monitors = {monitor(1, points(0, 0, 1470, 956), points(0, 0, 1470, 956), 1)}};
+    computers[1] = {.placed = 1,
+                    .placement = {.device_id = {2}, .x = 1000 * 16, .y = 0, .detached = 0},
+                    .monitor_count = 2,
+                    .monitors = {windows[0], windows[1]}};
+    std::array<osdrop_layout_problem, 4> problems{};
+    size_t count = 0;
+    ASSERT_EQ(osdrop_layout_check(computers.data(), computers.size(), problems.data(),
+                                  problems.size(), &count),
+              OSDROP_OK);
+    ASSERT_EQ(count, 1U);
+    EXPECT_EQ(problems[0].kind, OSDROP_LAYOUT_OVERLAP);
+    computers[1].placement.x = 1470 * 16;
+    ASSERT_EQ(osdrop_layout_check(computers.data(), computers.size(), problems.data(),
+                                  problems.size(), &count),
+              OSDROP_OK);
+    EXPECT_EQ(count, 0U);
+
+    std::array<osdrop_monitor, 2> no_primary{windows[0], windows[1]};
+    no_primary[0].primary = 0;
+    EXPECT_EQ(osdrop_layout_derive_frames(no_primary.data(), no_primary.size()),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_layout_derive_frames(nullptr, 1), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_layout_check(nullptr, 1, nullptr, 0, &count), OSDROP_ERROR_INVALID_ARGUMENT);
+}
+
 TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     Random random{13};
     const osdrop_random_source source{.fill = fill, .context = &random};
@@ -387,6 +518,8 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
                                   .platform = OSDROP_PLATFORM_MACOS,
                                   .group_state = nullptr,
                                   .group_state_size = 0,
+                                  .layout_state = nullptr,
+                                  .layout_state_size = 0,
                                   .features = 0x1F,
                                   .max_transfer_streams = 4,
                                   .listen_port = 0};
@@ -425,6 +558,13 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     config.group_state = newer.data();
     config.group_state_size = newer.size();
     EXPECT_EQ(create(config), OSDROP_ERROR_UNSUPPORTED_VERSION) << "kept, never overwritten";
+    config = good;
+    const Bytes newer_layout{'O', 'D', 'L', 'Y', 2};
+    config.layout_state = newer_layout.data();
+    config.layout_state_size = newer_layout.size();
+    EXPECT_EQ(create(config), OSDROP_ERROR_UNSUPPORTED_VERSION);
+    config.layout_state = nullptr;
+    EXPECT_EQ(create(config), OSDROP_ERROR_INVALID_ARGUMENT) << "a size without bytes";
     EXPECT_EQ(osdrop_mesh_create(&good, &source, nullptr, &mesh), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(mesh, nullptr);
     EXPECT_EQ(osdrop_mesh_listen_port(nullptr, nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
