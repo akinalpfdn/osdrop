@@ -1,5 +1,5 @@
 # Phase 011 (MVP-11) — Discovery, pairing and group on both platforms
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 10. Depends on: Phase 9
 
