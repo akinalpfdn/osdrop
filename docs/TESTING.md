@@ -23,7 +23,9 @@ The core also runs under AddressSanitizer, UndefinedBehaviorSanitizer and Thread
 reliable ordered TCP, lossy and reordering UDP, computers that freeze (power loss) and a capture
 of every byte sent. The mesh tests check that five members converge to one session per pair even
 when all dial at once, that peer loss is reported within one second, that motion never moves
-backwards, and that nothing readable crosses the wire. `transport_test.cpp` repeats the essentials
+backwards, and that nothing readable crosses the wire. The group tests pair computers into
+groups, introduce and revoke members (also while some are offline), and check permissions; the
+roster tests merge random operations in random orders and require every replica to converge. `transport_test.cpp` repeats the essentials
 on real loopback sockets, including control latency while a transfer stream is saturated and a
 recording relay on the control connection.
 
@@ -36,8 +38,9 @@ must re-encode byte for byte. `scripts/lint.sh` fails when the files differ from
 writes.
 
 Each decoder (control messages, input datagrams, transfer messages, the TXT record) has a libFuzzer
-target in `core/fuzz/`, and a fifth one feeds the Noise handshake reader and the input datagram
-opener, which must never accept a forgery. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
+target in `core/fuzz/`; another feeds the Noise handshake reader and the input datagram opener,
+which must never accept a forgery, and one more the stored group state and rosters from members,
+which must merge the same way in either order. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
 UndefinedBehaviorSanitizer; every test build also replays the fixtures and `core/fuzz/seeds/`
 through the same entry points. To fuzz locally (Clang with libFuzzer, e.g. on Linux):
 

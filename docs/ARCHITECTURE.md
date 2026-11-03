@@ -44,7 +44,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 
 ## Core networking
 
-Built in Phases 5–7 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+Built in Phases 5–8 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
 bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
 it with a simulated clock and network; one Asio layer drives it in the apps.
 
@@ -54,6 +54,7 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 | Crypto | `crypto/` | Noise XX, cipher states, session and stream keys, input datagram sealing, pairing code |
 | Session | `session/` | `SessionEngine`: one control connection from Hello to Bye — handshake, pairing confirmation, capabilities, ports, heartbeats, peer loss, clock offset, latest-wins input |
 | Mesh | `mesh/` | `Mesh`: every connection of one computer — who dials, duplicate resolution, reconnects with backoff, transfer streams with their tokens and keys |
+| Group | `group/` | `Group`: the mesh's observer — trust from the roster, pairing into a group, roster gossip, revocation, leaving, per-member permissions; passes members' events on to the layers above |
 | Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
@@ -65,6 +66,12 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 - **Backpressure.** A transfer stream refuses messages while 4 MiB are queued for writing and
   reports itself writable again below 1 MiB, so a file never fills memory or delays the control
   connection, which has its own TCP connection.
+- **Group state.** `Group` hands its state (group ID, roster, permissions) to the platform after
+  every change as bytes the platform stores in its secure store and passes back at start. The
+  format: magic `ODGS`, a version byte (1), the group ID, the pairings (device ID, key, epoch,
+  platform, name), the revocations (device ID, epoch) and the permissions that differ from the
+  default; counts are u16 and integers little-endian, as on the wire. A newer version is refused,
+  so it is never overwritten.
 - **Traffic marking.** On macOS, input sockets are marked as interactive voice and control
   connections as signaling, so Wi-Fi gives them priority. Windows has no unprivileged equivalent;
   sockets stay unmarked there.

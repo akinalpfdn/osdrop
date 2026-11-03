@@ -153,8 +153,10 @@ otherwise (as in Osplay).
 | max_transfer_streams | u8 | 1–8 |
 | reserved | bytes[3] | 0 |
 
-A feature bit says what the sender can do and allows; each computer's local permissions (DEVPLAN,
-data model) clear the bits it refuses for this peer.
+A feature bit says what the sender can do and allows; each computer's local permissions clear
+the bits it refuses for this peer (see "Group membership"). Capabilities is sent once while the
+session is set up and again, in the established session, whenever those permissions change; the
+newest replaces the previous one.
 
 ### 0x05 SessionSetup
 
@@ -201,8 +203,8 @@ No body.
 
 ### 0x10 RosterState
 
-The sender's view of the group as a two-phase set: members added by pairing, and revocations that
-remove them for good. Receivers merge by union (DEVPLAN, data model).
+The sender's view of the group: for each device it knows of, the newest pairing and the newest
+revocation. Receivers merge it as described in "Group membership".
 
 | Field | Type | Values |
 |-------|------|--------|
@@ -231,7 +233,8 @@ revocation:
 | epoch | u32 | 1 or more |
 
 No two members share (device_id, epoch); neither do two revocations. Whether `device_id` matches
-`public_key` is checked by the group logic, not the codec.
+`public_key` is checked by the group logic, not the codec: one mismatch discards the whole message.
+A roster too large for one message is split into several, each with at least one member.
 
 ### 0x11 ScreenReport
 
@@ -617,9 +620,9 @@ Chunks of one request arrive in order and without gaps.
 1. Both sides send Hello.
 2. The dialler sends HandshakeMessage step 1 once the listener's Hello arrived; steps 2 and 3
    follow.
-3. Each side decides about the authenticated peer: a member gets PairingConfirm *accepted* at once;
-   an unknown computer gets the pairing code shown and PairingConfirm after the user's answer; a
-   refused one gets Error NOT_TRUSTED.
+3. Each side decides about the authenticated peer (see "Group membership" → Pairing): a member
+   gets PairingConfirm *accepted* at once; an unknown computer gets the pairing code shown and
+   PairingConfirm after the user's answer; a refused one gets Error with the reason.
 4. When both have accepted, each side sends Capabilities and SessionSetup. The session is
    *established* once the peer's two have arrived.
 5. Application messages (types 0x10 and above) travel only in an established session.
@@ -628,7 +631,8 @@ Before the handshake completes only Hello, HandshakeMessage and Error travel, in
 it every frame is encrypted. A message that is malformed or arrives in the wrong state ends the
 session, and the peer is told with Error (UNSUPPORTED_VERSION for another major version,
 UNEXPECTED_MESSAGE otherwise); a frame that fails authentication ends it without a reply. Error
-codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED and UNSUPPORTED_VERSION are shown as
+codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED, GROUP_FULL, IN_ANOTHER_GROUP and
+UNSUPPORTED_VERSION are shown as
 such, any other code as a generic peer error. Bye 3 (going to sleep) ends the session with
 PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
 error; every other reason with CONNECTION_CLOSED.
@@ -659,6 +663,77 @@ peer's SessionSetup and a stream ID of its own parity. The accepting side closes
 unless the token belongs to an established session, the parity is the opener's and the ID was not
 used before in that session. Ending a session ends its streams. A side accepts no more messages
 for a stream while 4 MiB are waiting to be written to it, and continues once less than 1 MiB is.
+
+## Group membership
+
+### Roster
+
+Every member keeps the group's roster: for each device it knows of, the newest pairing (device ID,
+public key, epoch, platform, name) and the newest revoked epoch. A device is a member while its
+pairing's epoch is higher than its revoked epoch, so a revocation covers every pairing up to that
+epoch and only a new pairing brings the device back.
+
+Merging keeps, per device, the pairing with the higher epoch and the higher revoked epoch. Two
+entries for the same epoch carry the same key (the device ID is its fingerprint) and keep the one
+whose name, then platform, sorts first. Merges therefore give the same roster in every order, and
+a roster from a member that was offline cannot undo a revocation.
+
+### Rosters between members
+
+- A member sends its whole roster to each member whose session is established, and again to every
+  connected member whenever its roster changes (except the one the change came from).
+- A RosterState is accepted only from a current member and only for this computer's group; the
+  group ID is public, so anyone could claim it. The one exception is the computer this one has
+  just paired with while in no group: its roster is adopted if it names both of them as members,
+  this computer with its own key.
+- When a roster names a new member, the others trust it from then on, and those that refused it
+  before (NOT_TRUSTED, because they had not heard of it) dial it again.
+- When a change makes a connected peer a non-member, its session ends with Bye 6 (revoked). A
+  computer that finds itself revoked in a roster, or receives Bye 6 from a member, leaves the
+  group and reports NOT_TRUSTED.
+
+### Pairing
+
+After the handshake, each side decides about the peer in this order:
+
+| The peer | Decision |
+|----------|----------|
+| A member | Trusted: PairingConfirm *accepted* at once |
+| A device revoked here | Error NOT_TRUSTED |
+| In this computer's group, but not in its roster yet | Error NOT_TRUSTED; dialled again once a roster names it |
+| In another group, while this computer is in one | Error IN_ANOTHER_GROUP |
+| Anyone else while a pairing code is shown here | Error PEER_BUSY |
+| In no group, while this computer's group has 8 members | Error GROUP_FULL |
+| Anyone else | Pairing code |
+
+Once both users have accepted:
+
+- A computer in a group adds the other with an epoch higher than any it knows for that device and
+  sends the roster to it and to every connected member.
+- When neither is in a group, the one with the lower device ID creates one (a random group ID,
+  both computers as members); the other waits for its roster.
+- The computer that joined advertises the group from then on.
+
+A group has at most 8 members. Two members that add computers at the same time can take it past
+that; nobody is removed then.
+
+### Leaving
+
+A computer that leaves revokes its own pairing, sends that roster to every connected member, ends
+every session with Bye 5 and forgets the group. Members that were offline learn it from the others.
+
+### Permissions
+
+Each computer decides for itself, per member, whether the member may control it, send it files
+and share clipboards with it; all three are allowed until the user changes them. A denied
+permission clears the matching Capabilities bits (control: bit 0; files: bits 2 and 4; clipboard:
+bit 3), and the receiving side refuses requests that ignore that:
+
+| Denied | Refused |
+|--------|---------|
+| control | Enter gets Refuse 3 (not permitted); KeyEvent, ButtonEvent, ScrollEvent, ReleaseAll and PointerMotion are dropped |
+| files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped |
+| clipboard | ClipboardAnnounce is dropped; a ManifestRequest or ContentRequest for the clipboard gets TransferError NOT_PERMITTED |
 
 ## Encryption
 
@@ -761,6 +836,8 @@ Decoding and encoding report these codes, which are also the values of `osdrop_r
 | 26 | INTERNAL | the core could not allocate memory or start its I/O thread |
 | 27 | PEER_SLEEPING | the peer closed the session with Bye 3 (going to sleep); it is expected back |
 | 28 | NOT_PERMITTED | this computer's local permissions refuse the request from this peer |
+| 29 | GROUP_FULL | pairing refused: the group already has the most computers allowed (8) |
+| 30 | IN_ANOTHER_GROUP | pairing refused: the two computers belong to different groups; one must leave its group first |
 
 ## Fixtures
 
