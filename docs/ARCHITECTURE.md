@@ -44,7 +44,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 
 ## Core networking
 
-Built in Phases 5–9 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+Built in Phases 5–9 and 13 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
 bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
 it with a simulated clock and network; one Asio layer drives it in the apps.
 
@@ -56,6 +56,7 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 | Mesh | `mesh/` | `Mesh`: every connection of one computer — who dials, duplicate resolution, reconnects with backoff, transfer streams with their tokens and keys |
 | Group | `group/` | `Group`: the mesh's observer — trust from the roster, pairing into a group, roster gossip, revocation, leaving, per-member permissions; passes members' events on to the layers above |
 | Layout | `layout/` | `Layout`: next in the chain — screen reports and the layout document between members; the arrangement checks; the crossing engine (below) |
+| Transfer | `transfer/` | `TransferService`: after the layout — files and folder trees between members on transfer streams (below) |
 | Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
@@ -104,8 +105,53 @@ physical pixels).
   computer's monitors it moves as its system would: straight to a point on any monitor, otherwise
   horizontally then vertically through monitors that continue each other. It comes home to where
   it left when its computer drops out of the arrangement.
-- **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → the platform, so the
-  layout hears only from members.
+- **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → `TransferService` (files)
+  → the platform, so the layout and the transfers hear only from members.
+
+## Transfers
+
+Built in Phase 13 (`core/src/transfer`). A computer offers items (a dragged file or folder, the
+files of a clipboard) to chosen members; a member that wants one opens a transfer stream to it and
+fetches it into a folder.
+
+| Part | File | Role |
+|------|------|------|
+| Names | `names`, `unicode` | NFC from generated Unicode 15.1 tables; the mapping to what the receiving file system can hold; numbering of names one folder would hold twice |
+| Files | `files` | UTF-8 paths, `\\?\` long paths on Windows, times in microseconds, free space, ranged reads, a writer that verifies and moves its file into place without replacing anything |
+| Manifest | `manifest` | Scanning offered items (parents first, inner links not followed, NFC names), splitting manifests into messages, checking and mapping a received manifest, where a received link may point |
+| Streams | `streams` | A queue per stream that holds messages while the mesh refuses more; mesh calls as deferred work |
+| Sender | `sender` | Offers, one scan each; requests served in order per stream; reads of 1 MiB at a time, the next only once the stream's queue is below 1 MiB |
+| Receiver | `receiver` | One stream per transfer up to both sides' stream limits; manifest, free space and folders first, then contents with eight requests in flight; links last; rollback on any failure |
+| File thread | `file_thread` | Runs file work in order, off the I/O thread |
+
+- **Threads.** Reading, hashing, writing and scanning run on the file thread, never on the I/O
+  thread that carries input; results come back to the I/O thread as posted work. Tests run the
+  same code with the file work queued and drained between simulated steps.
+- **Integrity.** Each ContentEnd carries the BLAKE2b-256 digest of the whole entry. The sender
+  hashes while it reads and keeps the digest for later requests; before ContentEnd it checks that
+  the file still has the size and time it had when scanned (IO_ERROR otherwise). The receiver
+  hashes what it writes and moves the file into place only when size and digest match.
+- **Nothing left behind.** A receiver writes each file to a hidden temporary (`.osdrop-<id>.part`)
+  next to its target and records everything it creates. A failure, a cancellation from either
+  side, a lost peer or quitting removes the temporaries and everything the transfer created, in
+  reverse order, before the end is reported.
+- **Backpressure.** The sender reads only while its stream's queue has room. The receiver stops
+  reading its stream while 8 MiB wait to be written and resumes below 2 MiB, so TCP holds the
+  sender back instead of the receiver's memory filling.
+- **Names.** Names travel in NFC. A receiver maps them for its file system (Windows: fullwidth
+  look-alikes for refused characters, look-alikes for trailing dots and spaces, an underscore after
+  reserved device names; both: shortening to 255 bytes or UTF-16 units), numbers names a
+  case-insensitive folder would hold twice, and numbers top-level names the destination already
+  holds (" (2)").
+- **Links.** Links inside a folder travel as links whose content is the target, `/`-separated. A
+  receiver recreates a link only when its target names another entry of the same item, rewritten
+  to the mapped names; other links, and links Windows does not let the user create, are skipped
+  and counted. A path offered as an item is followed when it is a link.
+- **Permissions.** A receiver fetches only from members whose "files" permission is on, and ends
+  their transfers when it is turned off. A sender serves an item only to the members it was
+  offered to.
+- **Received files are not marked** (no quarantine attribute, no Mark of the Web), by the user's
+  decision.
 
 ## Group on the platforms
 
