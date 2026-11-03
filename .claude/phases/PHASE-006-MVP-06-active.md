@@ -1,5 +1,5 @@
 # Phase 006 (MVP-06) — Protocol codec and fixtures
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 5. Depends on: Phase 0
 
