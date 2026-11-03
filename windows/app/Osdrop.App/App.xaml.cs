@@ -5,7 +5,6 @@ using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Interop;
 using Osdrop.App.Tray;
-using Osdrop.Localization;
 
 namespace Osdrop.App;
 
@@ -43,13 +42,13 @@ public partial class App : Application
     {
         if (!await Native.IsAvailableAsync().ConfigureAwait(true))
         {
-            _startFailure = Strings.EngineUnavailable;
+            _startFailure = Localization.Strings.EngineUnavailable;
             return;
         }
         (CoreResult result, EngineHost? engine) = await EngineHost.StartAsync(Dispatcher).ConfigureAwait(true);
         if (engine is null)
         {
-            _startFailure = result == CoreResult.UnsupportedVersion ? Strings.EngineNewerVersion : Strings.EngineUnavailable;
+            _startFailure = result == CoreResult.UnsupportedVersion ? Localization.Strings.EngineNewerVersion : Localization.Strings.EngineUnavailable;
             return;
         }
         _engine = engine;
@@ -64,7 +63,7 @@ public partial class App : Application
     {
         if (_group is null)
         {
-            _ = MessageBox.Show(_startFailure ?? Strings.EngineStarting, Strings.GroupWindowTitle);
+            _ = MessageBox.Show(_startFailure ?? Localization.Strings.EngineStarting, Localization.Strings.GroupWindowTitle);
             return;
         }
         if (_groupWindow is null)

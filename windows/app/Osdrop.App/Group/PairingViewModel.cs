@@ -1,7 +1,6 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Interop;
-using Osdrop.Localization;
 
 namespace Osdrop.App.Group;
 
@@ -38,10 +37,10 @@ public sealed partial class PairingViewModel
 
     public string Message => Stage switch
     {
-        PairingStage.Dialing => Format(Strings.PairingDialing),
-        PairingStage.Confirm => Format(Strings.PairingConfirm),
-        PairingStage.Waiting => Format(Strings.PairingWaiting),
-        _ => Format(Strings.PairingFailed),
+        PairingStage.Dialing => Format(Localization.Strings.PairingDialing),
+        PairingStage.Confirm => Format(Localization.Strings.PairingConfirm),
+        PairingStage.Waiting => Format(Localization.Strings.PairingWaiting),
+        _ => Format(Localization.Strings.PairingFailed),
     };
 
     /// <summary>"042 917": six digits with leading zeros, in two groups.</summary>
@@ -51,7 +50,7 @@ public sealed partial class PairingViewModel
 
     public string Detail => Stage switch
     {
-        PairingStage.Confirm => Strings.PairingHint,
+        PairingStage.Confirm => Localization.Strings.PairingHint,
         PairingStage.Failed => Failure,
         _ => string.Empty,
     };
@@ -69,12 +68,12 @@ public sealed partial class PairingViewModel
     /// <summary>Why a pairing did not complete, in words.</summary>
     internal static string Explain(CoreResult reason) => reason switch
     {
-        CoreResult.PairingRejected => Strings.PairingFailedRejected,
-        CoreResult.PeerBusy => Strings.PairingFailedBusy,
-        CoreResult.GroupFull => Strings.PairingFailedGroupFull,
-        CoreResult.InAnotherGroup => Strings.PairingFailedInAnotherGroup,
-        CoreResult.TimedOut => Strings.PairingFailedTimedOut,
-        _ => Strings.PairingFailedUnreachable,
+        CoreResult.PairingRejected => Localization.Strings.PairingFailedRejected,
+        CoreResult.PeerBusy => Localization.Strings.PairingFailedBusy,
+        CoreResult.GroupFull => Localization.Strings.PairingFailedGroupFull,
+        CoreResult.InAnotherGroup => Localization.Strings.PairingFailedInAnotherGroup,
+        CoreResult.TimedOut => Localization.Strings.PairingFailedTimedOut,
+        _ => Localization.Strings.PairingFailedUnreachable,
     };
 
     [RelayCommand]

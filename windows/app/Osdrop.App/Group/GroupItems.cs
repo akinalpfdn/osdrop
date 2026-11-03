@@ -2,7 +2,6 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Osdrop.App.Engine;
 using Osdrop.App.Interop;
-using Osdrop.Localization;
 
 namespace Osdrop.App.Group;
 
@@ -33,17 +32,17 @@ public sealed partial class MemberItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(RoundTrip), nameof(ClockOffset), nameof(Rejected))]
     internal partial SessionStats? Stats { get; set; }
 
-    public string Status => IsSelf ? Strings.GroupThisComputer
-        : !IsConnected ? Strings.GroupNotConnected
-        : IsResponsive ? Strings.GroupConnected
-        : Strings.GroupNotResponding;
+    public string Status => IsSelf ? Localization.Strings.GroupThisComputer
+        : !IsConnected ? Localization.Strings.GroupNotConnected
+        : IsResponsive ? Localization.Strings.GroupConnected
+        : Localization.Strings.GroupNotResponding;
 
-    public string RoundTrip => Stats is null ? Strings.MeshNoSession
-        : Format(Strings.MeshRoundTrip, (Stats.RoundTripMicroseconds / 1000.0).ToString("F1", CultureInfo.CurrentCulture));
+    public string RoundTrip => Stats is null ? Localization.Strings.MeshNoSession
+        : Format(Localization.Strings.MeshRoundTrip, (Stats.RoundTripMicroseconds / 1000.0).ToString("F1", CultureInfo.CurrentCulture));
 
-    public string ClockOffset => Stats is null ? string.Empty : Format(Strings.MeshClockOffset, Stats.ClockOffsetMicroseconds);
+    public string ClockOffset => Stats is null ? string.Empty : Format(Localization.Strings.MeshClockOffset, Stats.ClockOffsetMicroseconds);
 
-    public string Rejected => Stats is null ? string.Empty : Format(Strings.MeshRejected, Stats.DatagramsRejected);
+    public string Rejected => Stats is null ? string.Empty : Format(Localization.Strings.MeshRejected, Stats.DatagramsRejected);
 
     private static string Format(string text, object value) => string.Format(CultureInfo.CurrentCulture, text, value);
 }
@@ -56,8 +55,8 @@ public sealed class NearbyItem
         DeviceId = computer.DeviceId;
         Name = computer.Name;
         IsWindows = computer.Platform == Platform.Windows;
-        Note = computer.NeedsUpdate ? Strings.GroupNeedsUpdate
-            : computer.InAnotherGroup ? Strings.GroupInAnotherGroup
+        Note = computer.NeedsUpdate ? Localization.Strings.GroupNeedsUpdate
+            : computer.InAnotherGroup ? Localization.Strings.GroupInAnotherGroup
             : string.Empty;
         CanPair = !computer.NeedsUpdate;
     }

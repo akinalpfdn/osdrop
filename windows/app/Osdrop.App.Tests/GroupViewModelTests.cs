@@ -1,7 +1,6 @@
 using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Interop;
-using Osdrop.Localization;
 using Xunit;
 
 namespace Osdrop.App.Tests;
@@ -52,7 +51,7 @@ public sealed class GroupViewModelTests
         engine.Raise(new EngineEvent(EngineEventKind.PairingCode, Code: 8, Connection: 10, DeviceId: _laptop, Name: "Laptop"));
         engine.Raise(new EngineEvent(EngineEventKind.PairingFailed, Reason: CoreResult.InAnotherGroup, Connection: 10));
         Assert.Equal(PairingStage.Failed, group.Pairing?.Stage);
-        Assert.Equal(Strings.PairingFailedInAnotherGroup, group.Pairing?.Detail);
+        Assert.Equal(Localization.Strings.PairingFailedInAnotherGroup, group.Pairing?.Detail);
         Assert.True(group.Pairing?.CanClose);
     }
 
@@ -68,10 +67,10 @@ public sealed class GroupViewModelTests
         Assert.Equal(50_000, group.ListenPort);
         Assert.Equal(2, group.Members.Count);
         Assert.False(group.Members[0].CanRemove);
-        Assert.Equal(Strings.GroupConnected, group.Members[1].Status);
+        Assert.Equal(Localization.Strings.GroupConnected, group.Members[1].Status);
 
         engine.Raise(new EngineEvent(EngineEventKind.PeerResponsive, DeviceId: _laptop, Responsive: false));
-        Assert.Equal(Strings.GroupNotResponding, group.Members[1].Status);
+        Assert.Equal(Localization.Strings.GroupNotResponding, group.Members[1].Status);
 
         await group.RevokeCommand.ExecuteAsync(group.Members[1]);
         Assert.Equal([_laptop], engine.Revoked);
