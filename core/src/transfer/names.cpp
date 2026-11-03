@@ -114,6 +114,16 @@ std::u32string fit(std::u32string_view name, std::u32string_view suffix, TargetP
     return whole();
 }
 
+std::u32string numbered(const std::u32string& name, int number, bool is_folder,
+                        TargetPlatform target) {
+    if (number <= 1) {
+        return name;
+    }
+    const std::u32string suffix = U" (" + decode_utf8(std::to_string(number)).value_or(U"") + U")";
+    // Folders have no extension: "Photos.2024" numbers as "Photos.2024 (2)".
+    return is_folder ? fit(name + suffix, {}, target) : fit(name, suffix, target);
+}
+
 std::u32string mapped_code_points(std::string_view name, TargetPlatform target) {
     const std::string normalized = to_nfc(name).value_or(std::string(name));
     std::u32string code_points = decode_utf8(normalized).value_or(std::u32string{});
@@ -144,6 +154,12 @@ bool fits(std::string_view name, TargetPlatform target) {
     return map_name(name, target) == name;
 }
 
+std::string numbered_name(std::string_view name, int number, bool is_folder,
+                          TargetPlatform target) {
+    return encode_utf8(
+        numbered(decode_utf8(name).value_or(std::u32string{}), number, is_folder, target));
+}
+
 std::optional<std::string> TreeNames::map(std::string_view path, bool is_folder) {
     if (!protocol::is_valid_path(protocol::bytes_of(std::string(path)))) {
         return std::nullopt;
@@ -161,12 +177,9 @@ std::optional<std::string> TreeNames::map(std::string_view path, bool is_folder)
     const std::u32string mapped = mapped_code_points(leaf, target_);
     std::set<std::string>& taken = taken_[mapped_parent];
     std::u32string chosen = mapped;
-    // Folders have no extension: "Photos.2024" numbers as "Photos.2024 (2)".
     for (int number = 2;
          taken.contains(fold_case(encode_utf8(chosen)).value_or(encode_utf8(chosen))); ++number) {
-        const std::u32string suffix =
-            U" (" + decode_utf8(std::to_string(number)).value_or(U"") + U")";
-        chosen = is_folder ? fit(mapped + suffix, {}, target_) : fit(mapped, suffix, target_);
+        chosen = numbered(mapped, number, is_folder, target_);
     }
     const std::string name = encode_utf8(chosen);
     taken.insert(fold_case(name).value_or(name));

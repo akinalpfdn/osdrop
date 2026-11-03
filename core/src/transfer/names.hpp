@@ -26,6 +26,11 @@ enum class TargetPlatform : std::uint8_t { MacOS, Windows };
 /// Whether `name` fits `target` as it is: what the sending side checks before it offers a name.
 [[nodiscard]] bool fits(std::string_view name, TargetPlatform target);
 
+/// A mapped name with " (number)" before its extension (folders: at the end), shortened to fit
+/// `target`; `name` itself for number 1.
+[[nodiscard]] std::string numbered_name(std::string_view name, int number, bool is_folder,
+                                        TargetPlatform target);
+
 /// The paths of one tree, mapped one entry at a time, parents before children.
 class TreeNames {
 public:
