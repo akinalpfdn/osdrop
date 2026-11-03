@@ -1,0 +1,23 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSLocalNetworkUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osdrop finds your other computers on this network and connects to them."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osdrop bu ağdaki diğer bilgisayarlarınızı bulur ve onlara bağlanır."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

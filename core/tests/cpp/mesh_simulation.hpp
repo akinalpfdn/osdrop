@@ -355,12 +355,22 @@ public:
     // --- From the transports ---
 
     void dial(std::size_t from, ConnectionId id, std::size_t to) {
-        schedule({.at = now + latency, .kind = Event::Kind::Accept, .from = {from, id}, .to = to});
+        schedule({.at = now + latency,
+                  .kind = Event::Kind::Accept,
+                  .from = {from, id},
+                  .target = {},
+                  .to = to,
+                  .bytes = {}});
     }
 
     /// Nothing listens there: the dial fails after a round trip (never inside the mesh's call).
     void dial_nowhere(std::size_t from, ConnectionId id) {
-        schedule({.at = now + latency, .kind = Event::Kind::DialFailed, .from = {from, id}});
+        schedule({.at = now + latency,
+                  .kind = Event::Kind::DialFailed,
+                  .from = {from, id},
+                  .target = {},
+                  .to = 0,
+                  .bytes = {}});
     }
 
     [[nodiscard]] std::optional<std::size_t> node_at(const std::string& host) const {
@@ -387,7 +397,8 @@ public:
             return;
         }
         wire.emplace_back(bytes.begin(), bytes.end());
-        Event event{.kind = Event::Kind::Bytes,
+        Event event{.at = {},
+                    .kind = Event::Kind::Bytes,
                     .from = {from, id},
                     .target = it->second,
                     .bytes = {bytes.begin(), bytes.end()}};
@@ -437,7 +448,12 @@ public:
         }
         const Endpoint target = it->second;
         links_.erase(it);
-        enqueue_ordered({.kind = Event::Kind::Close, .from = {from, id}, .target = target});
+        enqueue_ordered({.at = {},
+                         .kind = Event::Kind::Close,
+                         .from = {from, id},
+                         .target = target,
+                         .to = 0,
+                         .bytes = {}});
     }
 
 private:

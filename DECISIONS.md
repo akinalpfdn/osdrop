@@ -300,3 +300,30 @@ choices the plan leaves open are logged here.
 **Why:** Phase 11 builds the controller around capture, Enter and Leave in core; the engine's shape for the platforms comes from that work, not before it.
 **Trade-offs:** None for the platforms until Phase 11.
 **Revisit if:** Phase 10 needs a crossing preview in the UI.
+
+---
+
+## 2026-11-03 — The Windows group logic is portable C++
+**Chosen:** `GroupEngine` (starting the mesh from stored state, wiring DNS-SD to it, nearby computers, storing and advertising the group) lives in `windows/shared` behind small `Discovery` and `StateStore` interfaces; the engine DLL only adds DNS-SD, DPAPI, monitors and the C API.
+**Alternatives:** Writing it inside the engine against Win32 directly.
+**Why:** The PC is verified by CI only. Portable logic builds, lints and runs on the Mac, including two real meshes pairing over loopback, so most mistakes are found before a CI round.
+**Trade-offs:** Two thin interfaces that only the engine implements.
+**Revisit if:** The engine grows logic that cannot be separated from Win32.
+
+---
+
+## 2026-11-03 — Platforms pass every discovery to core and re-register on group changes
+**Chosen:** The apps hand every Bonjour result to core, which dials only computers advertising its own group. When the group changes, the app withdraws its registration and registers again with the new `grp` value.
+**Alternatives:** Filtering in the apps; updating the TXT record in place.
+**Why:** One rule for whom to dial, in core. A new registration makes every browser see a removal and an addition and resolve the record again on both platforms' DNS-SD APIs, so members learn the new group and dial; Windows' DNS-SD has no record update.
+**Trade-offs:** A short gap in the advertisement after each group change.
+**Revisit if:** Browsers miss the change in practice (Phase 18 measurements).
+
+---
+
+## 2026-11-03 — Temporary pairing UI on both platforms
+**Chosen:** A pairing window with the code and Pair / Don't Pair on both computers; members and nearby computers in the Mac menu and in a Windows window opened from the tray; a Mesh window in debug builds.
+**Alternatives:** Building the final UI now.
+**Why:** DEVPLAN keeps the final UI for Phases 16 and 17; Phase 10 needs only enough to pair, revoke and see the mesh on real hardware.
+**Trade-offs:** Replaced later; strings and view models carry over.
+**Revisit if:** The final UI starts earlier.

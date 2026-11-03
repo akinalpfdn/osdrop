@@ -37,6 +37,13 @@ public struct DeviceIdentity: Sendable {
     /// The ID advertised over Bonjour: lowercase hex of the device ID bytes.
     public var deviceID: String { Self.deviceID(publicKey: publicKey) }
 
+    public var id: DeviceID {
+        var id = [UInt8](repeating: 0, count: Int(OSDROP_DEVICE_ID_SIZE))
+        // Cannot fail: both buffers have the documented sizes.
+        _ = osdrop_identity_device_id(publicKey, &id)
+        return DeviceID(validated: id)
+    }
+
     /// Another device's ID, from the public key it presented in the handshake.
     public static func deviceID(publicKey: [UInt8]) -> String {
         guard publicKey.count == Int(OSDROP_KEY_SIZE) else { return "" }

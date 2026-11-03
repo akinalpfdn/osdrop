@@ -26,6 +26,9 @@ when all dial at once, that peer loss is reported within one second, that motion
 backwards, and that nothing readable crosses the wire. The group tests pair computers into
 groups, introduce and revoke members (also while some are offline), and check permissions; the
 roster tests merge random operations in random orders and require every replica to converge.
+The Windows group logic (`windows/shared`) pairs two engines over loopback with fake DNS-SD
+and restarts one from its stored state; the Mac app's `GroupController` and the Windows shell's
+view models are tested with fake engines (pairing flow, stored state, refusals).
 The layout tests generate random arrangements of macOS and mixed-scale Windows desktops and require
 that leaving and coming back through an edge returns within one unit, that nothing crosses into a
 gap and that no wall stands where another computer touches; layout documents converge in every
@@ -119,6 +122,21 @@ and release; then **Drop with Osdrop** and put the cursor on the target within 3
 | D5 | Promised files | A photo from Photos | A Finder window | Captured after Photos delivers it (an iCloud-only original is downloaded first) |
 | D6 | Refusal | One file, with "Accept drops at the edge" off | The edge only | The drag slides back; nothing is captured |
 | D7 | Nothing accepts | One file | The developer window | The drag ends as cancelled; nothing is written |
+
+### Pairing and group (Phase 10)
+
+Run with the apps of the same build on every computer, all on one network. Mac rows need two
+Macs; PC rows need two PCs.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| G1 | Mac ↔ PC | On the Mac, menu › Nearby › **Pair** next to the PC | Both show the same code; after **Pair** on both, each lists the other as connected |
+| G2 | Mac ↔ Mac, PC ↔ PC | As G1 between two Macs, then between two PCs | As G1 |
+| G3 | Third computer | Pair a third computer with any member | Every member lists it as connected without another code |
+| G4 | Revocation | On any member, remove another one | It disappears everywhere; the removed computer says it was removed and lists no group |
+| G5 | Restart | Quit and start Osdrop on one member; then restart that computer | Members reconnect without a code or any action |
+| G6 | Different groups | Pair a computer of one group with one of another group | Refused before any code: the two are in different groups |
+| G7 | Local Network off (Mac) | Turn off Osdrop in System Settings › Local Network | The menu says Local Network access is needed; turning it on finds computers again |
 
 ### Runs
 

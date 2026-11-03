@@ -18,6 +18,10 @@
     </tb:TaskbarIcon.IconSource>
     <tb:TaskbarIcon.ContextMenu>
       <ContextMenu>
+        <MenuItem Header="{x:Static res:Strings.TrayComputers}" Command="{Binding OpenComputersCommand}" />
+        <MenuItem Header="{x:Static res:Strings.TrayMesh}" Command="{Binding OpenMeshCommand}"
+                  Visibility="{Binding Source={x:Static tray:TrayViewModel.ShowsMesh}, Converter={StaticResource Osdrop.Converter.Visible}}" />
+        <Separator />
         <MenuItem Header="{x:Static res:Strings.TrayQuit}" Command="{Binding QuitCommand}" />
       </ContextMenu>
     </tb:TaskbarIcon.ContextMenu>

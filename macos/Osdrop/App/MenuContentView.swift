@@ -4,6 +4,7 @@ import SwiftUI
 
 struct MenuContentView: View {
     let accessibility: AccessibilityPermission
+    let group: GroupController
     private let appVersion = AppVersion.current
     private let coreVersion = CoreVersion.linked
     #if DEBUG
@@ -31,9 +32,16 @@ struct MenuContentView: View {
             }
 
             Divider()
+            GroupMenuSection(controller: group)
+
+            Divider()
             #if DEBUG
                 Button("menu.developer") {
                     openWindow(id: DeveloperInputView.windowID)
+                    NSApp.activate()
+                }
+                Button("menu.developer.mesh") {
+                    openWindow(id: DeveloperMeshView.windowID)
                     NSApp.activate()
                 }
             #endif

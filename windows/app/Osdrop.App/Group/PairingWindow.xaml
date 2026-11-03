@@ -1,0 +1,36 @@
+<Window x:Class="Osdrop.App.Group.PairingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:Osdrop.Localization;assembly=Osdrop.Localization"
+        xmlns:group="clr-namespace:Osdrop.App.Group"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=group:PairingViewModel}"
+        Title="{x:Static res:Strings.PairingTitle}"
+        Width="{StaticResource Osdrop.Width.PairingWindow}"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True">
+  <StackPanel Margin="{StaticResource Osdrop.Thickness.WindowPadding}">
+    <TextBlock Text="{Binding Message}" Style="{StaticResource Osdrop.Text.Title}" />
+    <TextBlock Text="{Binding CodeText}" HorizontalAlignment="Center" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
+               Visibility="{Binding ShowsCode, Converter={StaticResource Osdrop.Converter.Visible}}"
+               Style="{StaticResource Osdrop.Text.Code}" />
+    <TextBlock Text="{Binding Detail}" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
+               Visibility="{Binding HasDetail, Converter={StaticResource Osdrop.Converter.Visible}}"
+               Style="{StaticResource Osdrop.Text.Body}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="{StaticResource Osdrop.Thickness.SectionGap}">
+      <Button Content="{x:Static res:Strings.PairingReject}" Command="{Binding RejectCommand}" IsCancel="True"
+              Visibility="{Binding CanAnswer, Converter={StaticResource Osdrop.Converter.Visible}}"
+              Margin="{StaticResource Osdrop.Thickness.ButtonGap}" Style="{StaticResource Osdrop.Button}" />
+      <Button Content="{x:Static res:Strings.PairingAccept}" Command="{Binding AcceptCommand}" IsDefault="True"
+              Visibility="{Binding CanAnswer, Converter={StaticResource Osdrop.Converter.Visible}}"
+              Style="{StaticResource Osdrop.Button}" />
+      <Button Content="{x:Static res:Strings.PairingClose}" Command="{Binding CloseCommand}"
+              Visibility="{Binding CanClose, Converter={StaticResource Osdrop.Converter.Visible}}"
+              Style="{StaticResource Osdrop.Button}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -58,12 +58,18 @@ open DerivedData/Build/Products/Debug/Osdrop.app
 ```
 
 The app has no Dock icon; it appears in the menu bar as two half arrows crossing a vertical line. Its menu shows the app and
-core versions and a Quit button. The app bundle also carries `OsdropCaptureGuard` in
-`Contents/MacOS`, built by the same scheme.
+core versions, the computers in this Mac's group, the Macs and PCs nearby that run Osdrop (with
+**Pair**), and a Quit button. A pairing opens a window with the code on both computers. The app
+bundle also carries `OsdropCaptureGuard` in `Contents/MacOS`, built by the same scheme.
+
+Osdrop finds other computers with Bonjour, so macOS asks for Local Network access the first time
+(System Settings › Privacy & Security › Local Network); while it is off, the menu says so and
+nothing is found. The identity and the group are stored in the Keychain under
+`com.akinalpfdn.osdrop`; the arrangement in the app's preferences.
 
 Osdrop reads and sends input, so it asks for Accessibility access (System Settings › Privacy &
 Security › Accessibility); the menu shows a button that opens the right pane. Debug builds have a
-**Developer…** menu item with the input tools of Phase 1. Tests that move the real cursor are in a
+**Developer…** menu item with the input tools of Phase 1 and **Mesh…** with this Mac's sessions. Tests that move the real cursor are in a
 separate scheme and never run in CI; see [`TESTING.md`](TESTING.md) → Hardware tests.
 
 To work in Xcode, run `xcodegen generate` in `macos/` and open `Osdrop.xcodeproj`. The project is
@@ -141,9 +147,32 @@ dotnet run --project Osdrop.App -c Release
 ```
 
 The shell starts without a window and shows an "O" icon in the notification area; right-click it
-to quit. Windows may hide new icons in the overflow menu (the `^` arrow on the taskbar).
+for **Computers…** (members and nearby computers, pairing), **Mesh…** in Debug builds, and to quit.
+Windows may hide new icons in the overflow menu (the `^` arrow on the taskbar).
 
-Native binaries land in `windows/build/<preset>/bin/`; .NET builds land in `bin/` folders.
+Native binaries land in `windows/build/<preset>/bin/`; .NET builds land in `bin/` folders. The
+shell build copies `OsdropEngine.dll` from `windows/build/debug/bin`; pass
+`-p:OsdropNativeBin=<folder>` to `dotnet build` to take it from another preset.
+
+#### Firewall rule for development builds
+
+Installed builds will get their firewall rule from the installer (Phase 19). A development build
+has none, so Windows Defender Firewall asks the first time Osdrop listens, or blocks other
+computers silently when nobody answers. Allow the development build on private networks once, in
+an administrator PowerShell command line in `windows\app`:
+
+```powershell
+New-NetFirewallRule -DisplayName "Osdrop (development)" -Direction Inbound -Action Allow `
+  -Profile Private -Program "$PWD\Osdrop.App\bin\Release\net10.0-windows\Osdrop.exe"
+```
+
+Remove it with `Remove-NetFirewallRule -DisplayName "Osdrop (development)"`. The network must be
+set to Private (Settings › Network & internet › your network › Private network); DNS-SD and the
+rule do not apply on Public networks.
+
+The engine keeps its state in `%APPDATA%\Osdrop`: the identity and the group sealed with DPAPI for
+the signed-in user, and the arrangement as it is. Deleting the folder makes the PC a new computer
+that has to be paired again.
 
 ### Formatting
 

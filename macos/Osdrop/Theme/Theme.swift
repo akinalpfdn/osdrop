@@ -15,17 +15,23 @@ enum Theme {
         static let body = Font.body
         static let caption = Font.caption
         static let monospaced = Font.system(.caption, design: .monospaced)
+        /// The six-digit pairing code, large enough to compare across the desk.
+        static let pairingCode = Font.system(size: 34, weight: .semibold, design: .monospaced)
     }
 
     enum Colors {
         static let secondary = Color.secondary
         static let warning = Color.orange
         static let positive = Color.green
+        static let inactive = Color.secondary
     }
 
     enum Size {
-        static let menuWidth: CGFloat = 280
+        static let menuWidth: CGFloat = 320
         static let developerWindowWidth: CGFloat = 520
+        static let pairingWindowWidth: CGFloat = 340
+        /// The dot that shows whether a member is connected.
+        static let statusDot: CGFloat = 8
     }
 
     /// Drag windows are drawn with AppKit, so their values are AppKit types.
@@ -51,5 +57,10 @@ enum Theme {
     enum Symbol {
         static let warning = "exclamationmark.triangle.fill"
         static let granted = "checkmark.circle.fill"
+        static let mac = "laptopcomputer"
+        static let pc = "pc"
+        static let remove = "minus.circle"
+        static let pair = "link.badge.plus"
+        static let failed = "xmark.octagon.fill"
     }
 }
