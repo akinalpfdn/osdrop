@@ -1,5 +1,5 @@
 # Phase 008 (MVP-08) — Sessions and mesh transport
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 7. Depends on: Phase 6
 
