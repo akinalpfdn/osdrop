@@ -74,6 +74,36 @@ jobs:
           cmake --build --preset tsan
           ctest --preset tsan
 
+  fuzz:
+    name: Decoder fuzzing
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the fuzzers (Clang, libFuzzer, ASan, UBSan)
+        run: |
+          cmake -S core -B build/fuzz -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++ \
+            -DOSDROP_CORE_BUILD_FUZZER=ON -DOSDROP_CORE_BUILD_TESTS=OFF
+          cmake --build build/fuzz --parallel
+
+      - name: Seed the corpora with the protocol fixtures and the fuzz seeds
+        run: |
+          for kind in control input transfer discovery; do
+            mkdir -p "build/corpus/$kind"
+          done
+          while IFS=$'\t' read -r file kind _; do
+            case "$file" in '#'*|'') continue ;; esac
+            cp "protocol/fixtures/$file" "build/corpus/$kind/$(echo "$file" | tr / _)"
+          done < protocol/fixtures/manifest.tsv
+          cp core/fuzz/seeds/discovery_* build/corpus/discovery/
+
+      - name: Fuzz each decoder for 30 seconds
+        run: |
+          build/fuzz/fuzz/osdrop_control_fuzzer -max_total_time=30 -max_len=65537 build/corpus/control
+          build/fuzz/fuzz/osdrop_input_fuzzer -max_total_time=30 -max_len=1185 build/corpus/input
+          build/fuzz/fuzz/osdrop_transfer_fuzzer -max_total_time=30 -max_len=65537 build/corpus/transfer
+          build/fuzz/fuzz/osdrop_discovery_fuzzer -max_total_time=30 -max_len=512 build/corpus/discovery
+
   windows:
     name: Windows
     runs-on: windows-2025
