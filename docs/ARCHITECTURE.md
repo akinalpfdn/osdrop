@@ -61,3 +61,24 @@ Built in Phase 1 (`macos/Osdrop/Services/Input`):
 - **Focus** — `InvisibleKeyWindowFocus` takes keyboard focus during capture so password fields in
   other apps resign and Secure Event Input turns off; `SystemSecureInput` names the app that still
   holds it.
+
+## macOS drag bridge
+
+Built in Phase 2 (`macos/Osdrop/Services/Drag`):
+
+- **Capture at an edge** — `DragActivityMonitor` notices a drag in progress from the drag
+  pasteboard's change count while the left button is down. `EdgeDropTarget` is a nearly transparent
+  panel along an edge, shown only during drags. It accepts a drop as a copy (the source app keeps
+  its files) or refuses it (the drag slides back). File URLs are read at once; file promises are
+  received into a staging folder, with a visible wait and a 2-minute limit.
+- **Start from injected input** — `PromiseDragStarter` places a small window under a point; the
+  injected button press there starts an `NSDraggingSession` with one `NSFilePromiseProvider` per
+  item, and injected movement carries it to the drop.
+- **Fulfil promises** — `PromisedItemWriter` writes each item into the folder the drop target names,
+  under a free name, through a hidden partial file that is moved into place only when complete;
+  progress is published for Finder. Content comes from a `PromisedContentReading`: local files now,
+  the transfer engine in Phase 14. Items up to 64 MB are also offered as a staged file URL for
+  apps that take no promises.
+- **Threads** — AppKit runs some promise callbacks on background queues (file coordination for
+  sandboxed targets, delivery of received promises). Those callbacks are nonisolated and tested
+  from background queues.

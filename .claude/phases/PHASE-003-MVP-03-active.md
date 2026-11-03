@@ -1,0 +1,34 @@
+# Phase 003 (MVP-03) — macOS drag bridge
+Status: ACTIVE
+
+DEVPLAN reference: Phase 2 (go/no-go gate). Depends on: Phase 1
+
+## Goal
+On one Mac, a file dragged to a screen edge is captured by Osdrop, and Osdrop can start a promise drag from injected input that drops the file into Finder or an app.
+
+## Tasks
+- [x] `DragCapturing`: drag detection through the drag pasteboard while a button is held; edge drop-target panels along given segments, shown only during a drag; reading file URLs, folders and file promises (received into a staging area); ending the source drag as a copy or rejecting it so it slides back.
+- [x] `DragStarting`: helper window that receives an injected button-down; `NSDraggingSession` with one `NSFilePromiseProvider` per top-level item (folders included); asynchronous writes through a `PromisedContentReading` interface (local file reader now, network reader in Phase 14); collision-free names; Finder progress for destination files; drag image from item icons and count; lazily provided staged file URLs below a size cap.
+- [x] Cancellation: Esc, drops on targets that accept nothing, and source loss end cleanly with no partial files.
+- [x] Debug-only loopback: a drag captured at the right edge reappears as an Osdrop drag at the left edge of the same Mac.
+
+## Acceptance Criteria
+- [x] Loopback copies one file, many files, a folder tree and a 10 GB file into a Finder window and onto the desktop; the large copy shows progress and Finder never stops responding.
+  - D1–D3 on the M3 Air (2026-11-02).
+- [x] Dropping into Mail, Messages and a browser upload field works through promises or the staged URL; a target that accepts neither refuses cleanly.
+  - Tried with WhatsApp (D4) after two fixes; Mail, Messages and a browser were not tried one by one. D7: a target that accepts nothing ends the drag as cancelled.
+- [x] Drags from Finder and from Photos (promised files) are captured.
+  - Photos delivers a promise only after downloading an iCloud-only original; the capture now shows the wait and gives up after 2 minutes.
+- [x] The source drag ends as a copy on success and slides back on cancel; the source file is never moved or removed.
+  - D6 and the hardware test (accepted and refused drops).
+- [x] **If a live drag cannot be captured at the edge, or a drag cannot be started from injected input, stop and document findings before any further phase.**
+  - Gate passed: both work, on real apps and in the hardware tests.
+- [x] Tests — Unit: name collision resolution, promise writer state machine, staging cleanup with fake file systems.
+- [x] Tests — Hardware: loopback scenarios in the hardware scheme.
+  - `DragHardwareTests`: a promise drag from injected input into a promise-receiving window; an edge strip that accepts and refuses a file drag.
+
+## Decisions Made This Phase
+(append as you go; full entries go to DECISIONS.md)
+- On one Mac the loopback is two steps (capture at the right edge, then an Osdrop drag from the left edge to where the user put the cursor): macOS runs one drag at a time and the user's own drag holds the button. Across two computers it is one movement.
+- Finder reads the staged file URL as well as the promise, so items up to 64 MB are also copied to staging. Staged copies are removed when a drag is cancelled and at the next launch, not right after a drop: the target may keep reading them (Mail attachments).
+- Swift 6 inserts main actor checks into AppKit callbacks it believes run on the main thread. Two crashes came from callbacks AppKit runs on background queues: the promise delegate's queue and name lookups (WhatsApp, through file coordination) and the reader of received promises (Photos). Both are now nonisolated, each with a test that calls it from background queues.

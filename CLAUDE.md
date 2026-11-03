@@ -48,6 +48,10 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
   project are checked against the other.
 - Input safety invariants (DEVPLAN → Implementation Guidelines) override feature work.
 - Never log keystrokes, clipboard contents, file contents or key material.
+- Swift 6 isolation: a callback that AppKit or Foundation may run off the main thread (file promise
+  delegates and readers, file coordination, operation queues) must be `nonisolated` or `@Sendable`,
+  never inherit the main actor from its enclosing type, and needs a test that calls it from a
+  background queue. Two such callbacks crashed Osdrop in Phase 2.
 - Every user-facing string is localized (English + Turkish); `core`, the engine and the input
   process return error codes, never text.
 - Every visual value comes from the platform theme source.
