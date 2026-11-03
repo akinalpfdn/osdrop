@@ -63,7 +63,7 @@ bool reserved(std::u32string_view base) {
 
 void make_windows_safe(std::u32string& name) {
     for (char32_t& cp : name) {
-        if (const auto* it =
+        if (const auto it =
                 std::ranges::find(kWindowsInvalid, cp, &std::pair<char32_t, char32_t>::first);
             it != kWindowsInvalid.end()) {
             cp = it->second;

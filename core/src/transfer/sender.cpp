@@ -284,7 +284,8 @@ void Sender::scanned(const protocol::ObjectRef& item, std::uint64_t generation,
         return; // withdrawn or replaced meanwhile
     }
     Offer& offer = it->second;
-    OfferReady ready{.item = item};
+    OfferReady ready{
+        .item = item, .error = std::nullopt, .total_bytes = 0, .entry_count = 0, .skipped = 0};
     if (error) {
         offer.scan_error = error;
     } else if (tree->entries.empty()) {

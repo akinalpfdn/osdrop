@@ -7,6 +7,7 @@
 // on a case-insensitive file system are numbered. A name the target can hold maps to itself.
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <set>
