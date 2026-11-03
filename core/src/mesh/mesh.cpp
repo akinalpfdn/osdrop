@@ -501,7 +501,7 @@ void Mesh::close_children(ConnectionId control, std::optional<Error> reason) {
 
 void Mesh::on_datagram(ConnectionId id, std::span<std::uint8_t> datagram, TimePoint now) {
     now_ = now;
-    if (Connection* connection = find(id);
+    if (const Connection* connection = find(id);
         connection != nullptr && connection->kind == Connection::Kind::Control) {
         connection->engine->on_datagram(datagram, now);
     }
@@ -627,7 +627,7 @@ void Mesh::settle(TimePoint now) {
     while (!duplicates_.empty()) {
         const ConnectionId id = duplicates_.back();
         duplicates_.pop_back();
-        if (Connection* connection = find(id);
+        if (const Connection* connection = find(id);
             connection != nullptr && connection->kind == Connection::Kind::Control) {
             connection->engine->close(protocol::ByeReason::Duplicate, now);
         }
@@ -687,7 +687,7 @@ ConnectionId Mesh::pair_with(const PeerAddress& address, TimePoint now) {
 
 Status<Error> Mesh::confirm_pairing(ConnectionId id, bool accepted, TimePoint now) {
     now_ = now;
-    Connection* connection = find(id);
+    const Connection* connection = find(id);
     auto result = connection != nullptr && connection->kind == Connection::Kind::Control
                       ? connection->engine->confirm_pairing(accepted, now)
                       : Status<Error>::failure(Error::InvalidState);
@@ -705,7 +705,7 @@ void Mesh::set_group(const protocol::Id& group, TimePoint now) {
 Status<Error> Mesh::send_message(const DeviceId& device, const protocol::ControlMessage& message,
                                  TimePoint now) {
     now_ = now;
-    Connection* connection = established_with(device);
+    const Connection* connection = established_with(device);
     auto result = connection != nullptr ? connection->engine->send_message(message, now)
                                         : Status<Error>::failure(Error::InvalidState);
     settle(now);
@@ -715,7 +715,7 @@ Status<Error> Mesh::send_message(const DeviceId& device, const protocol::Control
 Status<Error> Mesh::send_motion(const DeviceId& device, const protocol::PointerMotion& motion,
                                 TimePoint now) {
     now_ = now;
-    Connection* connection = established_with(device);
+    const Connection* connection = established_with(device);
     auto result = connection != nullptr ? connection->engine->send_motion(motion, now)
                                         : Status<Error>::failure(Error::InvalidState);
     settle(now);
