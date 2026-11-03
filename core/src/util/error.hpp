@@ -45,4 +45,7 @@ enum class Error : std::uint8_t {
     NotFound = 36,
 };
 
+/// The highest code this build knows; a peer's newer codes are reported as PeerError.
+inline constexpr Error kLastError = Error::NotFound;
+
 } // namespace osdrop

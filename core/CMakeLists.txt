@@ -64,6 +64,10 @@ add_library(osdrop_core STATIC
     src/transfer/files.cpp
     src/transfer/manifest.cpp
     src/transfer/names.cpp
+    src/transfer/receiver.cpp
+    src/transfer/sender.cpp
+    src/transfer/service.cpp
+    src/transfer/streams.cpp
     src/transfer/unicode.cpp
     src/transport/asio_node.cpp
     src/transport/traffic_class.cpp)

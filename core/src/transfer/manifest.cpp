@@ -312,7 +312,7 @@ std::optional<std::string> mapped_link_target(const ReceivePlan& plan, std::size
         return std::nullopt;
     }
     const auto found = plan.index_of.find(join(resolved));
-    if (found == plan.index_of.end()) {
+    if (found == plan.index_of.end() || found->second == link) {
         return std::nullopt;
     }
     std::vector<std::string> from = split(entry.target);

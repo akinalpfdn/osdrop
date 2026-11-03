@@ -90,7 +90,7 @@ private:
 
 /// The target to give a received link so that it names the same entry after mapping: a relative
 /// path from the link's folder, '/' separated. nullopt when `target` is absolute, leaves the
-/// link's item or names no entry of it: such links are not recreated.
+/// link's item, or names no other entry of it: such links are not recreated.
 [[nodiscard]] std::optional<std::string>
 mapped_link_target(const ReceivePlan& plan, std::size_t link, std::string_view target);
 

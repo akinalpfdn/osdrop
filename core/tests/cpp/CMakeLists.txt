@@ -37,6 +37,7 @@ add_executable(osdrop_core_tests
     transfer_files_test.cpp
     transfer_manifest_test.cpp
     transfer_names_test.cpp
+    transfer_service_test.cpp
     transfer_unicode_test.cpp
     transport_test.cpp
     version_test.cpp)
