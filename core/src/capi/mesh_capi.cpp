@@ -37,6 +37,11 @@ static_assert(OSDROP_LOG_DEBUG == static_cast<int>(mesh::LogLevel::Debug) &&
               OSDROP_LOG_ERROR == static_cast<int>(mesh::LogLevel::Error));
 static_assert(OSDROP_LAYOUT_OVERLAP == static_cast<int>(layout::ProblemKind::Overlap) &&
               OSDROP_LAYOUT_UNREACHABLE == static_cast<int>(layout::ProblemKind::Unreachable));
+static_assert(OSDROP_FEATURE_TAKES_CONTROL == protocol::kFeatureTakesControl &&
+              OSDROP_FEATURE_DRAG_SOURCE == protocol::kFeatureDragSource &&
+              OSDROP_FEATURE_DRAG_TARGET == protocol::kFeatureDragTarget &&
+              OSDROP_FEATURE_CLIPBOARD == protocol::kFeatureClipboard &&
+              OSDROP_FEATURE_FILES == protocol::kFeatureFiles);
 static_assert(OSDROP_MONITOR_KEY_SIZE == protocol::kIdSize &&
               OSDROP_MAX_MONITORS == protocol::kMaxMonitors);
 
