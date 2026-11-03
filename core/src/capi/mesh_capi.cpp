@@ -312,11 +312,11 @@ osdrop::Expected<layout::Placements, Error> to_placements(const osdrop_placement
     using Result = osdrop::Expected<layout::Placements, Error>;
     layout::Placements result;
     for (const osdrop_placement& p : std::span(placements, count)) {
-        if (p.detached > 1 ||
-            !result
-                 .emplace(read_id(p.device_id), layout::Placement{.offset = {.x = p.x, .y = p.y},
-                                                                  .detached = p.detached == 1})
-                 .second) {
+        if (p.detached > 1 || !result
+                                   .emplace(read_id(std::data(p.device_id)),
+                                            layout::Placement{.offset = {.x = p.x, .y = p.y},
+                                                              .detached = p.detached == 1})
+                                   .second) {
             return Result::failure(Error::InvalidArgument);
         }
     }
@@ -620,11 +620,11 @@ osdrop_result osdrop_layout_check(const osdrop_layout_computer* computers, size_
     layout::Placements placements;
     layout::ScreenMap screens;
     for (const osdrop_layout_computer& computer : std::span(computers, count)) {
-        auto monitors = to_screens(computer.monitors, computer.monitor_count);
+        auto monitors = to_screens(std::data(computer.monitors), computer.monitor_count);
         if (!monitors) {
             return to_result(monitors.error());
         }
-        const layout::DeviceId device = read_id(computer.placement.device_id);
+        const layout::DeviceId device = read_id(std::data(computer.placement.device_id));
         if (computer.placed > 1 || computer.placement.detached > 1 ||
             !screens.emplace(device, std::move(monitors.value())).second) {
             return OSDROP_ERROR_INVALID_ARGUMENT;

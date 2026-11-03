@@ -45,8 +45,8 @@ private:
     PushConfig config_;
     bool active_ = false;
     EdgeContact contact_;
-    TimePoint started_{};
-    TimePoint last_{};
+    TimePoint started_;
+    TimePoint last_;
     std::int64_t pushed_ = 0;
 };
 

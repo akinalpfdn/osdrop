@@ -108,7 +108,7 @@ CursorUpdate CrossingEngine::push_against(TimePoint now, std::size_t monitor,
         }
         if (auto entry = arrangement_.neighbour(current_, monitor, push.edge, position_)) {
             chosen = push;
-            target = std::move(entry);
+            target = entry;
         }
     }
     if (!chosen || !target) {

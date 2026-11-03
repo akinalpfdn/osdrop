@@ -186,6 +186,9 @@ Point place_beside(const Placements& placements, const ScreenMap& screens, const
             leftmost = &monitor;
         }
     }
+    if (rightmost == nullptr || leftmost == nullptr) {
+        return {};
+    }
     return {.x = rightmost->right() - leftmost->frame.x, .y = rightmost->top() - leftmost->frame.y};
 }
 
