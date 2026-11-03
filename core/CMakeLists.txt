@@ -61,6 +61,8 @@ add_library(osdrop_core STATIC
     src/protocol/wire.cpp
     src/session/control_framer.cpp
     src/session/session_engine.cpp
+    src/transfer/names.cpp
+    src/transfer/unicode.cpp
     src/transport/asio_node.cpp
     src/transport/traffic_class.cpp)
 add_library(osdrop::core ALIAS osdrop_core)
