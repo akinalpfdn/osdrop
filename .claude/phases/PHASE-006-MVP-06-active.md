@@ -20,3 +20,7 @@ The complete wire format exists as a pure, tested library and a written specific
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- Codec scaffolding copied from Osplay `35046970` with provenance.
+- Coordinates bounded to ±2^28 so sums of three never overflow.
+- Symbolic links are manifest entries whose content is the target; receiver policy in Phase 13.
+- One fuzz target per decoder, 30 s each in CI.
