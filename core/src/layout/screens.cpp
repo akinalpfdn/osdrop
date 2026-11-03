@@ -180,7 +180,12 @@ Motion Screens::move(Point from, Point delta) const {
     const Point start = clamp(from);
     const Point target = start + delta;
     if (const auto hit = monitor_at(target)) {
-        return {.position = target, .monitor = *hit};
+        return {.position = target,
+                .monitor = *hit,
+                .blocked_x = std::nullopt,
+                .blocked_y = std::nullopt,
+                .overshoot_x = 0,
+                .overshoot_y = 0};
     }
     const Slide x = slide_x(start, monitor_near(start), delta.x);
     const Slide y = slide_y({.x = x.position, .y = start.y}, x.monitor, delta.y);
