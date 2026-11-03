@@ -1,0 +1,108 @@
+import OsdropCore
+
+/// A failure reported by the shared core (`osdrop_result`). The UI maps cases to localized text.
+public enum CoreError: Error, Equatable, Sendable {
+    case invalidArgument
+    case bufferTooSmall
+    case truncated
+    case badMagic
+    case unsupportedVersion
+    case unknownType
+    case trailingBytes
+    case valueOutOfRange
+    case invalidString
+    case tooLarge
+    case decryptionFailed
+    case handshakeOutOfOrder
+    case replayed
+    case nonceExhausted
+    case invalidKey
+    case randomUnavailable
+    case timedOut
+    case connectionClosed
+    case peerError
+    case unexpectedMessage
+    case notTrusted
+    case pairingRejected
+    case peerBusy
+    case invalidState
+    case network
+    case internalFailure
+    /// The peer closed because it is going to sleep; it is expected back.
+    case peerSleeping
+    /// This computer's local permissions refuse the request from this peer.
+    case notPermitted
+    /// A code added to the core after this app was built.
+    case unknown(code: UInt32)
+
+    /// `nil` for `OSDROP_OK`.
+    public init?(result: osdrop_result) {
+        switch result {
+        case OSDROP_OK: return nil
+        case OSDROP_ERROR_INVALID_ARGUMENT: self = .invalidArgument
+        case OSDROP_ERROR_BUFFER_TOO_SMALL: self = .bufferTooSmall
+        case OSDROP_ERROR_TRUNCATED: self = .truncated
+        case OSDROP_ERROR_BAD_MAGIC: self = .badMagic
+        case OSDROP_ERROR_UNSUPPORTED_VERSION: self = .unsupportedVersion
+        case OSDROP_ERROR_UNKNOWN_TYPE: self = .unknownType
+        case OSDROP_ERROR_TRAILING_BYTES: self = .trailingBytes
+        case OSDROP_ERROR_VALUE_OUT_OF_RANGE: self = .valueOutOfRange
+        case OSDROP_ERROR_INVALID_STRING: self = .invalidString
+        case OSDROP_ERROR_TOO_LARGE: self = .tooLarge
+        case OSDROP_ERROR_DECRYPTION_FAILED: self = .decryptionFailed
+        case OSDROP_ERROR_HANDSHAKE_OUT_OF_ORDER: self = .handshakeOutOfOrder
+        case OSDROP_ERROR_REPLAYED: self = .replayed
+        case OSDROP_ERROR_NONCE_EXHAUSTED: self = .nonceExhausted
+        case OSDROP_ERROR_INVALID_KEY: self = .invalidKey
+        case OSDROP_ERROR_RANDOM_UNAVAILABLE: self = .randomUnavailable
+        case OSDROP_ERROR_TIMED_OUT: self = .timedOut
+        case OSDROP_ERROR_CONNECTION_CLOSED: self = .connectionClosed
+        case OSDROP_ERROR_PEER_ERROR: self = .peerError
+        case OSDROP_ERROR_UNEXPECTED_MESSAGE: self = .unexpectedMessage
+        case OSDROP_ERROR_NOT_TRUSTED: self = .notTrusted
+        case OSDROP_ERROR_PAIRING_REJECTED: self = .pairingRejected
+        case OSDROP_ERROR_PEER_BUSY: self = .peerBusy
+        case OSDROP_ERROR_INVALID_STATE: self = .invalidState
+        case OSDROP_ERROR_NETWORK: self = .network
+        case OSDROP_ERROR_INTERNAL: self = .internalFailure
+        case OSDROP_ERROR_PEER_SLEEPING: self = .peerSleeping
+        case OSDROP_ERROR_NOT_PERMITTED: self = .notPermitted
+        default: self = .unknown(code: result.rawValue)
+        }
+    }
+
+    /// The numeric `osdrop_result` value.
+    public var code: UInt32 {
+        switch self {
+        case .invalidArgument: OSDROP_ERROR_INVALID_ARGUMENT.rawValue
+        case .bufferTooSmall: OSDROP_ERROR_BUFFER_TOO_SMALL.rawValue
+        case .truncated: OSDROP_ERROR_TRUNCATED.rawValue
+        case .badMagic: OSDROP_ERROR_BAD_MAGIC.rawValue
+        case .unsupportedVersion: OSDROP_ERROR_UNSUPPORTED_VERSION.rawValue
+        case .unknownType: OSDROP_ERROR_UNKNOWN_TYPE.rawValue
+        case .trailingBytes: OSDROP_ERROR_TRAILING_BYTES.rawValue
+        case .valueOutOfRange: OSDROP_ERROR_VALUE_OUT_OF_RANGE.rawValue
+        case .invalidString: OSDROP_ERROR_INVALID_STRING.rawValue
+        case .tooLarge: OSDROP_ERROR_TOO_LARGE.rawValue
+        case .decryptionFailed: OSDROP_ERROR_DECRYPTION_FAILED.rawValue
+        case .handshakeOutOfOrder: OSDROP_ERROR_HANDSHAKE_OUT_OF_ORDER.rawValue
+        case .replayed: OSDROP_ERROR_REPLAYED.rawValue
+        case .nonceExhausted: OSDROP_ERROR_NONCE_EXHAUSTED.rawValue
+        case .invalidKey: OSDROP_ERROR_INVALID_KEY.rawValue
+        case .randomUnavailable: OSDROP_ERROR_RANDOM_UNAVAILABLE.rawValue
+        case .timedOut: OSDROP_ERROR_TIMED_OUT.rawValue
+        case .connectionClosed: OSDROP_ERROR_CONNECTION_CLOSED.rawValue
+        case .peerError: OSDROP_ERROR_PEER_ERROR.rawValue
+        case .unexpectedMessage: OSDROP_ERROR_UNEXPECTED_MESSAGE.rawValue
+        case .notTrusted: OSDROP_ERROR_NOT_TRUSTED.rawValue
+        case .pairingRejected: OSDROP_ERROR_PAIRING_REJECTED.rawValue
+        case .peerBusy: OSDROP_ERROR_PEER_BUSY.rawValue
+        case .invalidState: OSDROP_ERROR_INVALID_STATE.rawValue
+        case .network: OSDROP_ERROR_NETWORK.rawValue
+        case .internalFailure: OSDROP_ERROR_INTERNAL.rawValue
+        case .peerSleeping: OSDROP_ERROR_PEER_SLEEPING.rawValue
+        case .notPermitted: OSDROP_ERROR_NOT_PERMITTED.rawValue
+        case .unknown(let code): code
+        }
+    }
+}
