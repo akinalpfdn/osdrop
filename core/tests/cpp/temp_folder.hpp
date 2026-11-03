@@ -47,8 +47,23 @@ private:
     std::filesystem::path path_;
 };
 
+/// Creates `path` and its missing parents one level at a time, each in its native form, so paths
+/// longer than 260 characters work on Windows. True when `path` is a folder afterwards.
+inline bool create_folders(const std::filesystem::path& path) {
+    std::error_code error;
+    if (std::filesystem::is_directory(transfer::native_path(path), error)) {
+        return true;
+    }
+    if (path.has_parent_path() && path.parent_path() != path &&
+        !create_folders(path.parent_path())) {
+        return false;
+    }
+    std::filesystem::create_directory(transfer::native_path(path), error);
+    return std::filesystem::is_directory(transfer::native_path(path), error);
+}
+
 inline void write_file(const std::filesystem::path& path, std::span<const std::uint8_t> bytes) {
-    std::filesystem::create_directories(transfer::native_path(path.parent_path()));
+    create_folders(path.parent_path());
     std::ofstream out(transfer::native_path(path), std::ios::binary | std::ios::trunc);
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): bytes as the stream's chars
     out.write(reinterpret_cast<const char*>(bytes.data()),

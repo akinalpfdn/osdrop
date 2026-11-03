@@ -722,15 +722,32 @@ TEST(CapiMesh, TransferCommandsCheckTheirArguments) {
     EXPECT_EQ(osdrop_mesh_cancel_transfer(nullptr, 99), OSDROP_ERROR_INVALID_ARGUMENT);
 }
 
+/// An environment variable; MSVC refuses std::getenv as unsafe.
+std::optional<std::string> environment(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string text(value);
+    std::free(value); // NOLINT(cppcoreguidelines-no-malloc): _dupenv_s allocates with malloc
+    return text;
+#else
+    const char* value = std::getenv(name); // NOLINT(concurrency-mt-unsafe): tests are serial here
+    return value == nullptr ? std::nullopt : std::optional<std::string>(value);
+#endif
+}
+
 /// A measurement, not a check: OSDROP_TRANSFER_BENCH_MB=1024 with a release build moves that many
 /// megabytes between two meshes on loopback and prints the rate (DEVPLAN Phase 13: 90 MB/s on
 /// wired gigabit between a Mac and a PC; loopback until the PC is available).
 TEST(CapiMesh, TransferThroughputOnLoopback) {
-    const char* setting = std::getenv("OSDROP_TRANSFER_BENCH_MB"); // NOLINT(concurrency-mt-unsafe)
-    if (setting == nullptr) {
+    const std::optional<std::string> setting = environment("OSDROP_TRANSFER_BENCH_MB");
+    if (!setting) {
         GTEST_SKIP() << "set OSDROP_TRANSFER_BENCH_MB to measure";
     }
-    const std::size_t megabytes = std::stoul(setting);
+    const std::size_t megabytes = std::stoul(*setting);
     const osdrop::test::TempFolder source;
     const osdrop::test::TempFolder destination;
     {

@@ -134,7 +134,7 @@ TEST(TransferFiles, LongPathsAndUnicodeNamesWork) {
     relative += "résumé ✓ 😀.txt";
     const fs::path target = folder / relative;
     ASSERT_GT(transfer::utf8_of(target).size(), 300U);
-    ASSERT_TRUE(fs::create_directories(transfer::native_path(target.parent_path())));
+    ASSERT_TRUE(osdrop::test::create_folders(target.parent_path()));
 
     const auto bytes = pattern(100);
     auto writer = transfer::FileWriter::create(target, "1-0");
