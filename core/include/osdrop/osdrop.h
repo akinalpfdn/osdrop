@@ -89,6 +89,11 @@ typedef enum osdrop_result {
     OSDROP_ERROR_IN_ANOTHER_GROUP =
         30,                           /* the peer belongs to another group; one must leave first */
     OSDROP_ERROR_INVALID_LAYOUT = 31, /* monitors overlap, or a computer touches no other */
+    OSDROP_ERROR_CANCELLED = 32,        /* a transfer was cancelled on either side */
+    OSDROP_ERROR_IO = 33,               /* a file could not be read or written */
+    OSDROP_ERROR_NO_SPACE = 34,         /* not enough free space for a transfer */
+    OSDROP_ERROR_INTEGRITY_FAILED = 35, /* received content does not match the sender's digest */
+    OSDROP_ERROR_NOT_FOUND = 36,        /* the offered item or file no longer exists */
     OSDROP_RESULT_MAX_ENUM = 0x7FFFFFFF
 } osdrop_result;
 

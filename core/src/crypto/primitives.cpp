@@ -50,6 +50,31 @@ void blake2b(std::span<std::uint8_t> out, ByteParts parts) {
     crypto_blake2b_final(&context, out.data());
 }
 
+namespace {
+
+crypto_blake2b_ctx* context_of(std::array<std::uint8_t, 256>& storage) {
+    static_assert(sizeof(crypto_blake2b_ctx) <= 256 && alignof(crypto_blake2b_ctx) <= 8);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): storage sized for it
+    return reinterpret_cast<crypto_blake2b_ctx*>(storage.data());
+}
+
+} // namespace
+
+ContentHasher::ContentHasher() {
+    crypto_blake2b_init(context_of(context_), kDigestSize);
+}
+
+void ContentHasher::update(std::span<const std::uint8_t> data) {
+    crypto_blake2b_update(context_of(context_), data.data(), data.size());
+}
+
+ContentHasher::Digest ContentHasher::finish() {
+    Digest digest{};
+    crypto_blake2b_final(context_of(context_), digest.data());
+    crypto_blake2b_init(context_of(context_), kDigestSize);
+    return digest;
+}
+
 Hash blake2b(ByteParts parts) {
     Hash hash{};
     blake2b(hash, parts);

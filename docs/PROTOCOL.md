@@ -881,6 +881,11 @@ Decoding and encoding report these codes, which are also the values of `osdrop_r
 | 29 | GROUP_FULL | pairing refused: the group already has the most computers allowed (8) |
 | 30 | IN_ANOTHER_GROUP | pairing refused: the two computers belong to different groups; one must leave its group first |
 | 31 | INVALID_LAYOUT | an arrangement was refused: monitors of two computers overlap, or a computer touches no other and is not detached |
+| 32 | CANCELLED | a transfer was cancelled on either side |
+| 33 | IO_ERROR | a file could not be read or written |
+| 34 | NO_SPACE | the receiver has not enough free space for a transfer |
+| 35 | INTEGRITY_FAILED | received content does not match the sender's digest |
+| 36 | NOT_FOUND | the requested item, entry or file no longer exists |
 
 ## Fixtures
 
