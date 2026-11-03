@@ -21,6 +21,7 @@ add_executable(osdrop_core_tests
     capi_protocol_test.cpp
     crypto_primitives_test.cpp
     input_crypto_test.cpp
+    mesh_test.cpp
     noise_handshake_test.cpp
     noise_vectors_test.cpp
     protocol_codec_test.cpp

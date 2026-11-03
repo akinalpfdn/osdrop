@@ -45,6 +45,8 @@ add_library(osdrop_core STATIC
     src/protocol/input_codec.cpp
     src/protocol/text.cpp
     src/protocol/transfer_codec.cpp
+    src/mesh/mesh.cpp
+    src/mesh/transfer_channel.cpp
     src/protocol/wire.cpp
     src/session/control_framer.cpp
     src/session/session_engine.cpp)
