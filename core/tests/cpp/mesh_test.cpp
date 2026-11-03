@@ -283,6 +283,67 @@ TEST(Mesh, TransferStreamsCarryMessagesBothWaysWithTheRightIds) {
     EXPECT_EQ(network.node(high).observer.transfers_closed.size(), 2U);
 }
 
+TEST(Mesh, AFullTransferQueueNeitherDelaysControlNorGrowsWithoutBound) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.bandwidth_bytes_per_ms = 10'000; // 10 MB/s on every connection
+    const auto [low, high] = ordered_pair(network);
+    auto& sender = network.node(low);
+    const auto receiver = network.node(high).mesh.device_id();
+    const auto stream = sender.mesh.open_transfer(receiver, network.now);
+    ASSERT_TRUE(stream.has_value());
+    network.run_for(milliseconds(10));
+    ASSERT_EQ(sender.observer.writable.size(), 1U);
+
+    // Fill the stream until it refuses: about 4 MiB, 400 ms of sending at this rate.
+    const std::vector<std::uint8_t> data(protocol::kMaxChunkData, 0x42);
+    std::uint64_t offset = 0;
+    for (;;) {
+        const auto sent = sender.mesh.send_transfer(
+            receiver, stream.value(),
+            protocol::ContentChunk{.request_id = 1, .offset = offset, .data = data}, network.now);
+        if (!sent) {
+            ASSERT_EQ(sent.error(), Error::PeerBusy);
+            break;
+        }
+        offset += data.size();
+        ASSERT_LT(offset, std::uint64_t{8} * 1024 * 1024) << "the stream never refused";
+    }
+    // Framing and tags make the queue reach 4 MiB one chunk earlier.
+    EXPECT_GE(offset + data.size(), std::uint64_t{4} * 1024 * 1024);
+
+    // A control message does not wait for the queued megabytes.
+    const auto sent_at = network.now;
+    ASSERT_TRUE(sender.mesh
+                    .send_message(receiver,
+                                  protocol::DragResult{.drag_id = 1,
+                                                       .outcome = protocol::DragOutcome::Dropped},
+                                  network.now)
+                    .has_value());
+    while (network.node(high).observer.messages.empty()) {
+        network.step();
+    }
+    EXPECT_LE(network.now - sent_at, milliseconds(2));
+
+    // The queue drains; the stream reports itself writable below 1 MiB and accepts more.
+    while (sender.observer.writable.size() < 2 && network.now < sent_at + milliseconds(1'000)) {
+        network.step();
+    }
+    ASSERT_EQ(sender.observer.writable.size(), 2U);
+    EXPECT_GE(network.now - sent_at, milliseconds(250)) << "about 3 MiB had to go first";
+    EXPECT_TRUE(
+        sender.mesh
+            .send_transfer(receiver, stream.value(),
+                           protocol::ContentChunk{.request_id = 1, .offset = offset, .data = data},
+                           network.now)
+            .has_value());
+    network.run_for(milliseconds(200));
+    EXPECT_EQ(network.node(high).observer.transfer_messages.size(), offset / data.size() + 1)
+        << "every chunk arrived";
+}
+
 TEST(Mesh, ForgedAndReplayedTransferHellosAreRefused) {
     SimulatedMeshNetwork network;
     build(network, 2);

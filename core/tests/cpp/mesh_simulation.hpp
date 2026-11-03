@@ -1,8 +1,9 @@
 #pragma once
 
 // A deterministic network of meshes for tests: a simulated clock, TCP connections that are
-// reliable and ordered (delayed by `latency`), input datagrams that can be lost and reordered,
-// nodes that can freeze (power loss), and a capture of every byte on the wire.
+// reliable and ordered (delayed by `latency`, optionally limited in bandwidth each), input
+// datagrams that can be lost and reordered, nodes that can freeze (power loss), and a capture of
+// every byte on the wire.
 
 #include "crypto_test_support.hpp"
 #include "mesh/mesh.hpp"
@@ -122,7 +123,7 @@ public:
     }
     void set_input_destination(ConnectionId /*id*/, std::uint16_t /*port*/) override {}
     void accept_input_source(ConnectionId /*id*/) override {}
-    std::size_t queued_bytes(ConnectionId /*id*/) const override { return 0; }
+    std::size_t queued_bytes(ConnectionId id) const override;
     void close(ConnectionId id) override;
     std::uint16_t listen_port() const override { return 49'152; }
 
@@ -152,6 +153,9 @@ public:
     Microseconds latency{500};
     double datagram_loss = 0.0;
     Microseconds datagram_jitter{0}; ///< extra random delay, which reorders datagrams
+    /// When set, each direction of each TCP connection moves this many bytes per millisecond, and
+    /// what has not been delivered yet counts as queued for writing.
+    std::optional<double> bandwidth_bytes_per_ms;
     TimePoint now{std::chrono::seconds(1000)};
     std::vector<std::vector<std::uint8_t>> wire; ///< every TCP write and datagram, in order
 
@@ -294,10 +298,26 @@ public:
             return;
         }
         wire.emplace_back(bytes.begin(), bytes.end());
-        enqueue_ordered({.kind = Event::Kind::Bytes,
-                         .from = {from, id},
-                         .target = it->second,
-                         .bytes = {bytes.begin(), bytes.end()}});
+        Event event{.kind = Event::Kind::Bytes,
+                    .from = {from, id},
+                    .target = it->second,
+                    .bytes = {bytes.begin(), bytes.end()}};
+        if (bandwidth_bytes_per_ms) {
+            // Bytes leave one after another at the link's rate; until then they are queued.
+            TimePoint& free = link_free_[event.from];
+            const auto transmit = Microseconds{static_cast<std::int64_t>(
+                static_cast<double>(bytes.size()) * 1000.0 / *bandwidth_bytes_per_ms)};
+            free = std::max(free, now) + transmit;
+            event.at = free;
+            event.queued_size = bytes.size();
+            queued_[event.from] += bytes.size();
+        }
+        enqueue_ordered(std::move(event));
+    }
+
+    [[nodiscard]] std::size_t queued(std::size_t node_index, ConnectionId id) const {
+        const auto it = queued_.find(Endpoint{.node = node_index, .id = id});
+        return it == queued_.end() ? 0 : it->second;
     }
 
     void send_datagram(std::size_t from, ConnectionId id, std::span<const std::uint8_t> bytes) {
@@ -342,6 +362,7 @@ private:
         Endpoint target;
         std::size_t to = 0; ///< Accept: the node dialled
         std::vector<std::uint8_t> bytes;
+        std::size_t queued_size = 0; ///< counted in queued_ until delivered
     };
 
     double draw() {
@@ -359,7 +380,7 @@ private:
 
     /// TCP: in order per direction of a connection.
     void enqueue_ordered(Event event) {
-        TimePoint at = now + latency;
+        TimePoint at = std::max(event.at, now) + latency;
         TimePoint& last = last_ordered_[event.from];
         at = std::max(at, last);
         last = at;
@@ -403,6 +424,12 @@ private:
         switch (event.kind) {
         case Event::Kind::Bytes:
             target.mesh.on_bytes(event.target.id, event.bytes, now);
+            if (event.queued_size > 0) {
+                queued_[event.from] -= event.queued_size;
+                if (!node(event.from.node).frozen) {
+                    node(event.from.node).mesh.on_sent(event.from.id);
+                }
+            }
             break;
         case Event::Kind::Datagram: {
             std::vector<std::uint8_t> datagram = event.bytes;
@@ -424,6 +451,8 @@ private:
     std::deque<Event> queue_;
     std::map<Endpoint, Endpoint> links_;
     std::map<Endpoint, TimePoint> last_ordered_;
+    std::map<Endpoint, TimePoint> link_free_;
+    std::map<Endpoint, std::size_t> queued_;
     std::map<std::size_t, Endpoint> raw_;
     std::map<std::size_t, bool> raw_open_;
     std::size_t next_raw_ = 1;
@@ -460,6 +489,10 @@ inline void SimulatedTransport::send_datagram(ConnectionId id,
 
 inline void SimulatedTransport::close(ConnectionId id) {
     network_->close(node_, id);
+}
+
+inline std::size_t SimulatedTransport::queued_bytes(ConnectionId id) const {
+    return network_->queued(node_, id);
 }
 
 } // namespace osdrop::test
