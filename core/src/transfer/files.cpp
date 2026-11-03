@@ -244,8 +244,9 @@ Expected<std::size_t, Error> FileReader::read(std::uint64_t offset, std::span<st
 Expected<FileWriter, Error> FileWriter::create(const fs::path& target, std::string_view token) {
     fs::path temporary =
         target.parent_path() / path_from_utf8(".osdrop-" + std::string(token) + ".part");
-    std::ofstream stream(native_path(temporary), std::ios::binary | std::ios::trunc);
-    if (!stream) {
+    auto stream =
+        std::make_unique<std::ofstream>(native_path(temporary), std::ios::binary | std::ios::trunc);
+    if (!*stream) {
         std::error_code error;
         const auto space = fs::space(native_path(target.parent_path()), error);
         return Expected<FileWriter, Error>::failure(
@@ -272,9 +273,9 @@ Status<Error> FileWriter::write(std::span<const std::uint8_t> data) {
         return Status<Error>::failure(Error::InvalidState);
     }
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): bytes as the stream's chars
-    stream_.write(reinterpret_cast<const char*>(data.data()),
-                  static_cast<std::streamsize>(data.size()));
-    if (!stream_) {
+    stream_->write(reinterpret_cast<const char*>(data.data()),
+                   static_cast<std::streamsize>(data.size()));
+    if (!*stream_) {
         const auto space = free_space(target_.parent_path());
         return Status<Error>::failure(space && *space < data.size() ? Error::NoSpace
                                                                     : Error::IoError);
@@ -291,8 +292,8 @@ Expected<fs::path, Error> FileWriter::finish(std::uint64_t expected_size,
     if (!open_) {
         return Result::failure(Error::InvalidState);
     }
-    stream_.close();
-    if (!stream_) {
+    stream_->close();
+    if (!*stream_) {
         abort();
         return Result::failure(Error::IoError);
     }
@@ -342,7 +343,7 @@ void FileWriter::abort() {
         return;
     }
     open_ = false;
-    stream_.close();
+    stream_->close();
     std::error_code ignored;
     fs::remove(native_path(temporary_), ignored);
 }

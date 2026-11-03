@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -91,13 +92,15 @@ public:
     void abort();
 
 private:
-    FileWriter(std::filesystem::path target, std::filesystem::path temporary, std::ofstream stream)
+    FileWriter(std::filesystem::path target, std::filesystem::path temporary,
+               std::unique_ptr<std::ofstream> stream)
         : target_(std::move(target)), temporary_(std::move(temporary)), stream_(std::move(stream)),
           open_(true) {}
 
     std::filesystem::path target_;
     std::filesystem::path temporary_;
-    std::ofstream stream_;
+    std::unique_ptr<std::ofstream>
+        stream_; ///< a pointer, so moving never throws (MSVC streams can)
     crypto::ContentHasher hasher_;
     std::uint64_t written_ = 0;
     bool open_ = false;
