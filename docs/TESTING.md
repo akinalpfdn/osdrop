@@ -28,6 +28,7 @@ the `OsdropHardware` scheme (`macos/OsdropHardwareTests`):
 | Injection into a real window | Opens a small "Osdrop hardware test" window and clicks, types, double-clicks, scrolls and drags it |
 | Displays on real hardware | Nothing; reads the display list |
 | Secure Event Input on real hardware | Nothing visible; turns Secure Event Input on in the test app for a moment |
+| Drag bridge on real hardware | Opens two small "Osdrop drag test" windows; drags promised files into one, and a file from the other onto an edge strip that accepts it once and refuses it once |
 
 Rules for running them:
 
@@ -64,8 +65,24 @@ scenario says otherwise: replayed keys reach whichever app has focus.
 | C4 | Secure input | Turn on Terminal › Secure Keyboard Entry and focus Terminal | The developer window says secure keyboard entry is on |
 | C5 | Another app in front | **Capture**; during the countdown click Finder | The cursor hides and stays put; the window says whether macOS gave Osdrop keyboard focus |
 
+### macOS drag bridge (debug builds, menu → Developer… → Drag bridge)
+
+Each scenario: **Arm**, drag the items to the green strip at the right edge of the main display
+and release; then **Drop with Osdrop** and put the cursor on the target within 3 seconds.
+
+| # | Scenario | Items | Target | Expected |
+|---|----------|-------|--------|----------|
+| D1 | Several items | Two files and a folder with a subfolder | A Finder window | All arrive; the folder with everything inside it |
+| D2 | Desktop | One file | An empty spot on the desktop | The file appears on the desktop |
+| D3 | Large file | A 10 GB file (`mkfile -n 10g`) | A Finder window | Finder shows progress on the icon and stays usable |
+| D4 | App | One file | A WhatsApp chat, a Mail message or a browser upload field | The file is attached |
+| D5 | Promised files | A photo from Photos | A Finder window | Captured after Photos delivers it (an iCloud-only original is downloaded first) |
+| D6 | Refusal | One file, with "Accept drops at the edge" off | The edge only | The drag slides back; nothing is captured |
+| D7 | Nothing accepts | One file | The developer window | The drag ends as cancelled; nothing is written |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-02 | Phase 2 branch, Debug, M3 Air | D1–D7 | Pass after two fixes found by D4 (WhatsApp) and D5 (Photos): AppKit called promise callbacks off the main thread |
 | 2026-11-02 | Phase 1 branch, Debug, M3 Air | C1, C3, C5 | Pass (C3 after the capture guard was added; before it, the cursor stayed hidden while the app was stopped). C5: macOS refused Osdrop keyboard focus with Finder in front |

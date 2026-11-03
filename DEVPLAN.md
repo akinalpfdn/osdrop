@@ -655,6 +655,8 @@ These apply to ALL phases. Claude Code must follow them throughout development.
 - **Low-level hook removal** if a callback ever exceeds the timeout. Callbacks only enqueue; measured in Phase 3 and in the soak test.
 - **Wi-Fi loss bursts (AWDL)** delay reliable messages. Motion is latest-wins over UDP; keys and buttons carry positions; measured in Phase 11 and Phase 18.
 - **Lazy clipboard rendering** can be triggered eagerly by clipboard history or Universal Clipboard. Verified in Phase 15; sensitive data is excluded from history.
+- **Promised files arrive late or never.** Photos downloads iCloud-only originals before it delivers them (Phase 2), so names and sizes of promised items are known only after delivery. Phase 14 must start the receiving side's drag before those are known or wait visibly; the edge capture already shows the wait and gives up after 2 minutes.
+- **AppKit callbacks off the main thread.** Swift 6 adds main actor checks to AppKit callbacks it believes run on the main thread; two of them (file promise delegate, promise receiver) run on background queues and crashed Osdrop in Phase 2. Every new AppKit or Foundation callback is checked for the queue it runs on.
 - **Finder pasting file promises** from the general pasteboard is unverified. Checked at the start of Phase 15; the staged-URL path is the fallback.
 - **Stuck modifier keys** after crashes or network loss. Prevented by the held-key ledger and release-all on every exit path; covered by the stress run in Phase 11.
 - **Keyboard layout mismatch** between computers produces the target layout's characters, as with a plugged-in keyboard. Explained in the UI and README.
