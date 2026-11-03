@@ -9,13 +9,33 @@ Run by CI on every pull request (commands in [`BUILDING.md`](BUILDING.md)):
 
 | Suite | Framework | Covers |
 |-------|-----------|--------|
-| `core/tests/cpp` | GoogleTest | Every `core` module |
+| `core/tests/cpp` | GoogleTest | Every `core` module; the protocol fixtures and the C API |
 | `windows/shared/tests` | GoogleTest | Windows-header-free libraries, on macOS and Windows |
-| `macos/CoreBridgeTests` | Swift Testing | The Swift wrapper over the C API |
+| `macos/CoreBridgeTests` | Swift Testing | The Swift wrapper over the C API; the protocol fixtures through it |
 | `macos/OsdropTests` | Swift Testing | Mac app logic: key and modifier tables, event translation and building, injection with a recording poster, the tap policy, replay plans, the capture guard's decisions and the guard process against a stand-in |
 | `windows/app/Osdrop.Localization.Tests` | xUnit | Shell strings in every shipped language |
 
 The core also runs under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer on macOS.
+
+### Protocol fixtures and fuzzing
+
+`protocol/fixtures/` holds valid and malformed samples of every message, written by an independent
+Python encoder from [`PROTOCOL.md`](PROTOCOL.md) (see [`protocol/README.md`](../protocol/README.md)).
+The C++ and Swift suites must reach the outcome the manifest lists for each file, and valid files
+must re-encode byte for byte. `scripts/lint.sh` fails when the files differ from what the generator
+writes.
+
+Each decoder (control messages, input datagrams, transfer messages, the TXT record) has a libFuzzer
+target in `core/fuzz/`. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
+UndefinedBehaviorSanitizer; every test build also replays the fixtures and `core/fuzz/seeds/`
+through the same entry points. To fuzz locally (Clang with libFuzzer, e.g. on Linux):
+
+```sh
+cmake -S core -B build/fuzz -DCMAKE_CXX_COMPILER=clang++ -DOSDROP_CORE_BUILD_FUZZER=ON \
+  -DOSDROP_CORE_BUILD_TESTS=OFF
+cmake --build build/fuzz
+build/fuzz/fuzz/osdrop_control_fuzzer -max_total_time=60 -max_len=65537 protocol/fixtures
+```
 
 ## Hardware tests
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs every formatter in check mode, clang-tidy (core and portable Windows libraries), the UI
-# token check and the localization check.
+# token check, the localization check and the protocol fixture check.
 # CI runs this exact script; run it before every commit. Requires: uv, CMake, Ninja, Xcode.
 set -euo pipefail
 
@@ -42,6 +42,9 @@ scripts/check_ui_tokens.sh
 
 echo "==> localization"
 python3 scripts/check_localization.py
+
+echo "==> protocol fixtures"
+python3 protocol/tools/generate_fixtures.py --check
 
 tidy_extra=()
 if [[ "$(uname -s)" == "Darwin" ]]; then

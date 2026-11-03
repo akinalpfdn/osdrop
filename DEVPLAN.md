@@ -227,7 +227,7 @@ Phase 5 writes the authoritative `docs/PROTOCOL.md` and fixtures in `protocol/fi
 
 ### Control channel (TCP)
 - 4-byte length prefix, then the encrypted payload after the handshake.
-- Message families: Hello; Handshake (×3, Noise XX); PairingConfirm; Capabilities; RosterState / RosterIntroduce / RosterRevoke; ScreenReport; LayoutState; Enter (entry point, modifier state, optional carried drag), Leave, Refuse (reason: locked, asleep, not permitted…); KeyEvent (HID usage, down/up/repeat); ButtonEvent (button, down/up, click count, cursor position); ScrollEvent (deltas, phase, continuous flag, cursor position); ReleaseAll; CursorReport; LocalTakeover; DragProbe / DragOffer (item metadata, icons, sizes) / DragDrop / DragCancel / DragResult; ClipboardAnnounce / ClipboardRequest / ClipboardData; TransferOpen / TransferCancel / TransferResult; Ping/Pong; Heartbeat; Error; Bye.
+- Message families (field by field in `docs/PROTOCOL.md`): Hello; HandshakeMessage (×3, Noise XX); PairingConfirm; Capabilities; SessionSetup (UDP port and tokens); RosterState (members and revocations as a two-phase set merged by union, which covers introducing and revoking members); ScreenReport; LayoutState; Enter (entry point, modifier state, optional carried drag), Leave, Refuse (reason: locked, asleep, not permitted, busy); KeyEvent (HID usage, down/up/repeat); ButtonEvent (button, down/up, click count, cursor position); ScrollEvent (deltas, unit, phase, momentum, cursor position); ReleaseAll; CursorReport; LocalTakeover; DragProbe / DragOffer (item kind, size, content type from which the target draws the system icon, name) / DragResult (the drop itself is the injected button release); ClipboardAnnounce (formats and sizes; contents are fetched over a transfer stream); Ping/Pong; Heartbeat; Error; Bye.
 - Buttons, keys and scroll travel on the reliable channel and carry the cursor position they belong to, so ordering against unreliable motion never matters: the endpoint moves the cursor to that position before injecting.
 
 ### Input datagrams (UDP)
@@ -528,6 +528,7 @@ Phases 1–4 retire the platform risks first. They build production modules, tes
 - Portable name mapping in `core` (NFC, Windows-invalid characters, reserved names, trailing dots and spaces, case collisions within one tree, path length), replacing the Phase 4 function.
 - Platform readers and writers (long paths on Windows), a free-space check before writing, removal of partial files on failure.
 - Marking of received files (quarantine on macOS, Mark of the Web on Windows), decided with the user at the start of the phase.
+- Symbolic links inside folders arrive as link entries whose content is the target; whether a receiver recreates, follows or skips them is decided with the user at the start of the phase.
 - Receiver-side enforcement of the "files" permission.
 **Depends on**: Phase 7, Phase 8
 **Acceptance criteria**:

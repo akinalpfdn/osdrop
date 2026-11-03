@@ -16,3 +16,4 @@
 *.icns     binary
 *.pdf      binary
 protocol/fixtures/** binary
+core/fuzz/seeds/** binary

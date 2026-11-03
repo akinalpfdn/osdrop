@@ -14,13 +14,30 @@ project(OsdropCore
     LANGUAGES CXX)
 
 option(OSDROP_CORE_BUILD_TESTS "Build the core unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(OSDROP_CORE_BUILD_FUZZER "Build the libFuzzer decoder fuzzers (Clang only)" OFF)
+
+if(OSDROP_CORE_BUILD_FUZZER)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "OSDROP_CORE_BUILD_FUZZER requires Clang with libFuzzer")
+    endif()
+    add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
 
 if(NOT TARGET osdrop::warnings)
     include(cmake/OsdropWarnings.cmake)
 endif()
 
 add_library(osdrop_core STATIC
-    src/capi/version.cpp)
+    src/capi/discovery_capi.cpp
+    src/capi/protocol_capi.cpp
+    src/capi/version.cpp
+    src/protocol/advertisement.cpp
+    src/protocol/control_codec.cpp
+    src/protocol/input_codec.cpp
+    src/protocol/text.cpp
+    src/protocol/transfer_codec.cpp
+    src/protocol/wire.cpp)
 add_library(osdrop::core ALIAS osdrop_core)
 
 target_include_directories(osdrop_core
@@ -34,3 +51,5 @@ if(OSDROP_CORE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests/cpp)
 endif()
+
+add_subdirectory(fuzz)

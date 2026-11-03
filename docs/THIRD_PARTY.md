@@ -22,7 +22,9 @@ folder.
 ## Code from Osplay
 
 Parts of [Osplay](https://github.com/akinalpfdn/osplay)'s core (MIT, same author) are copied into
-`core/` in Phase 6 and adapted: the Noise handshake, cipher states, replay window, randomness
-injection, Asio transport base, control framing and utilities. The Osplay commit they come from is
-recorded in `DECISIONS.md` when the copy is made. A security fix in either project is checked
+`core/` and adapted. Phase 5 copied the protocol utilities (`util/expected.hpp`,
+`protocol/byte_io.hpp`, the UTF-8 rules of `protocol/text.cpp`), the codec and fixture layout and
+the fuzz replay runner; Phase 6 copies the Noise handshake, cipher states, replay window and
+randomness injection, and Phase 7 the Asio transport base and control framing. The Osplay commit
+each copy comes from is recorded in `DECISIONS.md`. A security fix in either project is checked
 against the other.

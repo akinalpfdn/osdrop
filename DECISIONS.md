@@ -95,3 +95,46 @@ choices the plan leaves open are logged here.
 **Revisit if:** Input observation moves to a component that App Nap does not apply to.
 
 ---
+
+## 2026-11-03 — User decision: core phases before the Windows gates
+**Chosen:** With the Windows PC away, Phases 5–9 (protocol, crypto, sessions and mesh, group membership, layout and crossing) run before Phases 3 and 4 (Windows input process and drag bridge). Phases 3 and 4 run when the PC is back, and both must be done before Phase 10.
+**Alternatives:** Writing Phase 3 as code only and leaving its hardware gate open; pausing until the PC is back.
+**Why:** Phases 5–9 live in `core` and are verified completely on the Mac and in CI; none depends on how Windows captures input. Writing Windows input code without its gate would pile up work that a failed gate could invalidate.
+**Trade-offs:** The Windows go/no-go gates are answered later, so a Windows design change would be found after the core is built (the core does not depend on it).
+**Revisit if:** The PC comes back before Phase 9 ends; Phase 3 can then start at the next phase boundary.
+
+---
+
+## 2026-11-03 — Protocol code copied from Osplay
+**Chosen:** The codec scaffolding is copied from Osplay commit `35046970f99c145d1b3e549d2362897c114af733` (its `main` on 2026-10-31) and adapted to the `osdrop` namespace: `util/expected.hpp`, `protocol/byte_io.hpp` (with `i64` added), the UTF-8 rules in `protocol/text.cpp`, the codec layout (one struct per message, shared validation for encoder and decoder), the fixture manifest format and generator layout, the fuzz replay runner and the C API's validate/reencode pair. Messages, fields and rules are Osdrop's own.
+**Alternatives:** Writing the scaffolding anew; sharing it with Osplay as a library.
+**Why:** The copied pieces are small, reviewed and fuzzed in Osplay; the user chose copying with provenance over linking (2026-11-02).
+**Trade-offs:** A bug found in these files must be fixed in both projects.
+**Revisit if:** Either project changes these files in a way the other should follow.
+
+---
+
+## 2026-11-03 — Coordinates are bounded to ±2^28
+**Chosen:** Every `coord` on the wire lies in −2^28…2^28 (1/16 point units, ±16,777,216 points); decoders reject values outside it.
+**Alternatives:** Accepting the whole `i32` range and widening every geometric computation to 64 bits.
+**Why:** Layout code adds an arrangement offset, a monitor origin and a size. With the bound, any sum of three coordinates fits an `i32`, so crossing and layout code (Phase 9) cannot overflow on hostile or corrupted input, and the bound is far beyond any real desktop.
+**Trade-offs:** None in practice; a desktop larger than 16 million points cannot be described.
+**Revisit if:** Never expected.
+
+---
+
+## 2026-11-03 — Symbolic links travel as link entries
+**Chosen:** A folder's manifest lists links as their own entry kind; the link's content is its target path (1–4096 bytes), fetched like a file's content.
+**Alternatives:** Following links on the sender (copying what they point to); leaving links out of the protocol.
+**Why:** Following links can copy files from outside the dragged folder or loop forever; dropping them silently loses data. Sending them as links leaves the choice to the receiver, which knows its platform (Windows needs a privilege to create links).
+**Trade-offs:** Receivers must handle a target that points outside the tree; how they do it is decided at the start of Phase 13 (DEVPLAN).
+**Revisit if:** Phase 13 decides receivers never create links; the entry kind then stays for reporting what was skipped.
+
+---
+
+## 2026-11-03 — One fuzz target per decoder
+**Chosen:** Separate libFuzzer targets for control messages, input datagrams, transfer messages (manifests included) and the TXT record parser, each run for 30 seconds in CI with its own corpus seeded from the fixtures. Every target checks that whatever decodes re-encodes to the same bytes.
+**Alternatives:** One target that feeds every input to every decoder (Osplay's layout).
+**Why:** Each decoder keeps its own coverage feedback and iteration rate; a single target would spend most of its time on prefixes that only one decoder accepts.
+**Trade-offs:** Two minutes of CI time instead of one.
+**Revisit if:** CI time becomes a constraint.
