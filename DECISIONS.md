@@ -255,3 +255,48 @@ choices the plan leaves open are logged here.
 **Why:** Every member keeps a session with every other, so the mesh grows quadratically; 8 covers a desk or a small studio. One prompt at a time keeps a stranger on the LAN from flooding the user with codes. Removing members after a merge would be surprising and order-dependent.
 **Trade-offs:** The limit can be exceeded by concurrent pairings.
 **Revisit if:** Users ask for larger groups.
+
+---
+
+## 2026-11-03 — Monitors carry native rectangles on the wire
+**Chosen:** ScreenReport gives each monitor a logical frame and a native rectangle (macOS points, Windows physical pixels). The controller moves a remote cursor in native units and between that computer's monitors as its system does; positions on the wire are native.
+**Alternatives:** Logical frames only, with remote cursors moving in logical units and each endpoint converting.
+**Why:** A Windows desktop with mixed scales has no logical space in which its monitors line up the way Windows moves the cursor between them; moving in logical units would make the cursor jump along every boundary between a 150% and a 100% monitor. The acceptance criterion asks for the platforms' own behaviour.
+**Trade-offs:** 16 more bytes per monitor; the protocol changed before its first release (fixtures regenerated).
+**Revisit if:** A platform appears whose cursor space is neither points nor pixels.
+
+---
+
+## 2026-11-03 — Core derives Windows logical frames
+**Chosen:** `osdrop_layout_derive_frames` builds logical frames from physical rectangles and scales: the primary at its scaled origin, each touching monitor attached along the shared edge, starting as far along it as in pixels, scaled by the monitor it attaches to.
+**Alternatives:** Dividing every rectangle by its own scale (leaves gaps and overlaps with mixed scales); one scale for the whole desktop (wrong sizes).
+**Why:** The arrangement needs one rigid logical desktop per computer, with monitors that touch in pixels touching in points. The rule lives in core so it is tested on macOS and is the same for every Windows build.
+**Trade-offs:** Rings of four or more monitors with mixed scales can come out with small overlaps; crossings still use each monitor's own conversion.
+**Revisit if:** Users report arrangements that look wrong in the editor.
+
+---
+
+## 2026-11-03 — One layout document, newest wins, members place themselves
+**Chosen:** The layout document is replaced as a whole; the newer (revision, author) wins and, for a repeated pair, the placements that sort first. A member missing from the document adds itself to the right of everything. Joining or leaving a group starts from an empty document. Editors publish only valid arrangements (INVALID_LAYOUT, code 31); receivers accept any well-formed one.
+**Alternatives:** Per-placement merges; a designated member that places newcomers; refusing invalid documents on receipt.
+**Why:** Arrangements are edited rarely and as a whole, so last writer wins is what users expect, and it converges in every order (property-tested, and fuzzed with repeated revisions). Self-placement needs no coordinator. Screens change after an arrangement is made, so validity cannot be a condition for accepting one.
+**Trade-offs:** Two simultaneous edits keep only one. Newcomers that place themselves at once may each publish once more before the document settles.
+**Revisit if:** The arrangement editor needs collaborative editing.
+
+---
+
+## 2026-11-03 — Edge push defaults: 1 s, 32 units, 300 ms pauses
+**Chosen:** The cursor crosses after pushing against an edge with a neighbour for 1 s and 32 logical units, with no pause longer than 300 ms; immediate mode crosses at once.
+**Alternatives:** Distance only (as some KVM tools do); time only.
+**Why:** The user described crossing as pushing for about one second. The distance keeps a hand resting on a mouse at the edge from crossing; the pause limit lets a push continue across a short lift of the mouse.
+**Trade-offs:** Defaults until Phase 12 makes them settings; values may change after the Phase 11 hardware runs.
+**Revisit if:** Testing on the reference hardware feels slow or accidental.
+
+---
+
+## 2026-11-03 — The crossing engine stays inside core until Phase 11
+**Chosen:** The C API gains screens, the arrangement, checks and Windows frame derivation; the crossing engine has no C API yet.
+**Alternatives:** Exposing motion in and crossings out now.
+**Why:** Phase 11 builds the controller around capture, Enter and Leave in core; the engine's shape for the platforms comes from that work, not before it.
+**Trade-offs:** None for the platforms until Phase 11.
+**Revisit if:** Phase 10 needs a crossing preview in the UI.

@@ -88,7 +88,7 @@ jobs:
 
       - name: Seed the corpora with the protocol fixtures and the fuzz seeds
         run: |
-          for kind in control input transfer discovery crypto group; do
+          for kind in control input transfer discovery crypto group layout; do
             mkdir -p "build/corpus/$kind"
           done
           while IFS=$'\t' read -r file kind _; do
@@ -98,8 +98,9 @@ jobs:
           cp core/fuzz/seeds/discovery_* build/corpus/discovery/
           cp build/corpus/control/* build/corpus/input/* build/corpus/crypto/
           cp build/corpus/control/* core/fuzz/seeds/group_* build/corpus/group/
+          cp build/corpus/control/* core/fuzz/seeds/layout_* build/corpus/layout/
 
-      - name: Fuzz each decoder, the crypto parsers and the group for 30 seconds
+      - name: Fuzz each decoder, the crypto parsers, the group and the layout for 30 seconds
         run: |
           build/fuzz/fuzz/osdrop_control_fuzzer -max_total_time=30 -max_len=65537 build/corpus/control
           build/fuzz/fuzz/osdrop_input_fuzzer -max_total_time=30 -max_len=1185 build/corpus/input
@@ -107,6 +108,7 @@ jobs:
           build/fuzz/fuzz/osdrop_discovery_fuzzer -max_total_time=30 -max_len=512 build/corpus/discovery
           build/fuzz/fuzz/osdrop_crypto_fuzzer -max_total_time=30 -max_len=2048 build/corpus/crypto
           build/fuzz/fuzz/osdrop_group_fuzzer -max_total_time=30 -max_len=65537 build/corpus/group
+          build/fuzz/fuzz/osdrop_layout_fuzzer -max_total_time=30 -max_len=65537 build/corpus/layout
 
   windows:
     name: Windows

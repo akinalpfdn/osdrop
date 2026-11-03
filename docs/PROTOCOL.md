@@ -21,8 +21,10 @@ changes are additive and raise the minor version.
   receivers normalize again before using a name, so decoders do not check the form.
 - `path` is `u16 length` followed by 1–1024 bytes: names (as above) joined with `/`, relative,
   no empty component.
-- `coord` is an `i32` in 1/16 of a point (macOS points, Windows device-independent pixels),
-  from −2^28 to 2^28 (±16,777,216 points), so the sum of three coordinates fits an `i32`.
+- `coord` is an `i32` in 1/16 of a unit, from −2^28 to 2^28 (±16,777,216 units), so the sum of
+  three coordinates fits an `i32`. The unit is the *logical* one (macOS points, Windows
+  device-independent pixels) unless a field says *native*: the units the computer's own cursor
+  moves in (macOS points, Windows physical pixels).
 - `device_id` is `bytes[16]`: the first 16 bytes of BLAKE2b-256 over the device's static public
   key.
 - Fields marked *reserved* are written as 0 and must be 0 when read.
@@ -248,16 +250,23 @@ monitor:
 | Field | Type | Values |
 |-------|------|--------|
 | key | bytes[16] | stable identity of the monitor on its computer |
-| x | coord | frame in the computer's own desktop space |
+| x | coord | frame in the computer's logical desktop space |
 | y | coord | |
-| width | coord | 16 (one point) to 16 × 32768 |
+| width | coord | 16 (one unit) to 16 × 32768 |
 | height | coord | as width |
+| native_x | coord | the same monitor in native units, where the computer's cursor moves |
+| native_y | coord | |
+| native_width | coord | as width |
+| native_height | coord | as width |
 | pixel_width | u16 | 1–32768 |
 | pixel_height | u16 | 1–32768 |
 | flags | u8 | bit 0 primary display. Other bits reserved. |
 | reserved | u8 | 0 |
 
-Keys are unique; exactly one monitor is primary.
+Keys are unique; exactly one monitor is primary. On macOS the native rectangle is the frame. On
+Windows it is the monitor in physical pixels, and the frames are a logical arrangement the sender
+derives from it (see "Arrangement"), because Windows has no logical desktop when monitors use
+different scales.
 
 ### 0x12 LayoutState
 
@@ -290,7 +299,7 @@ new Enter ends the previous control_id.
 Shift, bit 2 left Option/Alt, bit 3 left Command/Windows, bit 4 right Control, bit 5 right Shift,
 bit 6 right Option/Alt, bit 7 right Command/Windows (0xE7).
 
-Positions (`x`, `y`) are in the endpoint's own desktop space.
+Positions (`x`, `y`) are native positions in the endpoint's desktop (see ScreenReport).
 
 #### 0x20 Enter
 
@@ -735,6 +744,39 @@ bit 3), and the receiving side refuses requests that ignore that:
 | files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped |
 | clipboard | ClipboardAnnounce is dropped; a ManifestRequest or ContentRequest for the clipboard gets TransferError NOT_PERMITTED |
 
+## Arrangement
+
+One shared arrangement places every member's logical desktop in a single space; the arrangement
+never moves a computer's monitors relative to each other.
+
+### Screens
+
+- A member sends its ScreenReport to each member whose session is established, and to every
+  connected member whenever its monitors change. A report replaces the sender's previous one;
+  members keep each member's last report, also while it is offline.
+- On macOS the frames are the displays in points. On Windows the sender derives them from the
+  physical layout: the primary monitor's frame is its physical rectangle scaled by its own scale;
+  a monitor that touches an already placed one in physical pixels gets the shared edge in common
+  with it and starts as far along that edge as in pixels, scaled by the placed monitor; a monitor
+  that touches none keeps its physical position, scaled like the primary.
+
+### Layout document
+
+- LayoutState carries the whole document. A member keeps the newer by (revision, author); for
+  the same pair it keeps the one whose placements, listed by device ID as (device_id, x, y,
+  detached), sort first, so a faulty member cannot split the group.
+- A member sends its document to each member whose session is established, and to every connected
+  member whenever its document changes, except the member it came from.
+- A member that knows its own screens but is missing from the document adds itself: revision one
+  higher, itself as author, placements of computers that are no longer members dropped, and its
+  own placement to the right of everything placed: its leftmost monitor's left edge on the
+  rightmost monitor's right edge, tops aligned.
+- A computer that joins another group, or leaves its group, starts from an empty document.
+- An arrangement is valid when no two computers' monitors overlap and the attached computers all
+  touch each other, directly or through others. Two monitors touch when facing edges are at most
+  8 units apart and share a stretch along them. Editors publish only valid arrangements;
+  receivers take any well-formed document, because screens can change after it was made.
+
 ## Encryption
 
 ### Handshake
@@ -838,6 +880,7 @@ Decoding and encoding report these codes, which are also the values of `osdrop_r
 | 28 | NOT_PERMITTED | this computer's local permissions refuse the request from this peer |
 | 29 | GROUP_FULL | pairing refused: the group already has the most computers allowed (8) |
 | 30 | IN_ANOTHER_GROUP | pairing refused: the two computers belong to different groups; one must leave its group first |
+| 31 | INVALID_LAYOUT | an arrangement was refused: monitors of two computers overlap, or a computer touches no other and is not detached |
 
 ## Fixtures
 

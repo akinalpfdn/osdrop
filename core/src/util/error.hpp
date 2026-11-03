@@ -37,6 +37,7 @@ enum class Error : std::uint8_t {
     NotPermitted = 28,
     GroupFull = 29,
     InAnotherGroup = 30,
+    InvalidLayout = 31,
 };
 
 } // namespace osdrop

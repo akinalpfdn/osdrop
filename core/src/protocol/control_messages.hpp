@@ -191,10 +191,16 @@ struct RosterState {
 
 struct Monitor {
     Id key{};
+    // The frame in the computer's logical desktop space (points, device-independent pixels).
     std::int32_t x = 0;
     std::int32_t y = 0;
     std::int32_t width = 0;
     std::int32_t height = 0;
+    // The same monitor in native cursor units (macOS points, Windows physical pixels).
+    std::int32_t native_x = 0;
+    std::int32_t native_y = 0;
+    std::int32_t native_width = 0;
+    std::int32_t native_height = 0;
     std::uint16_t pixel_width = 0;
     std::uint16_t pixel_height = 0;
     bool primary = false;

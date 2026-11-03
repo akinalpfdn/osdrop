@@ -1,5 +1,5 @@
 # Phase 009 (MVP-09) — Group membership and trust
-Status: ACTIVE
+Status: DONE
 
 DEVPLAN reference: Phase 8. Depends on: Phase 7
 

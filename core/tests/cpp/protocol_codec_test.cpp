@@ -55,6 +55,10 @@ std::vector<ControlMessage> boundary_messages() {
                             .y = -kEdge,
                             .width = i == 0 ? protocol::kMinMonitorSize : protocol::kMaxMonitorSize,
                             .height = protocol::kMaxMonitorSize,
+                            .native_x = kEdge,
+                            .native_y = i == 0 ? -kEdge : kEdge,
+                            .native_width = protocol::kMaxMonitorSize,
+                            .native_height = protocol::kMinMonitorSize,
                             .pixel_width = protocol::kMaxPixelSize,
                             .pixel_height = 1,
                             .primary = i == 3});
@@ -172,11 +176,23 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
                                                  .members = {{.device_id = id(2), .name = "A"},
                                                              {.device_id = id(2), .name = "B"}}}),
               Error::ValueOutOfRange);
-    EXPECT_EQ(
-        encode_error(protocol::ScreenReport{
-            .monitors =
-                {{.key = id(1), .width = 16, .height = 16, .pixel_width = 1, .pixel_height = 1}}}),
-        Error::ValueOutOfRange); // no primary monitor
+    EXPECT_EQ(encode_error(protocol::ScreenReport{.monitors = {{.key = id(1),
+                                                                .width = 16,
+                                                                .height = 16,
+                                                                .native_width = 16,
+                                                                .native_height = 16,
+                                                                .pixel_width = 1,
+                                                                .pixel_height = 1}}}),
+              Error::ValueOutOfRange); // no primary monitor
+    EXPECT_EQ(encode_error(protocol::ScreenReport{.monitors = {{.key = id(1),
+                                                                .width = 16,
+                                                                .height = 16,
+                                                                .native_width = 15,
+                                                                .native_height = 16,
+                                                                .pixel_width = 1,
+                                                                .pixel_height = 1,
+                                                                .primary = true}}}),
+              Error::ValueOutOfRange); // native width below one unit
     EXPECT_EQ(encode_error(protocol::LayoutState{.placements = {{.x = kEdge + 1}}}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::Enter{}), Error::ValueOutOfRange);

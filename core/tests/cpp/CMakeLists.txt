@@ -23,6 +23,10 @@ add_executable(osdrop_core_tests
     crypto_primitives_test.cpp
     group_test.cpp
     input_crypto_test.cpp
+    layout_crossing_test.cpp
+    layout_document_test.cpp
+    layout_screens_test.cpp
+    layout_sync_test.cpp
     mesh_test.cpp
     noise_handshake_test.cpp
     noise_vectors_test.cpp

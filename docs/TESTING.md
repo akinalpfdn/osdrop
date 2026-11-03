@@ -25,7 +25,12 @@ of every byte sent. The mesh tests check that five members converge to one sessi
 when all dial at once, that peer loss is reported within one second, that motion never moves
 backwards, and that nothing readable crosses the wire. The group tests pair computers into
 groups, introduce and revoke members (also while some are offline), and check permissions; the
-roster tests merge random operations in random orders and require every replica to converge. `transport_test.cpp` repeats the essentials
+roster tests merge random operations in random orders and require every replica to converge.
+The layout tests generate random arrangements of macOS and mixed-scale Windows desktops and require
+that leaving and coming back through an edge returns within one unit, that nothing crosses into a
+gap and that no wall stands where another computer touches; layout documents converge in every
+order, edge push timing runs on a fake clock, and members share screens and arrangements over the
+simulated network, including members that were offline. `transport_test.cpp` repeats the essentials
 on real loopback sockets, including control latency while a transfer stream is saturated and a
 recording relay on the control connection.
 
@@ -39,8 +44,9 @@ writes.
 
 Each decoder (control messages, input datagrams, transfer messages, the TXT record) has a libFuzzer
 target in `core/fuzz/`; another feeds the Noise handshake reader and the input datagram opener,
-which must never accept a forgery, and one more the stored group state and rosters from members,
-which must merge the same way in either order. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
+which must never accept a forgery; one feeds the stored group state and rosters from members,
+which must merge the same way in either order, and one the stored layout, screen reports (the
+cursor must never leave a reported desktop) and layout documents. CI runs each for 30 seconds on Linux with Clang, AddressSanitizer and
 UndefinedBehaviorSanitizer; every test build also replays the fixtures and `core/fuzz/seeds/`
 through the same entry points. To fuzz locally (Clang with libFuzzer, e.g. on Linux):
 

@@ -7,6 +7,7 @@
 
 #include "crypto_test_support.hpp"
 #include "group/group.hpp"
+#include "layout/layout.hpp"
 #include "mesh/mesh.hpp"
 
 #include <algorithm>
@@ -102,14 +103,29 @@ public:
 };
 
 /// Records what the group layer reports to the platform.
+/// The members of a group state, by device ID.
+inline std::set<DeviceId> members_of(const group::GroupState& state) {
+    std::set<DeviceId> members;
+    for (const group::Member& member : state.roster.members()) {
+        members.insert(member.device_id);
+    }
+    return members;
+}
+
 class RecordingGroupObserver final : public group::GroupObserver {
 public:
     std::optional<group::GroupState> stored; ///< what the platform would have saved last
     std::vector<std::pair<ConnectionId, std::uint32_t>> codes;
     std::vector<std::pair<ConnectionId, Error>> failures;
     std::vector<std::optional<Error>> left;
+    layout::Layout* layout = nullptr; ///< told about every change, as the platform glue does
 
-    void on_state_changed(const group::GroupState& state) override { stored = state; }
+    void on_state_changed(const group::GroupState& state) override {
+        stored = state;
+        if (layout != nullptr) {
+            layout->group_changed(state.group_id, members_of(state));
+        }
+    }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
                          const protocol::Hello& /*hello*/) override {
         codes.emplace_back(connection, code);
@@ -118,6 +134,17 @@ public:
         failures.emplace_back(connection, reason);
     }
     void on_left_group(std::optional<Error> reason) override { left.push_back(reason); }
+};
+
+class RecordingLayoutObserver final : public layout::LayoutObserver {
+public:
+    std::optional<layout::LayoutState> stored; ///< what the platform would have saved last
+    std::size_t changes = 0;
+
+    void on_layout_changed(const layout::LayoutState& state) override {
+        stored = state;
+        ++changes;
+    }
 };
 
 class SimulatedNode;
@@ -157,19 +184,28 @@ private:
 
 class SimulatedNode {
 public:
-    /// With a group state, a Group answers trust and sits between the mesh and `observer`.
+    /// With a group state, a Group answers trust and a Layout keeps the arrangement, between the
+    /// mesh and `observer`: mesh → group → layout → observer, as in the apps.
     SimulatedNode(SimulatedMeshNetwork& network, std::size_t index, mesh::MeshConfig config,
-                  std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt)
+                  std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt,
+                  layout::LayoutState layout_state = {})
         : random(seed), identity(key_pair(random)), transport(network, index),
+          layout(group_state ? std::make_unique<layout::Layout>(
+                                   crypto::device_id(identity.public_key()),
+                                   std::move(layout_state), layout_observer, observer)
+                             : nullptr),
           group(group_state ? std::make_unique<group::Group>(
                                   group::GroupConfig{.platform = config.platform,
                                                      .device_name = config.device_name},
-                                  identity, *group_state, random, group_observer, observer)
+                                  identity, *group_state, random, group_observer, *layout)
                             : nullptr),
           mesh(with_group(std::move(config), group_state), identity, random,
                group ? static_cast<mesh::MeshObserver&>(*group) : observer, transport),
           address{"node" + std::to_string(index), 49'152} {
         if (group) {
+            group_observer.layout = layout.get();
+            layout->group_changed(group_state->group_id, members_of(*group_state));
+            layout->attach(mesh);
             group->attach(mesh);
         }
     }
@@ -178,7 +214,9 @@ public:
     crypto::KeyPair identity;
     RecordingMeshObserver observer;
     RecordingGroupObserver group_observer;
+    RecordingLayoutObserver layout_observer;
     SimulatedTransport transport;
+    std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
     mesh::Mesh mesh;
     mesh::PeerAddress address;
@@ -216,10 +254,12 @@ public:
 
     SimulatedNode& add(const mesh::MeshConfig& node_config,
                        std::optional<group::GroupState> group_state = std::nullopt,
-                       std::optional<std::uint64_t> seed = std::nullopt) {
+                       std::optional<std::uint64_t> seed = std::nullopt,
+                       layout::LayoutState layout_state = {}) {
         const std::size_t index = nodes_.size();
         nodes_.push_back(std::make_unique<SimulatedNode>(*this, index, node_config,
-                                                         seed.value_or(7 + index), group_state));
+                                                         seed.value_or(7 + index), group_state,
+                                                         std::move(layout_state)));
         return *nodes_.back();
     }
     SimulatedNode& node(std::size_t index) { return *nodes_.at(index); }

@@ -49,6 +49,13 @@ add_library(osdrop_core STATIC
     src/group/group.cpp
     src/group/group_state.cpp
     src/group/roster.cpp
+    src/layout/arrangement.cpp
+    src/layout/crossing.cpp
+    src/layout/document.cpp
+    src/layout/edge_push.cpp
+    src/layout/layout.cpp
+    src/layout/layout_state.cpp
+    src/layout/screens.cpp
     src/mesh/mesh.cpp
     src/mesh/transfer_channel.cpp
     src/protocol/wire.cpp
