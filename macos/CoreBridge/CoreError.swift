@@ -36,6 +36,8 @@ public enum CoreError: Error, Equatable, Sendable {
     case groupFull
     /// The peer belongs to another group; one of them must leave it first.
     case inAnotherGroup
+    /// The arrangement has overlapping monitors, or a computer that touches no other.
+    case invalidLayout
     /// A code added to the core after this app was built.
     case unknown(code: UInt32)
 
@@ -73,6 +75,7 @@ public enum CoreError: Error, Equatable, Sendable {
         case OSDROP_ERROR_NOT_PERMITTED: self = .notPermitted
         case OSDROP_ERROR_GROUP_FULL: self = .groupFull
         case OSDROP_ERROR_IN_ANOTHER_GROUP: self = .inAnotherGroup
+        case OSDROP_ERROR_INVALID_LAYOUT: self = .invalidLayout
         default: self = .unknown(code: result.rawValue)
         }
     }
@@ -110,6 +113,7 @@ public enum CoreError: Error, Equatable, Sendable {
         case .notPermitted: OSDROP_ERROR_NOT_PERMITTED.rawValue
         case .groupFull: OSDROP_ERROR_GROUP_FULL.rawValue
         case .inAnotherGroup: OSDROP_ERROR_IN_ANOTHER_GROUP.rawValue
+        case .invalidLayout: OSDROP_ERROR_INVALID_LAYOUT.rawValue
         case .unknown(let code): code
         }
     }

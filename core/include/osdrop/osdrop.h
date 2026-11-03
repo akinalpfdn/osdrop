@@ -81,6 +81,7 @@ typedef enum osdrop_result {
     OSDROP_ERROR_GROUP_FULL = 29, /* the group already has the most computers allowed */
     OSDROP_ERROR_IN_ANOTHER_GROUP =
         30, /* the peer belongs to another group; one must leave first */
+    OSDROP_ERROR_INVALID_LAYOUT = 31, /* monitors overlap, or a computer touches no other */
     OSDROP_RESULT_MAX_ENUM = 0x7FFFFFFF
 } osdrop_result;
 
