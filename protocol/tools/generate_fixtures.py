@@ -148,9 +148,11 @@ def roster(members: list[bytes], revocations: list[bytes] | None = None, group: 
 
 
 def monitor(key: bytes, x: int, y: int, width: int, height: int, pixel_width: int, pixel_height: int,
-            flags: int = 0, reserved: int = 0) -> bytes:
-    return (key + coords(x, y) + i32(width) + i32(height) + u16(pixel_width) + u16(pixel_height) + u8(flags)
-            + u8(reserved))
+            flags: int = 0, reserved: int = 0, native: tuple[int, int, int, int] | None = None) -> bytes:
+    """`native` is the monitor in native cursor units; macOS monitors use their frame."""
+    nx, ny, nw, nh = native if native is not None else (x, y, width, height)
+    return (key + coords(x, y) + i32(width) + i32(height) + coords(nx, ny) + i32(nw) + i32(nh)
+            + u16(pixel_width) + u16(pixel_height) + u8(flags) + u8(reserved))
 
 
 def built_in(flags: int = 1) -> bytes:
@@ -270,6 +272,12 @@ def control_fixtures() -> list[Fixture]:
                 "built-in display and an external one on its left",
                 screen_report([built_in(), monitor(pattern(2), -2560 * 16, -240 * 16, 2560 * 16, 1440 * 16,
                                                    5120, 2880)])),
+        Fixture("control/screen_report_mixed_scale.bin", "control", v, 0x11,
+                "a PC: a 150% laptop panel and a 100% monitor on its right, in physical pixels",
+                screen_report([monitor(pattern(5), 0, 0, 1280 * 16, 800 * 16, 1920, 1200, 1,
+                                       native=(0, 0, 1920 * 16, 1200 * 16)),
+                               monitor(pattern(6), 1280 * 16, 0, 2560 * 16, 1440 * 16, 2560, 1440,
+                                       native=(1920 * 16, 0, 2560 * 16, 1440 * 16))])),
         Fixture("control/screen_report_bounds.bin", "control", v, 0x11,
                 "smallest and largest monitor sizes at the coordinate limits",
                 screen_report([monitor(pattern(3), -edge, -edge, 16, 16, 1, 1, 1),
@@ -451,6 +459,12 @@ def control_fixtures() -> list[Fixture]:
                 "pixel height 32769", screen_report([monitor(pattern(1), 0, 0, 16, 16, 1, 32769, 1)])),
         Fixture("malformed/screen_x_outside.bin", "control", e, VALUE_OUT_OF_RANGE, "x one past 2^28",
                 screen_report([monitor(pattern(1), edge + 1, 0, 16, 16, 1, 1, 1)])),
+        Fixture("malformed/screen_native_width_15.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "native width below one unit",
+                screen_report([monitor(pattern(1), 0, 0, 16, 16, 1, 1, 1, native=(0, 0, 15, 16))])),
+        Fixture("malformed/screen_native_y_outside.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "native y one below -2^28",
+                screen_report([monitor(pattern(1), 0, 0, 16, 16, 1, 1, 1, native=(0, -edge - 1, 16, 16))])),
         Fixture("malformed/screen_reserved_flag.bin", "control", e, VALUE_OUT_OF_RANGE, "flag bit 1",
                 screen_report([built_in(0b11)])),
         Fixture("malformed/screen_reserved_set.bin", "control", e, VALUE_OUT_OF_RANGE, "reserved byte is 1",

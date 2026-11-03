@@ -21,8 +21,10 @@ changes are additive and raise the minor version.
   receivers normalize again before using a name, so decoders do not check the form.
 - `path` is `u16 length` followed by 1–1024 bytes: names (as above) joined with `/`, relative,
   no empty component.
-- `coord` is an `i32` in 1/16 of a point (macOS points, Windows device-independent pixels),
-  from −2^28 to 2^28 (±16,777,216 points), so the sum of three coordinates fits an `i32`.
+- `coord` is an `i32` in 1/16 of a unit, from −2^28 to 2^28 (±16,777,216 units), so the sum of
+  three coordinates fits an `i32`. The unit is the *logical* one (macOS points, Windows
+  device-independent pixels) unless a field says *native*: the units the computer's own cursor
+  moves in (macOS points, Windows physical pixels).
 - `device_id` is `bytes[16]`: the first 16 bytes of BLAKE2b-256 over the device's static public
   key.
 - Fields marked *reserved* are written as 0 and must be 0 when read.
@@ -248,16 +250,23 @@ monitor:
 | Field | Type | Values |
 |-------|------|--------|
 | key | bytes[16] | stable identity of the monitor on its computer |
-| x | coord | frame in the computer's own desktop space |
+| x | coord | frame in the computer's logical desktop space |
 | y | coord | |
-| width | coord | 16 (one point) to 16 × 32768 |
+| width | coord | 16 (one unit) to 16 × 32768 |
 | height | coord | as width |
+| native_x | coord | the same monitor in native units, where the computer's cursor moves |
+| native_y | coord | |
+| native_width | coord | as width |
+| native_height | coord | as width |
 | pixel_width | u16 | 1–32768 |
 | pixel_height | u16 | 1–32768 |
 | flags | u8 | bit 0 primary display. Other bits reserved. |
 | reserved | u8 | 0 |
 
-Keys are unique; exactly one monitor is primary.
+Keys are unique; exactly one monitor is primary. On macOS the native rectangle is the frame. On
+Windows it is the monitor in physical pixels, and the frames are a logical arrangement the sender
+derives from it (see "Arrangement"), because Windows has no logical desktop when monitors use
+different scales.
 
 ### 0x12 LayoutState
 
@@ -290,7 +299,7 @@ new Enter ends the previous control_id.
 Shift, bit 2 left Option/Alt, bit 3 left Command/Windows, bit 4 right Control, bit 5 right Shift,
 bit 6 right Option/Alt, bit 7 right Command/Windows (0xE7).
 
-Positions (`x`, `y`) are in the endpoint's own desktop space.
+Positions (`x`, `y`) are native positions in the endpoint's desktop (see ScreenReport).
 
 #### 0x20 Enter
 

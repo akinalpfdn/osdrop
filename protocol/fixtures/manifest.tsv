@@ -21,6 +21,7 @@ control/roster_two_members.bin	control	valid	16	two members and a revocation
 control/roster_repaired_member.bin	control	valid	16	the same device at epochs 1 and 2, epoch 1 revoked
 control/roster_largest.bin	control	valid	16	64 members and 255 revocations
 control/screen_report_two.bin	control	valid	17	built-in display and an external one on its left
+control/screen_report_mixed_scale.bin	control	valid	17	a PC: a 150% laptop panel and a 100% monitor on its right, in physical pixels
 control/screen_report_bounds.bin	control	valid	17	smallest and largest monitor sizes at the coordinate limits
 control/layout_three.bin	control	valid	18	three computers, one detached
 control/enter.bin	control	valid	32	Enter with Shift held
@@ -111,6 +112,8 @@ malformed/screen_negative_height.bin	control	error	8	height -16
 malformed/screen_pixel_width_0.bin	control	error	8	pixel width 0
 malformed/screen_pixel_height_32769.bin	control	error	8	pixel height 32769
 malformed/screen_x_outside.bin	control	error	8	x one past 2^28
+malformed/screen_native_width_15.bin	control	error	8	native width below one unit
+malformed/screen_native_y_outside.bin	control	error	8	native y one below -2^28
 malformed/screen_reserved_flag.bin	control	error	8	flag bit 1
 malformed/screen_reserved_set.bin	control	error	8	reserved byte is 1
 malformed/layout_none.bin	control	error	8	placement_count 0

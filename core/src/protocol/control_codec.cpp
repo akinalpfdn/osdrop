@@ -106,6 +106,9 @@ Check validate(const ScreenReport& m) {
     for (const Monitor& monitor : m.monitors) {
         const bool valid = keys.insert(monitor.key).second && is_point(monitor.x, monitor.y) &&
                            is_monitor_size(monitor.width) && is_monitor_size(monitor.height) &&
+                           is_point(monitor.native_x, monitor.native_y) &&
+                           is_monitor_size(monitor.native_width) &&
+                           is_monitor_size(monitor.native_height) &&
                            in_range(monitor.pixel_width, 1, kMaxPixelSize) &&
                            in_range(monitor.pixel_height, 1, kMaxPixelSize);
         if (!valid) {
@@ -350,7 +353,9 @@ Decoded read_screen_report(BodyReader& b) {
     for (Monitor& monitor : m.monitors) {
         std::uint8_t flags = 0;
         if (!read_array(r, monitor.key) || !r.i32(monitor.x) || !r.i32(monitor.y) ||
-            !r.i32(monitor.width) || !r.i32(monitor.height) || !r.u16(monitor.pixel_width) ||
+            !r.i32(monitor.width) || !r.i32(monitor.height) || !r.i32(monitor.native_x) ||
+            !r.i32(monitor.native_y) || !r.i32(monitor.native_width) ||
+            !r.i32(monitor.native_height) || !r.u16(monitor.pixel_width) ||
             !r.u16(monitor.pixel_height) || !b.flags(1, flags) || !b.reserved(1)) {
             return decode_failure(Error::Truncated);
         }
@@ -632,6 +637,9 @@ void write_body(Writer& w, const ControlMessage& message) {
                            write_point(w, monitor.x, monitor.y);
                            w.i32(monitor.width);
                            w.i32(monitor.height);
+                           write_point(w, monitor.native_x, monitor.native_y);
+                           w.i32(monitor.native_width);
+                           w.i32(monitor.native_height);
                            w.u16(monitor.pixel_width);
                            w.u16(monitor.pixel_height);
                            w.u8(static_cast<std::uint8_t>(monitor.primary));
