@@ -396,8 +396,8 @@ void Sender::read_next(const StreamKey& key, Serving& serving, std::uint32_t req
     serving.reading = request_id;
     executor_.run_file_work(
         [this, key, request_id, read = serving.read, budget = tunables_.read_batch] {
-            Batch batch = read_batch(*read, budget);
-            executor_.run_on_mesh([this, key, request_id, batch = std::move(batch)](TimePoint) {
+            Batch result = read_batch(*read, budget);
+            executor_.run_on_mesh([this, key, request_id, batch = std::move(result)](TimePoint) {
                 read_done(key, request_id, batch);
             });
         });

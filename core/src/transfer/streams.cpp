@@ -44,12 +44,12 @@ void Streams::open(const mesh::DeviceId& device,
         opened(Expected<std::uint32_t, Error>::failure(Error::InvalidState));
         return;
     }
-    mesh_->defer([this, device, opened = std::move(opened)](mesh::Mesh& mesh, TimePoint now) {
+    mesh_->defer([this, device, done = std::move(opened)](mesh::Mesh& mesh, TimePoint now) {
         auto stream = mesh.open_transfer(device, now);
         if (stream) {
             outboxes_.try_emplace(StreamKey{.device = device, .id = stream.value()});
         }
-        opened(stream);
+        done(stream);
     });
 }
 
