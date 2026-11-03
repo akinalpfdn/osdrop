@@ -95,3 +95,12 @@ choices the plan leaves open are logged here.
 **Revisit if:** Input observation moves to a component that App Nap does not apply to.
 
 ---
+
+## 2026-11-03 — User decision: core phases before the Windows gates
+**Chosen:** With the Windows PC away, Phases 5–9 (protocol, crypto, sessions and mesh, group membership, layout and crossing) run before Phases 3 and 4 (Windows input process and drag bridge). Phases 3 and 4 run when the PC is back, and both must be done before Phase 10.
+**Alternatives:** Writing Phase 3 as code only and leaving its hardware gate open; pausing until the PC is back.
+**Why:** Phases 5–9 live in `core` and are verified completely on the Mac and in CI; none depends on how Windows captures input. Writing Windows input code without its gate would pile up work that a failed gate could invalidate.
+**Trade-offs:** The Windows go/no-go gates are answered later, so a Windows design change would be found after the core is built (the core does not depend on it).
+**Revisit if:** The PC comes back before Phase 9 ends; Phase 3 can then start at the next phase boundary.
+
+---
