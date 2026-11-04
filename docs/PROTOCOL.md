@@ -301,6 +301,18 @@ bit 6 right Option/Alt, bit 7 right Command/Windows (0xE7).
 
 Positions (`x`, `y`) are native positions in the endpoint's desktop (see ScreenReport).
 
+An endpoint follows one controller at a time. Another computer's Enter while it is controlled, or
+while its own input is on another computer, gets Refuse 4 (busy); one while its screen is locked,
+it is going to sleep or it may not inject input gets Refuse 1, 2 or 3. When that happens during
+control, the endpoint sends Refuse with the current `control_id` and releases what it holds. A
+Refuse or LocalTakeover with the current `control_id` ends the controller's capture, and its
+cursor reappears where it left.
+
+An endpoint injects the release of a key or button only if it pressed it, and releases everything
+it holds on Leave, ReleaseAll (the control goes on), physical input of its own (it sends
+LocalTakeover), and a controller that stops answering or leaves. It sends CursorReport when
+something other than the controller moved its cursor by more than one unit.
+
 #### 0x20 Enter
 
 | Field | Type | Values |
