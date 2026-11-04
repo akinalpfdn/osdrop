@@ -1,6 +1,8 @@
 # Platform-independent pieces of the Windows build (names, protocols, mappings), kept free of
 # Windows headers so they can be unit tested and linted on every host.
 add_library(osdrop_win_shared STATIC
+    src/clipboard_sync.cpp
+    src/clipboard_text.cpp
     src/group_engine.cpp
     src/product_names.cpp
     src/screens.cpp
@@ -14,6 +16,8 @@ target_link_libraries(osdrop_win_shared PUBLIC osdrop::core PRIVATE osdrop::warn
 
 if(OSDROP_CORE_BUILD_TESTS)
     add_executable(osdrop_win_shared_tests
+        tests/clipboard_sync_test.cpp
+        tests/clipboard_text_test.cpp
         tests/group_engine_test.cpp
         tests/product_names_test.cpp
         tests/screens_test.cpp
