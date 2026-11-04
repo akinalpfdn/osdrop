@@ -1,5 +1,6 @@
 #include "capi/random_source.hpp"
 #include "clipboard/clipboard.hpp"
+#include "control/control.hpp"
 #include "crypto/noise.hpp"
 #include "group/group.hpp"
 #include "group/group_state.hpp"
@@ -35,6 +36,7 @@ namespace {
 
 namespace group = osdrop::group;
 namespace clipboard = osdrop::clipboard;
+namespace control = osdrop::control;
 namespace layout = osdrop::layout;
 namespace mesh = osdrop::mesh;
 namespace protocol = osdrop::protocol;
@@ -61,8 +63,95 @@ static_assert(OSDROP_CLIPBOARD_TEXT == static_cast<int>(protocol::ClipboardForma
               OSDROP_CLIPBOARD_IMAGE == static_cast<int>(protocol::ClipboardFormat::Image) &&
               OSDROP_CLIPBOARD_FILES == static_cast<int>(protocol::ClipboardFormat::Files));
 
+constexpr std::uint8_t kMaxButton = 31;
+constexpr std::uint8_t kMaxScrollPhase = 5;
+constexpr std::uint8_t kMaxMomentumPhase = 3;
+
 osdrop_result to_result(Error error) {
     return static_cast<osdrop_result>(error);
+}
+
+/// Physical input from the platform, checked.
+osdrop::Expected<control::Input, Error> to_physical_input(const osdrop_input& input) {
+    using Result = osdrop::Expected<control::Input, Error>;
+    switch (input.kind) {
+    case OSDROP_INPUT_POINTER:
+        return Result(control::PointerMoved{.position = {.x = input.x, .y = input.y},
+                                            .delta = {.x = input.dx, .y = input.dy}});
+    case OSDROP_INPUT_KEY:
+        if ((input.page != protocol::kKeyboardPage && input.page != protocol::kConsumerPage) ||
+            input.usage == 0 || input.action < 1 || input.action > 3) {
+            return Result::failure(Error::InvalidArgument);
+        }
+        return Result(control::KeyInput{.key = {.page = input.page, .usage = input.usage},
+                                        .action = static_cast<protocol::KeyAction>(input.action)});
+    case OSDROP_INPUT_BUTTON:
+        if (input.button > kMaxButton || input.action < 1 || input.action > 2 ||
+            input.click_count == 0) {
+            return Result::failure(Error::InvalidArgument);
+        }
+        return Result(
+            control::ButtonInput{.button = input.button,
+                                 .action = static_cast<protocol::ButtonAction>(input.action),
+                                 .click_count = input.click_count});
+    case OSDROP_INPUT_SCROLL:
+        if (input.scroll_unit < 1 || input.scroll_unit > 2 ||
+            input.scroll_phase > kMaxScrollPhase || input.momentum > kMaxMomentumPhase) {
+            return Result::failure(Error::InvalidArgument);
+        }
+        return Result(
+            control::ScrollInput{.unit = static_cast<protocol::ScrollUnit>(input.scroll_unit),
+                                 .phase = static_cast<protocol::ScrollPhase>(input.scroll_phase),
+                                 .momentum = static_cast<protocol::MomentumPhase>(input.momentum),
+                                 .dx = input.dx,
+                                 .dy = input.dy});
+    default:
+        return Result::failure(Error::InvalidArgument);
+    }
+}
+
+/// An event for the platform to inject, as the C API carries it.
+osdrop_input to_input(const control::Injection& injection) {
+    osdrop_input input{.kind = OSDROP_INPUT_POINTER,
+                       .x = 0,
+                       .y = 0,
+                       .dx = 0,
+                       .dy = 0,
+                       .page = 0,
+                       .usage = 0,
+                       .action = 0,
+                       .button = 0,
+                       .click_count = 0,
+                       .scroll_unit = 0,
+                       .scroll_phase = 0,
+                       .momentum = 0};
+    if (const auto* move = std::get_if<control::MoveCursor>(&injection)) {
+        input.kind = OSDROP_INPUT_POINTER;
+        input.x = static_cast<std::int32_t>(move->position.x);
+        input.y = static_cast<std::int32_t>(move->position.y);
+    } else if (const auto* key = std::get_if<protocol::KeyEvent>(&injection)) {
+        input.kind = OSDROP_INPUT_KEY;
+        input.page = key->page;
+        input.usage = key->usage;
+        input.action = static_cast<std::uint8_t>(key->action);
+    } else if (const auto* button = std::get_if<protocol::ButtonEvent>(&injection)) {
+        input.kind = OSDROP_INPUT_BUTTON;
+        input.x = button->x;
+        input.y = button->y;
+        input.action = static_cast<std::uint8_t>(button->action);
+        input.button = button->button;
+        input.click_count = button->click_count;
+    } else if (const auto* scroll = std::get_if<protocol::ScrollEvent>(&injection)) {
+        input.kind = OSDROP_INPUT_SCROLL;
+        input.x = scroll->x;
+        input.y = scroll->y;
+        input.dx = scroll->dx;
+        input.dy = scroll->dy;
+        input.scroll_unit = static_cast<std::uint8_t>(scroll->unit);
+        input.scroll_phase = static_cast<std::uint8_t>(scroll->phase);
+        input.momentum = static_cast<std::uint8_t>(scroll->momentum);
+    }
+    return input;
 }
 
 osdrop_result to_result(const osdrop::Status<Error>& status) {
@@ -151,16 +240,18 @@ class CallbackObserver final : public group::GroupObserver,
                                public layout::LayoutObserver,
                                public transfer::TransferObserver,
                                public clipboard::ClipboardObserver,
+                               public control::ControlObserver,
                                public mesh::MeshObserver {
 public:
     explicit CallbackObserver(const osdrop_mesh_callbacks& callbacks) : callbacks_(callbacks) {}
 
     /// The layers to tell about group changes; set once, before the mesh starts.
     void follow(layout::Layout& arrangement, transfer::TransferService& transfers,
-                clipboard::Clipboard& shared) {
+                clipboard::Clipboard& shared, control::Control& input) {
         layout_ = &arrangement;
         transfers_ = &transfers;
         clipboard_ = &shared;
+        control_ = &input;
     }
 
     // --- group::GroupObserver ---
@@ -173,6 +264,9 @@ public:
         }
         if (clipboard_ != nullptr) {
             clipboard_->set_members(state.clipboard_members());
+        }
+        if (control_ != nullptr) {
+            control_->set_controllers(state.controllers());
         }
         if (callbacks_.group_changed != nullptr) {
             const std::vector<std::uint8_t> bytes = group::encode_state(state);
@@ -324,11 +418,57 @@ public:
                                      formats.data(), formats.size());
     }
 
+    // --- control::ControlObserver ---
+    void on_capture_began(const mesh::DeviceId& device,
+                          std::span<const control::HeldKey> release_here) override {
+        if (callbacks_.capture_began == nullptr) {
+            return;
+        }
+        std::vector<osdrop_input> keys;
+        keys.reserve(release_here.size());
+        for (const control::HeldKey& key : release_here) {
+            keys.push_back(to_input(protocol::KeyEvent{.control_id = 0,
+                                                       .page = key.page,
+                                                       .usage = key.usage,
+                                                       .action = protocol::KeyAction::Up}));
+        }
+        callbacks_.capture_began(callbacks_.context, device.data(), keys.data(), keys.size());
+    }
+    void on_capture_ended(const control::CaptureEnded& ended) override {
+        if (callbacks_.capture_ended != nullptr) {
+            callbacks_.capture_ended(
+                callbacks_.context, ended.device.data(), static_cast<std::int32_t>(ended.cursor.x),
+                static_cast<std::int32_t>(ended.cursor.y), static_cast<std::uint8_t>(ended.reason),
+                ended.refused ? static_cast<std::uint8_t>(*ended.refused) : 0);
+        }
+    }
+    void on_controlled(const std::optional<mesh::DeviceId>& controller) override {
+        if (callbacks_.controlled != nullptr) {
+            callbacks_.controlled(callbacks_.context, controller ? controller->data() : nullptr);
+        }
+    }
+    void on_inject(const control::Injection& injection) override {
+        if (callbacks_.inject != nullptr) {
+            const osdrop_input input = to_input(injection);
+            callbacks_.inject(callbacks_.context, &input);
+        }
+    }
+    void on_input_latency(const mesh::DeviceId& controller,
+                          const control::LatencyStats& stats) override {
+        if (callbacks_.input_latency != nullptr) {
+            callbacks_.input_latency(callbacks_.context, controller.data(),
+                                     static_cast<std::uint32_t>(stats.samples),
+                                     static_cast<std::uint32_t>(stats.median.count()),
+                                     static_cast<std::uint32_t>(stats.p99.count()));
+        }
+    }
+
 private:
     osdrop_mesh_callbacks callbacks_;
     layout::Layout* layout_ = nullptr;
     transfer::TransferService* transfers_ = nullptr;
     clipboard::Clipboard* clipboard_ = nullptr;
+    control::Control* control_ = nullptr;
 };
 
 /// File work on the file thread; results back on the node's I/O thread, with the mesh flushed.
@@ -493,6 +633,7 @@ struct osdrop_mesh {
     CallbackObserver observer;
     transfer::FileThread file_thread;
     NodeExecutor executor;
+    std::unique_ptr<control::Control> control;
     std::unique_ptr<clipboard::Clipboard> clipboard;
     std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
@@ -551,20 +692,24 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (!handle) {
         return OSDROP_ERROR_INTERNAL;
     }
-    // mesh → group → layout → transfers → clipboard → callbacks; the clipboard also stands
-    // between the transfers and the callbacks.
+    // mesh → group → layout → transfers → clipboard → control → callbacks; the clipboard also
+    // stands between the transfers and the callbacks, the control between the layout and them.
     const mesh::DeviceId self = osdrop::crypto::device_id(identity.value().public_key());
+    handle->control = std::make_unique<control::Control>(
+        self, control::ControlTunables{}, handle->observer, handle->observer, handle->observer);
     handle->clipboard = std::make_unique<clipboard::Clipboard>(self, handle->observer,
-                                                               handle->observer, handle->observer);
+                                                               handle->observer, *handle->control);
     handle->transfers = std::make_unique<transfer::TransferService>(
         transfer::TransferTunables{.max_streams = config->max_transfer_streams}, handle->executor,
         *handle->clipboard, *handle->clipboard);
     handle->layout = std::make_unique<layout::Layout>(self, std::move(arrangement.value()),
-                                                      handle->observer, *handle->transfers);
-    handle->observer.follow(*handle->layout, *handle->transfers, *handle->clipboard);
+                                                      *handle->control, *handle->transfers);
+    handle->observer.follow(*handle->layout, *handle->transfers, *handle->clipboard,
+                            *handle->control);
     handle->layout->group_changed(state.value().group_id, members_of(state.value()));
     handle->transfers->set_files_permitted(state.value().file_senders());
     handle->clipboard->set_members(state.value().clipboard_members());
+    handle->control->set_controllers(state.value().controllers());
     handle->group = std::make_unique<group::Group>(
         group::GroupConfig{.platform = mesh_config.platform, .device_name = name}, identity.value(),
         std::move(state.value()), handle->random, handle->observer, *handle->layout);
@@ -572,14 +717,17 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     layout::Layout& arrangement_layer = *handle->layout;
     transfer::TransferService& transfer_layer = *handle->transfers;
     clipboard::Clipboard& clipboard_layer = *handle->clipboard;
+    control::Control& control_layer = *handle->control;
     auto node = osdrop::transport::AsioNode::create(
         std::move(mesh_config), std::move(identity.value()), handle->random, member_layer,
         osdrop::transport::NodeOptions{.listen_port = config->listen_port},
-        [&member_layer, &arrangement_layer, &transfer_layer, &clipboard_layer](mesh::Mesh& mesh) {
+        [&member_layer, &arrangement_layer, &transfer_layer, &clipboard_layer,
+         &control_layer](mesh::Mesh& mesh) {
             member_layer.attach(mesh);
             arrangement_layer.attach(mesh);
             transfer_layer.attach(mesh);
             clipboard_layer.attach(mesh, transfer_layer);
+            control_layer.attach(mesh, arrangement_layer);
         });
     if (!node) {
         return to_result(node.error());
@@ -924,6 +1072,76 @@ osdrop_result osdrop_mesh_clipboard_copied(osdrop_mesh* mesh,
         return to_result(result.error());
     }
     *out_clip_id = result.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_input(osdrop_mesh* mesh, const osdrop_input* input, uint64_t age_us) {
+    if (mesh == nullptr || input == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    auto event = to_physical_input(*input);
+    if (!event) {
+        return to_result(event.error());
+    }
+    const TimePoint captured = osdrop::Clock::now() - osdrop::Microseconds(age_us);
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run(
+        [&input_layer, event = event.value(), captured](mesh::Mesh& node_mesh, TimePoint now) {
+            input_layer.input(event, captured);
+            node_mesh.flush(now);
+        });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_return_home(osdrop_mesh* mesh, uint8_t input_lost) {
+    if (mesh == nullptr || input_lost > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto reason = input_lost == 1 ? protocol::LeaveReason::ControllerLost
+                                        : protocol::LeaveReason::ReleasedByHotkey;
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, reason](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.return_home(reason);
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_lock_input(osdrop_mesh* mesh, uint8_t locked) {
+    if (mesh == nullptr || locked > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, locked](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.set_locked(locked == 1);
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason) {
+    if (mesh == nullptr || reason > static_cast<std::uint8_t>(protocol::RefuseReason::Asleep)) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const std::optional<protocol::RefuseReason> refused =
+        reason == 0 ? std::nullopt : std::optional(static_cast<protocol::RefuseReason>(reason));
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, refused](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.set_unavailable(refused);
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_cursor_moved(osdrop_mesh* mesh, int32_t x, int32_t y) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, x, y](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.cursor_moved({.x = x, .y = y});
+        node_mesh.flush(now);
+    });
     return OSDROP_OK;
 }
 

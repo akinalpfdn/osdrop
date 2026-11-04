@@ -294,6 +294,39 @@ typedef struct osdrop_announced_format {
     uint64_t byte_count; /* for FILES, the total of the files */
 } osdrop_announced_format;
 
+/* NOLINTBEGIN(cppcoreguidelines-use-enum-class,performance-enum-size) */
+typedef enum osdrop_input_kind {
+    OSDROP_INPUT_POINTER = 1, /* physical: x, y where this computer's cursor is, dx, dy the
+                                 movement; to inject: move the cursor to x, y */
+    OSDROP_INPUT_KEY = 2,
+    OSDROP_INPUT_BUTTON = 3,
+    OSDROP_INPUT_SCROLL = 4,
+    OSDROP_INPUT_KIND_MAX_ENUM = 0x7FFFFFFF
+} osdrop_input_kind;
+/* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
+
+/*
+ * One input event: physical input this computer captured, or input another computer sends to be
+ * injected here. Positions are native, in 1/16 point (docs/PROTOCOL.md, "Conventions"); buttons
+ * and scrolls to inject carry the position they happen at.
+ */
+typedef struct osdrop_input {
+    osdrop_input_kind kind;
+    int32_t x;
+    int32_t y;
+    int32_t dx; /* pointer: 1/16 point; scroll: 1/256 of a unit, positive moves content
+                   right and down */
+    int32_t dy;
+    uint16_t page;        /* key: 7 keyboard, 12 consumer */
+    uint16_t usage;       /* key: the HID usage */
+    uint8_t action;       /* key: 1 down, 2 up, 3 repeat; button: 1 down, 2 up */
+    uint8_t button;       /* 0 left, 1 right, 2 middle, 3-31 others */
+    uint8_t click_count;  /* button: 1 or more, from this computer's double-click settings */
+    uint8_t scroll_unit;  /* 1 lines (wheels), 2 points (trackpads, continuous wheels) */
+    uint8_t scroll_phase; /* 0 none, 1 may begin, 2 began, 3 changed, 4 ended, 5 cancelled */
+    uint8_t momentum;     /* 0 none, 1 began, 2 changed, 3 ended */
+} osdrop_input;
+
 typedef struct osdrop_transfer_progress {
     uint64_t transfer_id;
     uint64_t bytes_done;
@@ -360,6 +393,28 @@ typedef struct osdrop_mesh_callbacks {
      * or the reason. */
     void (*content_received)(void* context, uint64_t transfer_id, osdrop_result result,
                              const uint8_t* data, size_t size);
+    /*
+     * The cursor went to the member `device_id`: capture this computer's input and hide its
+     * cursor. The keys in `release_here` (KEY events with action 2) went down on this computer;
+     * release them here, since their release now goes to the other computer.
+     */
+    void (*capture_began)(void* context, const uint8_t* device_id, const osdrop_input* release_here,
+                          size_t count);
+    /*
+     * The cursor came back from `device_id`: give the input back and show the cursor at `x`, `y`.
+     * `reason`: 1 pushed back, 2 hotkey, 3 capture lost, 4 refused (`refused`: 1 locked,
+     * 2 asleep, 3 not permitted, 4 busy; otherwise 0), 5 someone used the other computer, 6 the
+     * other computer stopped answering, left or stopped accepting control.
+     */
+    void (*capture_ended)(void* context, const uint8_t* device_id, int32_t x, int32_t y,
+                          uint8_t reason, uint8_t refused);
+    /* The member `controller_id` controls this computer now; NULL when the control ended. */
+    void (*controlled)(void* context, const uint8_t* controller_id);
+    /* Input from the controller to apply here as if this computer's own devices produced it. */
+    void (*inject)(void* context, const osdrop_input* input);
+    /* While this computer is controlled: motion latency from the controller's capture to here. */
+    void (*input_latency)(void* context, const uint8_t* controller_id, uint32_t samples,
+                          uint32_t median_us, uint32_t p99_us);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -547,6 +602,25 @@ osdrop_result osdrop_mesh_clipboard_copied(osdrop_mesh* mesh,
 osdrop_result osdrop_mesh_fetch_content(osdrop_mesh* mesh, const uint8_t* device_id,
                                         const osdrop_object_ref* item, uint64_t max_bytes,
                                         uint64_t* out_transfer_id);
+
+/*
+ * Physical input on this computer, captured `age_us` microseconds ago: all of it, whether the
+ * cursor is here or on another computer. Physical input while another computer controls this one
+ * ends that control at once. Does not wait for the I/O thread.
+ */
+osdrop_result osdrop_mesh_input(osdrop_mesh* mesh, const osdrop_input* input, uint64_t age_us);
+/* Brings the cursor home to where it left: `input_lost` 0 for the user's hotkey, 1 when the
+ * platform lost its capture. */
+osdrop_result osdrop_mesh_return_home(osdrop_mesh* mesh, uint8_t input_lost);
+/* "Lock input here": while `locked` is 1, the cursor stays on the computer it is on. */
+osdrop_result osdrop_mesh_lock_input(osdrop_mesh* mesh, uint8_t locked);
+/*
+ * Whether this computer can be controlled: 0 yes, 1 its screen is locked, 2 it is going to sleep.
+ * Other computers are refused with that reason, and a computer controlling it is released.
+ */
+osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason);
+/* While this computer is controlled: where its cursor really is, when something else moved it. */
+osdrop_result osdrop_mesh_cursor_moved(osdrop_mesh* mesh, int32_t x, int32_t y);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.
