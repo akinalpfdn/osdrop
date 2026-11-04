@@ -38,6 +38,7 @@ add_library(osdrop_core STATIC
     src/capi/mesh_capi.cpp
     src/capi/protocol_capi.cpp
     src/capi/version.cpp
+    src/clipboard/clipboard.cpp
     src/crypto/input_crypto.cpp
     src/crypto/noise.cpp
     src/crypto/primitives.cpp

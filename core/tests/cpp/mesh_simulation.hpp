@@ -6,6 +6,7 @@
 // every byte on the wire. File work of the transfer engine runs between steps, on the test's
 // thread, unless a node holds it back (a slow disk).
 
+#include "clipboard/clipboard.hpp"
 #include "crypto_test_support.hpp"
 #include "group/group.hpp"
 #include "layout/layout.hpp"
@@ -124,6 +125,7 @@ public:
     std::vector<std::optional<Error>> left;
     layout::Layout* layout = nullptr; ///< told about every change, as the platform glue does
     transfer::TransferService* transfers = nullptr; ///< as well
+    clipboard::Clipboard* clipboard = nullptr;      ///< as well
 
     void on_state_changed(const group::GroupState& state) override {
         stored = state;
@@ -132,6 +134,9 @@ public:
         }
         if (transfers != nullptr) {
             transfers->set_files_permitted(state.file_senders());
+        }
+        if (clipboard != nullptr) {
+            clipboard->set_members(state.clipboard_members());
         }
     }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
@@ -183,6 +188,7 @@ public:
     std::vector<transfer::OfferReady> offers;
     std::vector<transfer::TransferProgress> progress;
     std::vector<transfer::TransferOutcome> finished;
+    std::vector<transfer::ContentOutcome> contents;
 
     void on_offer_ready(const transfer::OfferReady& ready) override { offers.push_back(ready); }
     void on_transfer_progress(const transfer::TransferProgress& update) override {
@@ -191,6 +197,16 @@ public:
     void on_transfer_finished(const transfer::TransferOutcome& outcome) override {
         finished.push_back(outcome);
     }
+    void on_content_received(const transfer::ContentOutcome& outcome) override {
+        contents.push_back(outcome);
+    }
+};
+
+class RecordingClipboardObserver final : public clipboard::ClipboardObserver {
+public:
+    std::vector<clipboard::RemoteClip> clips;
+
+    void on_remote_clip(const clipboard::RemoteClip& clip) override { clips.push_back(clip); }
 };
 
 class RecordingLayoutObserver final : public layout::LayoutObserver {
@@ -242,16 +258,20 @@ private:
 
 class SimulatedNode {
 public:
-    /// With a group state, a Group answers trust, a Layout keeps the arrangement and a
-    /// TransferService moves files, between the mesh and `observer`: mesh → group → layout →
-    /// transfers → observer, as in the apps.
+    /// With a group state, a Group answers trust, a Layout keeps the arrangement, a
+    /// TransferService moves files and a Clipboard shares copies, between the mesh and
+    /// `observer`: mesh → group → layout → transfers → clipboard → observer, as in the apps.
     SimulatedNode(SimulatedMeshNetwork& network, std::size_t index, mesh::MeshConfig config,
                   std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt,
                   layout::LayoutState layout_state = {},
                   const transfer::TransferTunables& transfer_tunables = {})
         : random(seed), identity(key_pair(random)), transport(network, index),
+          clipboard(group_state ? std::make_unique<clipboard::Clipboard>(
+                                      crypto::device_id(identity.public_key()), clipboard_observer,
+                                      transfer_observer, observer)
+                                : nullptr),
           transfers(group_state ? std::make_unique<transfer::TransferService>(
-                                      transfer_tunables, executor, transfer_observer, observer)
+                                      transfer_tunables, executor, *clipboard, *clipboard)
                                 : nullptr),
           layout(group_state ? std::make_unique<layout::Layout>(
                                    crypto::device_id(identity.public_key()),
@@ -268,9 +288,12 @@ public:
         if (group) {
             group_observer.layout = layout.get();
             group_observer.transfers = transfers.get();
+            group_observer.clipboard = clipboard.get();
             layout->group_changed(group_state->group_id, members_of(*group_state));
             transfers->set_files_permitted(group_state->file_senders());
+            clipboard->set_members(group_state->clipboard_members());
             transfers->attach(mesh);
+            clipboard->attach(mesh, *transfers);
             layout->attach(mesh);
             group->attach(mesh);
         }
@@ -283,7 +306,9 @@ public:
     RecordingLayoutObserver layout_observer;
     ManualExecutor executor;
     RecordingTransferObserver transfer_observer;
+    RecordingClipboardObserver clipboard_observer;
     SimulatedTransport transport;
+    std::unique_ptr<clipboard::Clipboard> clipboard;
     std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
