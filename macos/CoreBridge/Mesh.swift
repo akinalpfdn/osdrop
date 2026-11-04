@@ -273,6 +273,21 @@ public final class Mesh: Sendable {
         try check(handle.withPointer { osdrop_mesh_set_unavailable($0, reason?.code ?? 0) })
     }
 
+    public func setInputSettings(_ settings: InputSettings) throws(CoreError) {
+        var raw = settings.raw
+        try check(handle.withPointer { osdrop_mesh_set_input_settings($0, &raw) })
+    }
+
+    /// The pointer speed on `device`, in thousandths of this Mac's own: 250 to 4000.
+    public func setPointerSpeed(_ permille: UInt32, for device: DeviceID) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_set_pointer_speed($0, device.bytes, permille) })
+    }
+
+    /// Caps Lock on this Mac, whenever it changes while the cursor is home.
+    public func setCapsLock(_ on: Bool) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_set_caps_lock($0, on ? 1 : 0) })
+    }
+
     /// While controlled: where this Mac's cursor really is, when something else moved it.
     public func cursorMoved(to position: CoordPoint) throws(CoreError) {
         try check(handle.withPointer { osdrop_mesh_cursor_moved($0, position.x, position.y) })
@@ -446,13 +461,12 @@ private final class MeshCallbackBox: Sendable {
             let released = (0..<count).compactMap { index in keys.map { ControlInput($0[index]) } }
             MeshCallbackBox.from(context)?.control.yield(.captureBegan(deviceID(device), releaseHere: released))
         }
-        callbacks.capture_ended = { context, device, x, y, reason, refused in
+        callbacks.capture_ended = { context, device, x, y, reason, refused, capsLock in
             guard let device else { return }
             MeshCallbackBox.from(context)?.control.yield(
                 .captureEnded(
                     deviceID(device), cursor: CoordPoint(x: x, y: y),
-                    reason: CaptureEnd(reason: reason, refused: refused)
-                ))
+                    reason: CaptureEnd(reason: reason, refused: refused), capsLock: capsLock == 1))
         }
         callbacks.controlled = { context, controller in
             MeshCallbackBox.from(context)?.control.yield(.controlled(by: controller.map { deviceID($0) }))

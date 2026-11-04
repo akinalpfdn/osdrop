@@ -202,6 +202,9 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
     func lockInput(_ locked: Bool) {}
     func setUnavailable(_ reason: ControlUnavailability?) {}
     func cursorMoved(to position: CoordPoint) {}
+    func setInputSettings(_ settings: InputSettings) {}
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
+    func setCapsLock(_ on: Bool) {}
     private let continuation: AsyncStream<MeshEvent>.Continuation
     private let lock = NSLock()
     private var group: GroupID?
