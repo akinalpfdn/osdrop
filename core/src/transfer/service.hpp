@@ -14,7 +14,9 @@
 #include "transfer/streams.hpp"
 #include "transfer/types.hpp"
 
+#include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <set>
 #include <string_view>
 #include <vector>
@@ -40,6 +42,12 @@ public:
                                       std::set<mesh::DeviceId> audience) {
         return sender_.offer(item, std::move(roots), std::move(audience));
     }
+    [[nodiscard]] Status<Error>
+    offer_content(const protocol::ObjectRef& item,
+                  std::shared_ptr<const std::vector<std::uint8_t>> bytes,
+                  std::set<mesh::DeviceId> audience) {
+        return sender_.offer_content(item, std::move(bytes), std::move(audience));
+    }
     void withdraw(protocol::ObjectKind kind, std::uint64_t object_id) {
         sender_.withdraw(kind, object_id);
     }
@@ -47,8 +55,14 @@ public:
     // --- Receiving (Receiver) ---
     [[nodiscard]] Expected<TransferId, Error> receive(const mesh::DeviceId& device,
                                                       const protocol::ObjectRef& item,
-                                                      const std::filesystem::path& destination) {
-        return receiver_.receive(device, item, destination);
+                                                      const std::filesystem::path& destination,
+                                                      std::uint64_t max_bytes = UINT64_MAX) {
+        return receiver_.receive(device, item, destination, max_bytes);
+    }
+    [[nodiscard]] Expected<TransferId, Error> fetch_content(const mesh::DeviceId& device,
+                                                            const protocol::ObjectRef& item,
+                                                            std::uint64_t max_bytes) {
+        return receiver_.fetch_content(device, item, max_bytes);
     }
     void cancel(TransferId id) { receiver_.cancel(id); }
     void set_files_permitted(std::set<mesh::DeviceId> devices) {

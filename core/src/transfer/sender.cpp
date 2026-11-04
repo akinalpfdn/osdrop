@@ -183,8 +183,32 @@ Status<Error> Sender::offer(const protocol::ObjectRef& item,
                   .tree = nullptr,
                   .scan_error = std::nullopt,
                   .generation = next_generation_++,
-                  .digests = std::make_shared<DigestCache>()};
+                  .digests = std::make_shared<DigestCache>(),
+                  .content = nullptr,
+                  .content_digest = {}};
     scan(item, offer);
+    return Status<Error>::ok();
+}
+
+Status<Error> Sender::offer_content(const protocol::ObjectRef& item,
+                                    std::shared_ptr<const std::vector<std::uint8_t>> bytes,
+                                    std::set<mesh::DeviceId> audience) {
+    if (bytes == nullptr || item.kind != protocol::ObjectKind::Clipboard ||
+        item.item_index == protocol::kFilesClipboardFormat) {
+        return Status<Error>::failure(Error::InvalidArgument);
+    }
+    drop_jobs([&](const StreamKey& /*key*/, const Job& job) { return job.item == item; },
+              Error::Cancelled);
+    crypto::ContentHasher hasher;
+    hasher.update(*bytes);
+    offers_[item] = Offer{.roots = {},
+                          .audience = std::move(audience),
+                          .tree = nullptr,
+                          .scan_error = std::nullopt,
+                          .generation = next_generation_++,
+                          .digests = nullptr,
+                          .content = std::move(bytes),
+                          .content_digest = hasher.finish()};
     return Status<Error>::ok();
 }
 
@@ -332,6 +356,13 @@ bool Sender::serve_front(const StreamKey& key, Serving& serving) {
         finish_job(key, serving, Error::NotPermitted);
         return true;
     }
+    if (offer->second.content) {
+        if (job.manifest) { // single contents have no manifest
+            finish_job(key, serving, Error::InvalidArgument);
+            return true;
+        }
+        return serve_memory(key, serving, job, offer->second);
+    }
     if (offer->second.scan_error) {
         finish_job(key, serving, offer->second.scan_error);
         return true;
@@ -391,6 +422,37 @@ bool Sender::serve_content(const StreamKey& key, Serving& serving, const Job& jo
         read_next(key, serving, job.request_id);
     }
     return false; // read_done() or pumped() continues
+}
+
+bool Sender::serve_memory(const StreamKey& key, Serving& serving, const Job& job,
+                          const Offer& offer) {
+    const std::vector<std::uint8_t>& bytes = *offer.content;
+    if (job.entry != 0 || job.offset > bytes.size()) {
+        finish_job(key, serving, Error::InvalidArgument);
+        return true;
+    }
+    const std::uint64_t end =
+        job.offset + std::min<std::uint64_t>(job.length, bytes.size() - job.offset);
+    std::uint64_t position = job.offset + serving.sent;
+    while (position < end && streams_.queued_bytes(key) < tunables_.send_low_water) {
+        const auto size = static_cast<std::size_t>(
+            std::min<std::uint64_t>(protocol::kMaxChunkData, end - position));
+        const auto first = bytes.begin() + static_cast<std::ptrdiff_t>(position);
+        streams_.send(key, protocol::ContentChunk{
+                               .request_id = job.request_id,
+                               .offset = position,
+                               .data = {first, first + static_cast<std::ptrdiff_t>(size)}});
+        position += size;
+        serving.sent += size;
+    }
+    if (position < end) {
+        return false; // pumped() continues
+    }
+    streams_.send(key, protocol::ContentEnd{.request_id = job.request_id,
+                                            .byte_count = serving.sent,
+                                            .digest = offer.content_digest});
+    finish_job(key, serving, std::nullopt);
+    return true;
 }
 
 void Sender::read_next(const StreamKey& key, Serving& serving, std::uint32_t request_id) {

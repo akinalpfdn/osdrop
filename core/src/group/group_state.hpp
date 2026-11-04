@@ -38,6 +38,8 @@ struct GroupState {
     [[nodiscard]] Permissions permissions_for(const DeviceId& device) const;
     /// The members this computer accepts files from.
     [[nodiscard]] std::set<DeviceId> file_senders() const;
+    /// The members this computer shares clipboards with, both ways.
+    [[nodiscard]] std::set<DeviceId> clipboard_members() const;
     bool operator==(const GroupState&) const = default;
 };
 
