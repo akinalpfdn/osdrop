@@ -240,7 +240,7 @@ struct MeshTests {
         #expect(
             await macControl.wait { events in
                 events.contains {
-                    if case .captureEnded(other.deviceID, let cursor, .hotkey) = $0 {
+                    if case .captureEnded(other.deviceID, let cursor, .hotkey, false) = $0 {
                         cursor.x == 999 * 16
                     } else {
                         false
@@ -254,6 +254,14 @@ struct MeshTests {
         #expect(throws: CoreError.invalidArgument) {
             try mac.input(.key(page: 7, usage: 0, action: 1), ageMicroseconds: 0)
         }
+        #expect(await otherControl.events.contains(.inject(.capsLock(false))), "Caps Lock as on the Mac")
+        try mac.setInputSettings(InputSettings(modifierMapping: .positions, pushMilliseconds: 300))
+        try mac.setPointerSpeed(1_500, for: other.deviceID)
+        try mac.setCapsLock(true)
+        #expect(throws: CoreError.invalidArgument) {
+            try mac.setInputSettings(InputSettings(pushMilliseconds: InputSettings.maxPushMilliseconds + 1))
+        }
+        #expect(throws: CoreError.invalidArgument) { try mac.setPointerSpeed(100, for: other.deviceID) }
     }
 
     @Test("Commands and stored states are checked")

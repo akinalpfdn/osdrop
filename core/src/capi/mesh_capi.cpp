@@ -64,6 +64,9 @@ static_assert(OSDROP_CLIPBOARD_TEXT == static_cast<int>(protocol::ClipboardForma
               OSDROP_CLIPBOARD_FILES == static_cast<int>(protocol::ClipboardFormat::Files));
 
 constexpr std::uint8_t kMaxButton = 31;
+constexpr std::uint32_t kMaxPushMs = 5'000;
+constexpr std::uint32_t kMinSpeed = 250;
+constexpr std::uint32_t kMaxSpeed = 4'000;
 constexpr std::uint8_t kMaxScrollPhase = 5;
 constexpr std::uint8_t kMaxMomentumPhase = 3;
 
@@ -150,6 +153,9 @@ osdrop_input to_input(const control::Injection& injection) {
         input.scroll_unit = static_cast<std::uint8_t>(scroll->unit);
         input.scroll_phase = static_cast<std::uint8_t>(scroll->phase);
         input.momentum = static_cast<std::uint8_t>(scroll->momentum);
+    } else if (const auto* caps = std::get_if<control::SetCapsLock>(&injection)) {
+        input.kind = OSDROP_INPUT_CAPS_LOCK;
+        input.action = caps->on ? 1 : 2;
     }
     return input;
 }
@@ -439,7 +445,8 @@ public:
             callbacks_.capture_ended(
                 callbacks_.context, ended.device.data(), static_cast<std::int32_t>(ended.cursor.x),
                 static_cast<std::int32_t>(ended.cursor.y), static_cast<std::uint8_t>(ended.reason),
-                ended.refused ? static_cast<std::uint8_t>(*ended.refused) : 0);
+                ended.refused ? static_cast<std::uint8_t>(*ended.refused) : 0,
+                ended.caps_lock ? 1 : 0);
         }
     }
     void on_controlled(const std::optional<mesh::DeviceId>& controller) override {
@@ -695,8 +702,9 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     // mesh → group → layout → transfers → clipboard → control → callbacks; the clipboard also
     // stands between the transfers and the callbacks, the control between the layout and them.
     const mesh::DeviceId self = osdrop::crypto::device_id(identity.value().public_key());
-    handle->control = std::make_unique<control::Control>(
-        self, control::ControlTunables{}, handle->observer, handle->observer, handle->observer);
+    handle->control =
+        std::make_unique<control::Control>(self, mesh_config.platform, control::ControlTunables{},
+                                           handle->observer, handle->observer, handle->observer);
     handle->clipboard = std::make_unique<clipboard::Clipboard>(self, handle->observer,
                                                                handle->observer, *handle->control);
     handle->transfers = std::make_unique<transfer::TransferService>(
@@ -1130,6 +1138,49 @@ osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason) {
     mesh->node->run([&input_layer, refused](mesh::Mesh& node_mesh, TimePoint now) {
         input_layer.set_unavailable(refused);
         node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_set_input_settings(osdrop_mesh* mesh,
+                                             const osdrop_input_settings* settings) {
+    if (mesh == nullptr || settings == nullptr || settings->modifier_mapping > 1 ||
+        settings->immediate > 1 || settings->push_ms > kMaxPushMs) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::InputSettings applied;
+    applied.modifier_mapping = static_cast<control::ModifierMapping>(settings->modifier_mapping);
+    applied.push.time = osdrop::Milliseconds(settings->push_ms);
+    applied.push.immediate = settings->immediate == 1;
+    applied.crossing_modifiers = settings->crossing_modifiers;
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, applied](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.set_settings(applied);
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_set_pointer_speed(osdrop_mesh* mesh, const uint8_t* device_id,
+                                            uint32_t permille) {
+    if (mesh == nullptr || device_id == nullptr || permille < kMinSpeed || permille > kMaxSpeed) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const mesh::DeviceId device = read_id(device_id);
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, device, permille](mesh::Mesh& /*node_mesh*/, TimePoint /*now*/) {
+        input_layer.set_speed(device, permille);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_set_caps_lock(osdrop_mesh* mesh, uint8_t on) {
+    if (mesh == nullptr || on > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, on](mesh::Mesh& /*node_mesh*/, TimePoint /*now*/) {
+        input_layer.set_caps_lock(on == 1);
     });
     return OSDROP_OK;
 }

@@ -205,6 +205,9 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func lockInput(_ locked: Bool) {}
     func setUnavailable(_ reason: ControlUnavailability?) {}
     func cursorMoved(to position: CoordPoint) {}
+    func setInputSettings(_ settings: InputSettings) {}
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
+    func setCapsLock(_ on: Bool) {}
     private let lock = NSLock()
     private var nextID: UInt64 = 1
     private var copied: [(contents: [ClipboardContent], files: [URL])] = []

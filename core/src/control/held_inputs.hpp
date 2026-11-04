@@ -45,4 +45,11 @@ private:
 /// The modifier keys `modifiers` names, left before right.
 [[nodiscard]] std::vector<HeldKey> modifier_keys(std::uint8_t modifiers);
 
+inline constexpr std::uint16_t kCapsLockUsage = 0x39;
+
+/// Control and Command (Windows) swapped, on both sides, so shortcuts keep their place between a
+/// Mac and a PC: ⌘C on a Mac is Ctrl+C on a PC and the other way (user decision, Phase 12).
+[[nodiscard]] HeldKey swap_control_and_command(const HeldKey& key);
+[[nodiscard]] std::uint8_t swap_control_and_command(std::uint8_t modifiers);
+
 } // namespace osdrop::control

@@ -71,10 +71,15 @@ using Input = std::variant<PointerMoved, KeyInput, ButtonInput, ScrollInput>;
 struct MoveCursor {
     Point position;
 };
+/// Turns Caps Lock on or off on this computer. Caps Lock travels as a state, not as key
+/// presses, because platforms toggle it differently.
+struct SetCapsLock {
+    bool on = false;
+};
 /// Input for the platform to apply as if this computer's own devices produced it; the control_id
 /// fields carry no meaning here.
-using Injection =
-    std::variant<MoveCursor, protocol::KeyEvent, protocol::ButtonEvent, protocol::ScrollEvent>;
+using Injection = std::variant<MoveCursor, protocol::KeyEvent, protocol::ButtonEvent,
+                               protocol::ScrollEvent, SetCapsLock>;
 
 /// Why the cursor came back to this computer.
 enum class CaptureEnd : std::uint8_t {
@@ -91,6 +96,7 @@ struct CaptureEnded {
     Point cursor;      ///< where this computer's cursor goes
     CaptureEnd reason = CaptureEnd::Returned;
     std::optional<protocol::RefuseReason> refused;
+    bool caps_lock = false; ///< Caps Lock as the user left it on the other computers
 };
 
 /// Motion latency on this computer while it is controlled, from the controller's capture to the
@@ -118,8 +124,23 @@ public:
     virtual void on_input_latency(const DeviceId& controller, const LatencyStats& stats) = 0;
 };
 
-struct ControlTunables {
+/// How modifiers travel between a Mac and a PC; between computers of one platform they never
+/// change.
+enum class ModifierMapping : std::uint8_t {
+    Positions = 0, ///< every key as it is: ⌘ is the Windows key
+    Shortcuts = 1, ///< Control and Command swapped, so ⌘C copies on a PC (the default)
+};
+
+/// The user's input settings on this computer (DEVPLAN Phase 12).
+struct InputSettings {
+    ModifierMapping modifier_mapping = ModifierMapping::Shortcuts;
     layout::PushConfig push;
+    /// Enter modifier bits: the cursor crosses only while one of them is held; 0: always.
+    std::uint8_t crossing_modifiers = 0;
+};
+
+struct ControlTunables {
+    InputSettings settings;
     /// Motion latencies kept for the median and the 99th percentile.
     std::size_t latency_samples = 1000;
     /// An endpoint reports its cursor when something else moved it further than this.
@@ -128,8 +149,9 @@ struct ControlTunables {
 
 class Control final : public mesh::MeshObserver, public layout::LayoutObserver {
 public:
-    Control(const DeviceId& self, const ControlTunables& tunables, ControlObserver& observer,
-            layout::LayoutObserver& layout_observer, mesh::MeshObserver& next);
+    Control(const DeviceId& self, protocol::Platform platform, const ControlTunables& tunables,
+            ControlObserver& observer, layout::LayoutObserver& layout_observer,
+            mesh::MeshObserver& next);
     ~Control() override = default;
     Control(const Control&) = delete;
     Control& operator=(const Control&) = delete;
@@ -150,6 +172,13 @@ public:
     void return_home(protocol::LeaveReason reason);
     /// "Lock input here": while locked, the cursor stays on the computer it is on.
     void set_locked(bool locked);
+    /// Takes effect at the next crossing; a mapping never changes while keys may be held.
+    void set_settings(const InputSettings& settings);
+    /// `permille` of this computer's pointer speed while the cursor is on `device`.
+    void set_speed(const DeviceId& device, std::uint32_t permille);
+    /// Controller: Caps Lock on this computer, while the cursor is home. While it is away, Caps
+    /// Lock follows the presses sent to the other computers instead.
+    void set_caps_lock(bool on);
     /// Endpoint: this computer cannot be controlled now (its screen is locked, it is going to
     /// sleep); nothing when it can again. A computer being controlled is released.
     void set_unavailable(std::optional<protocol::RefuseReason> reason);
@@ -193,12 +222,14 @@ private:
     struct Peer {
         bool responsive = true;
         bool accepts_control = false;
+        protocol::Platform platform = protocol::Platform::MacOS;
     };
     /// The computer this one's input goes to.
     struct Away {
         DeviceId device{};
         std::uint32_t control_id = 0;
-        Point sent; ///< the last position sent
+        Point sent;            ///< the last position sent
+        bool swap_modifiers{}; ///< fixed for the whole entry, so every release matches its press
     };
     /// The controller whose input this computer injects.
     struct Controlled {
@@ -206,6 +237,7 @@ private:
         std::uint32_t control_id = 0;
         HeldInputs held;
         Point position; ///< where the controller last put the cursor
+        bool caps_lock{};
     };
 
     // Controller.
@@ -249,6 +281,9 @@ private:
     std::optional<Away> away_;
     std::uint32_t last_control_id_ = 0;
     bool locked_ = false;
+    protocol::Platform platform_;
+    InputSettings settings_;
+    bool caps_lock_ = false;
 
     std::optional<Controlled> controlled_;
     std::optional<protocol::RefuseReason> unavailable_;

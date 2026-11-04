@@ -301,6 +301,7 @@ typedef enum osdrop_input_kind {
     OSDROP_INPUT_KEY = 2,
     OSDROP_INPUT_BUTTON = 3,
     OSDROP_INPUT_SCROLL = 4,
+    OSDROP_INPUT_CAPS_LOCK = 5, /* to inject only: `action` 1 turns Caps Lock on, 2 off */
     OSDROP_INPUT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_input_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -404,10 +405,11 @@ typedef struct osdrop_mesh_callbacks {
      * The cursor came back from `device_id`: give the input back and show the cursor at `x`, `y`.
      * `reason`: 1 pushed back, 2 hotkey, 3 capture lost, 4 refused (`refused`: 1 locked,
      * 2 asleep, 3 not permitted, 4 busy; otherwise 0), 5 someone used the other computer, 6 the
-     * other computer stopped answering, left or stopped accepting control.
+     * other computer stopped answering, left or stopped accepting control. `caps_lock` (0 or 1)
+     * is Caps Lock as the user left it on the other computers: set it here.
      */
     void (*capture_ended)(void* context, const uint8_t* device_id, int32_t x, int32_t y,
-                          uint8_t reason, uint8_t refused);
+                          uint8_t reason, uint8_t refused, uint8_t caps_lock);
     /* The member `controller_id` controls this computer now; NULL when the control ended. */
     void (*controlled)(void* context, const uint8_t* controller_id);
     /* Input from the controller to apply here as if this computer's own devices produced it. */
@@ -622,6 +624,26 @@ osdrop_result osdrop_mesh_lock_input(osdrop_mesh* mesh, uint8_t locked);
 osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason);
 /* While this computer is controlled: where its cursor really is, when something else moved it. */
 osdrop_result osdrop_mesh_cursor_moved(osdrop_mesh* mesh, int32_t x, int32_t y);
+
+/* The user's input settings (DEVPLAN Phase 12). A new modifier mapping applies from the next
+ * crossing. */
+typedef struct osdrop_input_settings {
+    /* Between a Mac and a PC: 0 every key as it is (⌘ is the Windows key), 1 Control and Command
+     * swapped so shortcuts keep their place (⌘C copies on a PC). */
+    uint8_t modifier_mapping;
+    uint8_t immediate; /* 1: cross as soon as the cursor pushes past an edge */
+    uint8_t
+        crossing_modifiers; /* Enter modifier bits; crossing only while one is held; 0: always */
+    uint32_t push_ms;       /* how long a push must last, at most 5000 */
+} osdrop_input_settings;
+osdrop_result osdrop_mesh_set_input_settings(osdrop_mesh* mesh,
+                                             const osdrop_input_settings* settings);
+/* The pointer speed while the cursor is on `device_id`, in thousandths of this computer's own:
+ * 250 to 4000. */
+osdrop_result osdrop_mesh_set_pointer_speed(osdrop_mesh* mesh, const uint8_t* device_id,
+                                            uint32_t permille);
+/* Caps Lock on this computer (0 or 1), reported whenever it changes while the cursor is home. */
+osdrop_result osdrop_mesh_set_caps_lock(osdrop_mesh* mesh, uint8_t on);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.

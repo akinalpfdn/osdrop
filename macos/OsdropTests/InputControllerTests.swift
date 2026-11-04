@@ -14,12 +14,17 @@ struct InputControllerTests {
     private let capture = FakeCapture()
     private let injector = FakeInjector()
     private let cursor = FakeCursor()
+    private let capsLock = FakeCapsLock()
     private let other = inputDeviceID(0x42)
 
-    private func start(trusted: Bool = true) -> InputController {
+    private func start(
+        trusted: Bool = true, preferences: FakeInputPreferences = FakeInputPreferences()
+    ) -> InputController {
         let controller = InputController(
             mesh: mesh,
-            services: .fake(capture: capture, injector: injector, trusted: trusted, cursor: cursor)
+            services: .fake(
+                capture: capture, injector: injector, trusted: trusted, cursor: cursor, capsLock: capsLock,
+                preferences: preferences)
         ) { _ in "Other Mac" }
         controller.start()
         controller.setActive(true)
@@ -100,7 +105,8 @@ struct InputControllerTests {
         #expect(injector.calls.contains(.releaseHere([.keyboard(0xE1)])))
         try await waitUntil { capture.heartbeats >= 2 }
 
-        mesh.send(.captureEnded(other, cursor: CoordPoint(x: 1600, y: 3200), reason: .refused(.locked)))
+        mesh.send(
+            .captureEnded(other, cursor: CoordPoint(x: 1600, y: 3200), reason: .refused(.locked), capsLock: false))
         try await waitUntil { controller.capturingFor == nil }
         #expect(capture.mode == .observe)
         #expect(injector.calls.last == .place(CGPoint(x: 100, y: 200)))
@@ -191,6 +197,50 @@ struct InputControllerTests {
         #expect(
             controller.latency[other]
                 == InputLatency(samples: 40, median: .microseconds(2_500), p99: .microseconds(9_000)))
+        controller.stop()
+    }
+
+    @Test("Stored input settings and pointer speeds reach core at start")
+    func appliesSettings() async throws {
+        var preferences = FakeInputPreferences()
+        preferences.stored = InputSettings(modifierMapping: .positions, pushMilliseconds: 300, immediate: true)
+        preferences.speeds = [other: 1_500]
+        let controller = start(preferences: preferences)
+        #expect(mesh.calls.prefix(2) == [.settings(preferences.stored), .speed(1_500, other)])
+        controller.stop()
+    }
+
+    @Test("Caps Lock is reported while the cursor is home and set as the user left it elsewhere")
+    func capsLockSync() async throws {
+        let controller = start()
+        try await waitUntil { mesh.calls.contains(.capsLock(false)) }
+        capsLock.toggleByUser()
+        try await waitUntil { mesh.calls.contains(.capsLock(true)) }
+
+        mesh.send(.captureBegan(other, releaseHere: []))
+        try await waitUntil { controller.capturingFor == other }
+        let reported = mesh.calls.count { if case .capsLock = $0 { true } else { false } }
+        capsLock.toggleByUser()  // a press swallowed here; core follows what it sent
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(mesh.calls.count { if case .capsLock = $0 { true } else { false } } == reported)
+
+        mesh.send(.captureEnded(other, cursor: CoordPoint(x: 0, y: 0), reason: .returned, capsLock: true))
+        try await waitUntil { controller.capturingFor == nil }
+        #expect(capsLock.isOn, "on again, as the user left it on the other computer")
+        controller.stop()
+    }
+
+    @Test("Caps Lock from a controller is set as a state")
+    func capsLockInjected() async throws {
+        let controller = start()
+        mesh.send(.controlled(by: other))
+        mesh.send(.inject(.capsLock(true)))
+        try await waitUntil { capsLock.isOn }
+        mesh.send(.inject(.capsLock(true)))
+        mesh.send(.inject(.capsLock(false)))
+        try await waitUntil { !capsLock.isOn }
+        #expect(capsLock.setValues == [true, false], "set only when it differs")
+        #expect(!injector.calls.contains { if case .key = $0 { true } else { false } })
         controller.stop()
     }
 

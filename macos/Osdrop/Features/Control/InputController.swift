@@ -27,6 +27,8 @@ struct InputServices: Sendable {
     let cursorLocation: @MainActor @Sendable () -> CGPoint
     let doubleClickInterval: @MainActor @Sendable () -> TimeInterval
     let keyboardLayout: @MainActor @Sendable () -> KeyboardPhysicalLayout
+    let capsLock: any CapsLockControlling
+    let preferences: any InputPreferencesStoring
 }
 
 /// Cursor and keyboard across computers on this Mac (DEVPLAN Phase 11). Core decides crossings,
@@ -57,6 +59,7 @@ final class InputController {
     @ObservationIgnored private var heartbeat: Task<Void, Never>?
     @ObservationIgnored private var cursorWatch: Task<Void, Never>?
     @ObservationIgnored private var screenLocked = false
+    @ObservationIgnored private var capsLockReported: Bool?
     @ObservationIgnored private var isActive = false
     @ObservationIgnored private var isPermitted = false
     @ObservationIgnored private var unavailable: ControlUnavailability??
@@ -70,6 +73,10 @@ final class InputController {
     }
 
     func start() {
+        mesh.setInputSettings(services.preferences.settings())
+        for (device, permille) in services.preferences.pointerSpeeds() {
+            mesh.setPointerSpeed(permille, for: device)
+        }
         tasks.append(
             Task { [weak self, control = mesh.control] in
                 for await event in control {
@@ -98,6 +105,14 @@ final class InputController {
                     case .tapReenabled(let reason):
                         Log.input.info("Event tap turned back on: \(String(describing: reason), privacy: .public)")
                     }
+                }
+            })
+        tasks.append(
+            Task { [weak self] in
+                // Caps Lock goes to core while the cursor is home; while it is away, core follows
+                // the presses it sends.
+                while !Task.isCancelled, self?.reportCapsLock() != nil {
+                    try? await Task.sleep(for: Tunables.Control.capsCheckInterval)
                 }
             })
         tasks.append(
@@ -162,6 +177,15 @@ final class InputController {
         return (now - captured.tapTime) / 1_000
     }
 
+    private func reportCapsLock() {
+        guard capturingFor == nil else { return }
+        let on = services.capsLock.isOn
+        if on != capsLockReported {
+            capsLockReported = on
+            mesh.setCapsLock(on)
+        }
+    }
+
     private func toggleLock() {
         isLocked.toggle()
         mesh.lockInput(isLocked)
@@ -192,10 +216,14 @@ final class InputController {
             capturingFor = device
             notice = nil
             startHeartbeat()
-        case .captureEnded(let device, let cursor, let reason):
+        case .captureEnded(let device, let cursor, let reason, let capsLock):
             stopHeartbeat()
             capture.setMode(.observe)
             injector.placeCursor(at: ControlCoordinates.point(cursor))
+            if capsLock != services.capsLock.isOn {
+                services.capsLock.set(capsLock)
+            }
+            capsLockReported = capsLock
             capturingFor = nil
             switch reason {
             case .refused(let refusal): notice = .refused(name: nameOf(device), refusal)
@@ -209,6 +237,10 @@ final class InputController {
                 injector.releaseAll()  // core released what it pressed; this covers the rest
             } else {
                 startCursorWatch()
+            }
+        case .inject(.capsLock(let on)):
+            if on != services.capsLock.isOn {
+                services.capsLock.set(on)
             }
         case .inject(let input):
             Injection.apply(input, to: injector)

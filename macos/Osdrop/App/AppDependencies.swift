@@ -57,6 +57,7 @@ extension InputServices {
         InputServices(
             makeCapture: { EventTapCapture() }, makeInjector: { CGEventInjector() },
             isTrusted: { AXIsProcessTrusted() }, cursorLocation: { CGEventInjector.currentCursorLocation() },
-            doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() })
+            doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() },
+            capsLock: HIDCapsLock(), preferences: UserDefaultsInputPreferences())
     }
 }

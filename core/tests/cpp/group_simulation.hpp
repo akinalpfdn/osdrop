@@ -8,14 +8,20 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <vector>
 
 namespace osdrop::test {
 
-/// Computers in no group yet.
-inline void build(SimulatedMeshNetwork& network, std::size_t count) {
+/// Computers in no group yet; `platforms` gives each its platform (a Mac when missing).
+inline void build(SimulatedMeshNetwork& network, std::size_t count,
+                  const std::vector<protocol::Platform>& platforms = {}) {
     for (std::size_t i = 0; i < count; ++i) {
-        network.add(SimulatedMeshNetwork::config(protocol::Id{}, "Computer " + std::to_string(i)),
-                    group::GroupState{});
+        mesh::MeshConfig config =
+            SimulatedMeshNetwork::config(protocol::Id{}, "Computer " + std::to_string(i));
+        if (i < platforms.size()) {
+            config.platform = platforms[i];
+        }
+        network.add(config, group::GroupState{});
     }
 }
 
@@ -62,8 +68,9 @@ inline bool knows(SimulatedMeshNetwork& network, std::size_t node, std::size_t o
 }
 
 /// Pairs computers 1..count-1 with computer 0, one after another, and lets the group settle.
-inline void form_group(SimulatedMeshNetwork& network, std::size_t count) {
-    build(network, count);
+inline void form_group(SimulatedMeshNetwork& network, std::size_t count,
+                       const std::vector<protocol::Platform>& platforms = {}) {
+    build(network, count, platforms);
     for (std::size_t i = 1; i < count; ++i) {
         pair(network, i, 0);
         rediscover(network);

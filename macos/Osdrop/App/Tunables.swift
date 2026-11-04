@@ -39,6 +39,10 @@ enum Tunables {
         /// A cursor further than this (points) from where the controller put it was moved by an
         /// application, and the controller is told.
         static let cursorReportDistance = 1.0
+        /// How often Caps Lock is read while the cursor is home.
+        static let capsCheckInterval: Duration = .milliseconds(250)
+        /// Pointer speeds core takes, in thousandths of this Mac's own.
+        static let pointerSpeeds = 250...4_000
     }
 
     enum Drag {
@@ -74,6 +78,17 @@ enum Tunables {
     enum Settings {
         static let layoutStateKey = "layoutState"
         static let listenPortKey = "listenPort"
+
+        enum Input {
+            /// "shortcuts" (the default) or "positions".
+            static let modifierMapping = "input.modifierMapping"
+            static let positions = "positions"
+            static let pushMilliseconds = "input.pushMilliseconds"
+            static let immediate = "input.immediate"
+            static let crossingModifiers = "input.crossingModifiers"
+            /// Device ID in hex → thousandths of this Mac's speed.
+            static let pointerSpeeds = "input.pointerSpeeds"
+        }
     }
 
     enum Permissions {

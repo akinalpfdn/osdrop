@@ -11,6 +11,9 @@ protocol ControlDriving: Sendable {
     func lockInput(_ locked: Bool)
     func setUnavailable(_ reason: ControlUnavailability?)
     func cursorMoved(to position: CoordPoint)
+    func setInputSettings(_ settings: InputSettings)
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID)
+    func setCapsLock(_ on: Bool)
 }
 
 /// The mesh as the app drives it. Core's commands wait for its I/O thread, so the real one runs
@@ -102,6 +105,18 @@ actor CoreMesh: MeshDriving {
 
     nonisolated func cursorMoved(to position: CoordPoint) {
         report { () throws(CoreError) in try mesh.cursorMoved(to: position) }
+    }
+
+    nonisolated func setInputSettings(_ settings: InputSettings) {
+        report { () throws(CoreError) in try mesh.setInputSettings(settings) }
+    }
+
+    nonisolated func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {
+        report { () throws(CoreError) in try mesh.setPointerSpeed(permille, for: device) }
+    }
+
+    nonisolated func setCapsLock(_ on: Bool) {
+        report { () throws(CoreError) in try mesh.setCapsLock(on) }
     }
 
     private nonisolated func report(_ command: () throws(CoreError) -> Void) {

@@ -67,6 +67,10 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
   wakeups per second per peer (heartbeats).
 - **Peer loss.** A silent peer is reported unresponsive after 750 ms, so input to and from it stops
   well within the one-second budget; its session survives a Wi-Fi stall and ends only after 10 s.
+- **Orderly close.** When the mesh ends a connection, its last bytes (a pairing refusal, a Bye)
+  go out, then only the sending side is shut and the node reads until the peer closes or 2 s
+  pass. Closing a socket with unread bytes resets the connection, and Windows then drops what the
+  peer had not read yet.
 - **Backpressure.** A transfer stream refuses messages while 4 MiB are queued for writing and
   reports itself writable again below 1 MiB, so a file never fills memory or delays the control
   connection, which has its own TCP connection.
@@ -215,6 +219,12 @@ crossing, refusal and release; the platforms capture, inject, hide the cursor an
   ⌃⌥⌘⎋ remains the way out of a capture. Without Accessibility the Mac does not watch input and
   refuses control (not permitted); a locked screen refuses too. The menu bar icon changes and the
   menu names the controller while another computer controls the Mac.
+- **Fidelity** (Phase 12). Keys travel as HID usages and the computer they arrive on applies its
+  own layout; Control and Command/Windows swap between a Mac and a PC unless the user chose keys
+  by position; Caps Lock travels as a state; scrolling travels as content movement, a line being a
+  notch everywhere. The Mac's table is `MacKeyMap`; the PC's, scan codes for the Phase 3 input
+  process, is `key_codes` in `windows/shared`, with `wheel` for scrolling. The crossing settings
+  and pointer speeds come from preferences (`input.` keys) until the Phase 16 settings window.
 
 ## Group on the platforms
 

@@ -78,6 +78,9 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
         case lock(Bool)
         case unavailable(ControlUnavailability?)
         case cursorMoved(CoordPoint)
+        case settings(InputSettings)
+        case speed(UInt32, DeviceID)
+        case capsLock(Bool)
     }
 
     let control: AsyncStream<ControlEvent>
@@ -98,8 +101,40 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
     func lockInput(_ locked: Bool) { record(.lock(locked)) }
     func setUnavailable(_ reason: ControlUnavailability?) { record(.unavailable(reason)) }
     func cursorMoved(to position: CoordPoint) { record(.cursorMoved(position)) }
+    func setInputSettings(_ settings: InputSettings) { record(.settings(settings)) }
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID) { record(.speed(permille, device)) }
+    func setCapsLock(_ on: Bool) { record(.capsLock(on)) }
 
     private func record(_ call: Call) { lock.withLock { recorded.append(call) } }
+}
+
+/// Caps Lock in memory; tests flip it as the user would.
+final class FakeCapsLock: CapsLockControlling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var state = false
+    private var sets: [Bool] = []
+
+    var isOn: Bool { lock.withLock { state } }
+    var setValues: [Bool] { lock.withLock { sets } }
+
+    func set(_ on: Bool) {
+        lock.withLock {
+            state = on
+            sets.append(on)
+        }
+    }
+
+    /// The user pressed Caps Lock on this Mac.
+    func toggleByUser() { lock.withLock { state.toggle() } }
+}
+
+/// Stored input settings in memory.
+struct FakeInputPreferences: InputPreferencesStoring {
+    var stored = InputSettings()
+    var speeds: [DeviceID: UInt32] = [:]
+
+    func settings() -> InputSettings { stored }
+    func pointerSpeeds() -> [DeviceID: UInt32] { speeds }
 }
 
 /// Where the fake system cursor is; tests move it as an application would.
@@ -112,10 +147,12 @@ extension InputServices {
     @MainActor
     static func fake(
         capture: FakeCapture = FakeCapture(), injector: FakeInjector = FakeInjector(), trusted: Bool = false,
-        cursor: FakeCursor = FakeCursor()
+        cursor: FakeCursor = FakeCursor(), capsLock: FakeCapsLock = FakeCapsLock(),
+        preferences: FakeInputPreferences = FakeInputPreferences()
     ) -> InputServices {
         InputServices(
             makeCapture: { capture }, makeInjector: { injector }, isTrusted: { trusted },
-            cursorLocation: { cursor.location }, doubleClickInterval: { 0.5 }, keyboardLayout: { .ansi })
+            cursorLocation: { cursor.location }, doubleClickInterval: { 0.5 }, keyboardLayout: { .ansi },
+            capsLock: capsLock, preferences: preferences)
     }
 }
