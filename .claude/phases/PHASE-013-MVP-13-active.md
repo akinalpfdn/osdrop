@@ -1,5 +1,5 @@
 # Phase 013 (MVP-13) — Input fidelity
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 12. Depends on: Phase 11
 
@@ -21,3 +21,8 @@ Typing, shortcuts and scrolling feel native in every direction.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decision (2026-11-04): stacked on `feature/phase-11-input`; core and Mac now, Windows
+  tables verified through CI only, hardware rows wait for the devices.
+- User decision (2026-11-04): between a Mac and a PC, shortcuts keep their place by default —
+  Mac → PC: ⌘ → Ctrl, ⌃ → Windows, ⌥ → Alt; PC → Mac: Ctrl → ⌘, Windows → ⌃, Alt → ⌥. Mac ↔ Mac
+  and PC ↔ PC pass keys unchanged. Changeable per direction. Rejected: keys by position.
