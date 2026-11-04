@@ -1120,7 +1120,8 @@ osdrop_result osdrop_mesh_lock_input(osdrop_mesh* mesh, uint8_t locked) {
 }
 
 osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason) {
-    if (mesh == nullptr || reason > static_cast<std::uint8_t>(protocol::RefuseReason::Asleep)) {
+    if (mesh == nullptr ||
+        reason > static_cast<std::uint8_t>(protocol::RefuseReason::NotPermitted)) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     const std::optional<protocol::RefuseReason> refused =

@@ -615,8 +615,9 @@ osdrop_result osdrop_mesh_return_home(osdrop_mesh* mesh, uint8_t input_lost);
 /* "Lock input here": while `locked` is 1, the cursor stays on the computer it is on. */
 osdrop_result osdrop_mesh_lock_input(osdrop_mesh* mesh, uint8_t locked);
 /*
- * Whether this computer can be controlled: 0 yes, 1 its screen is locked, 2 it is going to sleep.
- * Other computers are refused with that reason, and a computer controlling it is released.
+ * Whether this computer can be controlled: 0 yes, 1 its screen is locked, 2 it is going to sleep,
+ * 3 it may not inject input (a permission is missing). Other computers are refused with that
+ * reason, and a computer controlling it is released.
  */
 osdrop_result osdrop_mesh_set_unavailable(osdrop_mesh* mesh, uint8_t reason);
 /* While this computer is controlled: where its cursor really is, when something else moved it. */

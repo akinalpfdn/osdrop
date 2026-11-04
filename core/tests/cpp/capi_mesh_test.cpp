@@ -94,6 +94,12 @@ struct Events {
         std::unique_lock lock(mutex);
         return changed.wait_for(lock, milliseconds(5'000), condition);
     }
+    /// What `read` returns, copied under the lock while callbacks may still arrive.
+    template <typename Read>
+    auto read(Read&& read) {
+        const std::lock_guard lock(mutex);
+        return read();
+    }
     template <typename Change>
     void update(Change&& change) {
         {
@@ -865,29 +871,36 @@ TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
         std::this_thread::sleep_for(milliseconds(20));
     }
     ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.captures.size() == 1; }));
-    ASSERT_EQ(mac.events.captures.back().size(), 1U);
-    EXPECT_EQ(mac.events.captures.back().front().usage, 0xE1) << "released on the Mac";
-    EXPECT_EQ(mac.events.captures.back().front().action, 2);
+    const auto released = mac.events.read([&] { return mac.events.captures.back(); });
+    ASSERT_EQ(released.size(), 1U);
+    EXPECT_EQ(released.front().usage, 0xE1) << "released on the Mac";
+    EXPECT_EQ(released.front().action, 2);
     ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.injected.size() >= 2; }));
-    EXPECT_EQ(pc.events.injected.front().kind, OSDROP_INPUT_POINTER);
-    EXPECT_EQ(pc.events.injected.front().x, 0) << "it enters at the PC's left edge";
-    EXPECT_EQ(pc.events.injected.front().y, 400 * 16);
-    EXPECT_EQ(pc.events.injected.at(1).usage, 0xE1) << "Shift is held on the PC";
-    ASSERT_EQ(pc.events.controlled.size(), 1U);
-    EXPECT_EQ(pc.events.controlled.back(), mac.device_id);
+    const auto entered = pc.events.read([&] { return pc.events.injected; });
+    EXPECT_EQ(entered.front().kind, OSDROP_INPUT_POINTER);
+    EXPECT_EQ(entered.front().x, 0) << "it enters at the PC's left edge";
+    EXPECT_EQ(entered.front().y, 400 * 16);
+    EXPECT_EQ(entered.at(1).usage, 0xE1) << "Shift is held on the PC";
+    EXPECT_EQ(pc.events.read([&] { return pc.events.controlled; }),
+              (std::vector<std::optional<DeviceId>>{mac.device_id}));
 
     const osdrop_input a = key(0x04, 1);
     ASSERT_EQ(osdrop_mesh_input(mac.mesh, &a, 0), OSDROP_OK);
-    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.injected.back().usage == 0x04; }));
+    ASSERT_TRUE(pc.events.wait_for([&] {
+        return std::ranges::any_of(pc.events.injected, [](const osdrop_input& input) {
+            return input.kind == OSDROP_INPUT_KEY && input.usage == 0x04;
+        });
+    }));
 
     ASSERT_EQ(osdrop_mesh_return_home(mac.mesh, 0), OSDROP_OK);
     ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.ended.size() == 1; }));
-    EXPECT_EQ(mac.events.ended.back().reason, 2);
-    EXPECT_EQ(mac.events.ended.back().x, 999 * 16) << "the cursor comes back where it left";
+    const auto ended = mac.events.read([&] { return mac.events.ended.back(); });
+    EXPECT_EQ(ended.reason, 2);
+    EXPECT_EQ(ended.x, 999 * 16) << "the cursor comes back where it left";
     ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.controlled.size() == 2; }));
-    EXPECT_EQ(pc.events.controlled.back(), std::nullopt);
+    EXPECT_EQ(pc.events.read([&] { return pc.events.controlled.back(); }), std::nullopt);
     std::set<uint16_t> held;
-    for (const osdrop_input& input : pc.events.injected) {
+    for (const osdrop_input& input : pc.events.read([&] { return pc.events.injected; })) {
         if (input.kind == OSDROP_INPUT_KEY) {
             input.action == 2 ? static_cast<void>(held.erase(input.usage))
                               : static_cast<void>(held.insert(input.usage));
@@ -930,7 +943,7 @@ TEST(CapiMesh, InputCommandsCheckTheirArguments) {
     EXPECT_EQ(osdrop_mesh_return_home(mac.mesh, 0), OSDROP_OK);
     EXPECT_EQ(osdrop_mesh_lock_input(mac.mesh, 2), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_lock_input(mac.mesh, 1), OSDROP_OK);
-    EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 3), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 4), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 1), OSDROP_OK);
     EXPECT_EQ(osdrop_mesh_cursor_moved(nullptr, 0, 0), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_cursor_moved(mac.mesh, 0, 0), OSDROP_OK);
