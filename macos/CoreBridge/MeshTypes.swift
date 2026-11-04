@@ -309,6 +309,11 @@ public struct ReceivedItem: Sendable, Equatable {
     public let items: [URL]
     /// Links not recreated: they pointed outside the item.
     public let skippedLinks: UInt64
+
+    public init(items: [URL], skippedLinks: UInt64) {
+        self.items = items
+        self.skippedLinks = skippedLinks
+    }
 }
 
 /// A rectangle in 1/16 of a unit (docs/PROTOCOL.md "Conventions").

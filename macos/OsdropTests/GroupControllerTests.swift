@@ -150,7 +150,7 @@ private final class Fixture {
             makeMesh: { configuration throws(CoreError) in
                 if let error = failure(configuration) { throw error }
                 return mesh
-            }, deviceName: "Test Mac")
+            }, deviceName: "Test Mac", clipboard: .fake())
         let controller = GroupController(services: services, screens: screens)
         controller.start()
         return controller
@@ -233,6 +233,17 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }
     func closeAll(sleeping: Bool) {}
+    func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64 { 1 }
+    func fetchContent(
+        _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
+    ) async throws(CoreError)
+        -> UInt64
+    { 1 }
+    func receive(
+        _ item: TransferItem, from device: DeviceID, into folder: URL, maxBytes: UInt64
+    )
+        async throws(CoreError) -> UInt64
+    { 1 }
 }
 
 private final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {

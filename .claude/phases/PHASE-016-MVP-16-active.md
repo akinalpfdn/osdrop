@@ -38,3 +38,7 @@ Copy on one computer and paste on another, for text, images and files.
   instead of lazy data providers: macOS asks for lazy data at once, and a provider would block the
   main thread on the network. Windows keeps delayed rendering (its render requests come on a
   window thread of Osdrop's own).
+- User decision: Windows works like the Mac: copies from other computers are fetched in the
+  background within the limits and written as real data (text, RTF, HTML, PNG and DIB; files from
+  a staging folder as CF_HDROP). Plain Win32, no delayed rendering or OLE virtual files; replaces
+  the earlier "Windows keeps delayed rendering".

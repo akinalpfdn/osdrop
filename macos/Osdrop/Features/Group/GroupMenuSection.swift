@@ -19,6 +19,9 @@ struct GroupMenuSection: View {
             if controller.wasRemoved {
                 RemovedBanner(controller: controller)
             }
+            if let clipboard = controller.clipboard, let notice = clipboard.notice {
+                ClipboardBanner(clipboard: clipboard, notice: notice)
+            }
             if controller.isRunning {
                 members
                 nearby
@@ -163,6 +166,28 @@ private struct RemovedBanner: View {
             Button("group.dismiss") { controller.dismissRemoval() }
         }
         .font(Theme.Typography.caption)
+    }
+}
+
+private struct ClipboardBanner: View {
+    let clipboard: ClipboardController
+    let notice: ClipboardNotice
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            Label(message, systemImage: Theme.Symbol.warning)
+                .foregroundStyle(Theme.Colors.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("clipboard.dismiss") { clipboard.dismissNotice() }
+        }
+        .font(Theme.Typography.caption)
+    }
+
+    private var message: LocalizedStringKey {
+        switch notice {
+        case .unavailable(let name): "clipboard.unavailable \(name)"
+        case .tooLarge(let name): "clipboard.tooLarge \(name)"
+        }
     }
 }
 
