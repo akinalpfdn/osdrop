@@ -7,6 +7,7 @@
 // thread, unless a node holds it back (a slow disk).
 
 #include "clipboard/clipboard.hpp"
+#include "control/control.hpp"
 #include "crypto_test_support.hpp"
 #include "group/group.hpp"
 #include "layout/layout.hpp"
@@ -126,6 +127,7 @@ public:
     layout::Layout* layout = nullptr; ///< told about every change, as the platform glue does
     transfer::TransferService* transfers = nullptr; ///< as well
     clipboard::Clipboard* clipboard = nullptr;      ///< as well
+    control::Control* control = nullptr;            ///< as well
 
     void on_state_changed(const group::GroupState& state) override {
         stored = state;
@@ -137,6 +139,9 @@ public:
         }
         if (clipboard != nullptr) {
             clipboard->set_members(state.clipboard_members());
+        }
+        if (control != nullptr) {
+            control->set_controllers(state.controllers());
         }
     }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
@@ -209,6 +214,35 @@ public:
     void on_remote_clip(const clipboard::RemoteClip& clip) override { clips.push_back(clip); }
 };
 
+class RecordingControlObserver final : public control::ControlObserver {
+public:
+    struct Began {
+        DeviceId device{};
+        std::vector<control::HeldKey> release_here;
+    };
+    std::vector<Began> began;
+    std::vector<control::CaptureEnded> ended;
+    std::vector<std::optional<DeviceId>> controlled;
+    std::vector<control::Injection> injected;
+    std::vector<std::pair<DeviceId, control::LatencyStats>> latencies;
+
+    void on_capture_began(const DeviceId& device,
+                          std::span<const control::HeldKey> release_here) override {
+        began.push_back(
+            {.device = device, .release_here = {release_here.begin(), release_here.end()}});
+    }
+    void on_capture_ended(const control::CaptureEnded& capture) override {
+        ended.push_back(capture);
+    }
+    void on_controlled(const std::optional<DeviceId>& controller) override {
+        controlled.push_back(controller);
+    }
+    void on_inject(const control::Injection& injection) override { injected.push_back(injection); }
+    void on_input_latency(const DeviceId& controller, const control::LatencyStats& stats) override {
+        latencies.emplace_back(controller, stats);
+    }
+};
+
 class RecordingLayoutObserver final : public layout::LayoutObserver {
 public:
     std::optional<layout::LayoutState> stored; ///< what the platform would have saved last
@@ -259,23 +293,30 @@ private:
 class SimulatedNode {
 public:
     /// With a group state, a Group answers trust, a Layout keeps the arrangement, a
-    /// TransferService moves files and a Clipboard shares copies, between the mesh and
-    /// `observer`: mesh → group → layout → transfers → clipboard → observer, as in the apps.
+    /// TransferService moves files, a Clipboard shares copies and a Control moves the input,
+    /// between the mesh and `observer`: mesh → group → layout → transfers → clipboard → control →
+    /// observer, as in the apps.
     SimulatedNode(SimulatedMeshNetwork& network, std::size_t index, mesh::MeshConfig config,
                   std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt,
                   layout::LayoutState layout_state = {},
-                  const transfer::TransferTunables& transfer_tunables = {})
+                  const transfer::TransferTunables& transfer_tunables = {},
+                  const control::ControlTunables& control_tunables = {}, bool with_control = true)
         : random(seed), identity(key_pair(random)), transport(network, index),
+          control(group_state && with_control
+                      ? std::make_unique<control::Control>(crypto::device_id(identity.public_key()),
+                                                           control_tunables, control_observer,
+                                                           layout_observer, observer)
+                      : nullptr),
           clipboard(group_state ? std::make_unique<clipboard::Clipboard>(
                                       crypto::device_id(identity.public_key()), clipboard_observer,
-                                      transfer_observer, observer)
+                                      transfer_observer, after_clipboard())
                                 : nullptr),
           transfers(group_state ? std::make_unique<transfer::TransferService>(
                                       transfer_tunables, executor, *clipboard, *clipboard)
                                 : nullptr),
           layout(group_state ? std::make_unique<layout::Layout>(
                                    crypto::device_id(identity.public_key()),
-                                   std::move(layout_state), layout_observer, *transfers)
+                                   std::move(layout_state), layout_listener(), *transfers)
                              : nullptr),
           group(group_state ? std::make_unique<group::Group>(
                                   group::GroupConfig{.platform = config.platform,
@@ -289,12 +330,19 @@ public:
             group_observer.layout = layout.get();
             group_observer.transfers = transfers.get();
             group_observer.clipboard = clipboard.get();
+            group_observer.control = control.get();
             layout->group_changed(group_state->group_id, members_of(*group_state));
             transfers->set_files_permitted(group_state->file_senders());
             clipboard->set_members(group_state->clipboard_members());
+            if (control) {
+                control->set_controllers(group_state->controllers());
+            }
             transfers->attach(mesh);
             clipboard->attach(mesh, *transfers);
             layout->attach(mesh);
+            if (control) {
+                control->attach(mesh, *layout);
+            }
             group->attach(mesh);
         }
     }
@@ -307,7 +355,9 @@ public:
     ManualExecutor executor;
     RecordingTransferObserver transfer_observer;
     RecordingClipboardObserver clipboard_observer;
+    RecordingControlObserver control_observer;
     SimulatedTransport transport;
+    std::unique_ptr<control::Control> control;
     std::unique_ptr<clipboard::Clipboard> clipboard;
     std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
@@ -317,6 +367,12 @@ public:
     bool frozen = false; ///< power loss: processes and sends nothing
 
 private:
+    mesh::MeshObserver& after_clipboard() {
+        return control ? static_cast<mesh::MeshObserver&>(*control) : observer;
+    }
+    layout::LayoutObserver& layout_listener() {
+        return control ? static_cast<layout::LayoutObserver&>(*control) : layout_observer;
+    }
     static mesh::MeshConfig with_group(mesh::MeshConfig config,
                                        const std::optional<group::GroupState>& state) {
         if (state) {
@@ -337,7 +393,9 @@ public:
     TimePoint now{std::chrono::seconds(1000)};
     std::vector<std::vector<std::uint8_t>> wire;  ///< every TCP write and datagram, in order
     transfer::TransferTunables transfer_tunables; ///< for nodes added from now on
-    bool capture_wire = true;                     ///< off for bulk transfers
+    control::ControlTunables control_tunables;    ///< as well
+    bool control_layer = true; ///< off: input messages reach `observer` like any other
+    bool capture_wire = true;  ///< off for bulk transfers
     /// Sees every TCP write before it travels and may change it (tampering on the path).
     std::function<void(std::vector<std::uint8_t>&)> tamper;
 
@@ -357,7 +415,7 @@ public:
         const std::size_t index = nodes_.size();
         nodes_.push_back(std::make_unique<SimulatedNode>(
             *this, index, node_config, seed.value_or(7 + index), group_state,
-            std::move(layout_state), transfer_tunables));
+            std::move(layout_state), transfer_tunables, control_tunables, control_layer));
         return *nodes_.back();
     }
     SimulatedNode& node(std::size_t index) { return *nodes_.at(index); }

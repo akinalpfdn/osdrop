@@ -41,6 +41,11 @@ public:
     /// The computers the cursor can reach now. When the computer that has the cursor is no
     /// longer among them, the cursor comes home to where it left, and the update says so.
     [[nodiscard]] std::optional<CursorUpdate> set_arrangement(Arrangement arrangement);
+    /// While locked, every edge is a wall and the cursor stays on the computer it is on.
+    void set_locked(bool locked);
+    /// The computer that has the cursor reports where its cursor really is (an application moved
+    /// it); the virtual cursor follows. Ignored while the cursor is home.
+    void correct(Point position);
 
     /// One movement of this computer's mouse. `local` is where this computer's cursor is: moved
     /// by the system while the cursor is home, held in place while it is away. `delta` is the
@@ -71,6 +76,7 @@ private:
     DeviceId current_;
     Point position_;
     Point departure_; ///< where the cursor left this computer
+    bool locked_ = false;
 };
 
 } // namespace osdrop::layout
