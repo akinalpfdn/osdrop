@@ -103,6 +103,7 @@ std::vector<ControlMessage> boundary_messages() {
                         .x = kEdge,
                         .y = -kEdge,
                         .modifiers = 0xFF,
+                        .locks = protocol::kCapsLock,
                         .drag_id = 0xFFFF'FFFF},
         protocol::Leave{.control_id = 1, .reason = protocol::LeaveReason::ControllerLost},
         protocol::Refuse{.control_id = 1, .reason = protocol::RefuseReason::Busy},

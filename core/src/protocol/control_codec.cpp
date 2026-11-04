@@ -390,7 +390,7 @@ Decoded read_enter(BodyReader& b) {
     Enter m;
     Reader& r = b.raw();
     if (!r.u32(m.control_id) || !r.i32(m.x) || !r.i32(m.y) || !r.u8(m.modifiers) ||
-        !b.reserved(3) || !r.u32(m.drag_id)) {
+        !b.flags(kKnownLocks, m.locks) || !b.reserved(2) || !r.u32(m.drag_id)) {
         return decode_failure(Error::Truncated);
     }
     return finish(b, m);
@@ -661,7 +661,8 @@ void write_body(Writer& w, const ControlMessage& message) {
                        w.u32(m.control_id);
                        write_point(w, m.x, m.y);
                        w.u8(m.modifiers);
-                       write_reserved(w, 3);
+                       w.u8(m.locks);
+                       write_reserved(w, 2);
                        w.u32(m.drag_id);
                    },
                    [&](const Leave& m) {

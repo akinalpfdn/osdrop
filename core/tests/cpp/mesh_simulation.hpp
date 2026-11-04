@@ -303,9 +303,9 @@ public:
                   const control::ControlTunables& control_tunables = {}, bool with_control = true)
         : random(seed), identity(key_pair(random)), transport(network, index),
           control(group_state && with_control
-                      ? std::make_unique<control::Control>(crypto::device_id(identity.public_key()),
-                                                           control_tunables, control_observer,
-                                                           layout_observer, observer)
+                      ? std::make_unique<control::Control>(
+                            crypto::device_id(identity.public_key()), config.platform,
+                            control_tunables, control_observer, layout_observer, observer)
                       : nullptr),
           clipboard(group_state ? std::make_unique<clipboard::Clipboard>(
                                       crypto::device_id(identity.public_key()), clipboard_observer,

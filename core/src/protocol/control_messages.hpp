@@ -85,6 +85,9 @@ enum class ClipboardFormat : std::uint8_t {
     Files = 5,
 };
 
+/// Enter's `locks` bits.
+inline constexpr std::uint8_t kCapsLock = 1U << 0U;
+inline constexpr std::uint8_t kKnownLocks = kCapsLock;
 inline constexpr std::uint16_t kKeyboardPage = 7;
 inline constexpr std::uint16_t kConsumerPage = 12;
 
@@ -235,6 +238,7 @@ struct Enter {
     std::int32_t x = 0;
     std::int32_t y = 0;
     std::uint8_t modifiers = 0;
+    std::uint8_t locks = 0; ///< kCapsLock when Caps Lock is on at the controller
     std::uint32_t drag_id = 0;
     bool operator==(const Enter&) const = default;
 };

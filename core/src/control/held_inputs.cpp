@@ -48,6 +48,48 @@ std::uint8_t HeldInputs::modifiers() const {
     return static_cast<std::uint8_t>(bits);
 }
 
+namespace {
+
+constexpr std::uint16_t kLeftControl = 0xE0;
+constexpr std::uint16_t kLeftCommand = 0xE3;
+constexpr std::uint16_t kRightControl = 0xE4;
+constexpr std::uint16_t kRightCommand = 0xE7;
+
+unsigned bit_of(std::uint16_t usage) {
+    return 1U << static_cast<unsigned>(usage - kFirstModifierUsage);
+}
+
+} // namespace
+
+HeldKey swap_control_and_command(const HeldKey& key) {
+    if (key.page != protocol::kKeyboardPage) {
+        return key;
+    }
+    switch (key.usage) {
+    case kLeftControl:
+        return {.page = key.page, .usage = kLeftCommand};
+    case kLeftCommand:
+        return {.page = key.page, .usage = kLeftControl};
+    case kRightControl:
+        return {.page = key.page, .usage = kRightCommand};
+    case kRightCommand:
+        return {.page = key.page, .usage = kRightControl};
+    default:
+        return key;
+    }
+}
+
+std::uint8_t swap_control_and_command(std::uint8_t modifiers) {
+    const unsigned bits = modifiers;
+    const unsigned swapped = (bits & ~(bit_of(kLeftControl) | bit_of(kLeftCommand) |
+                                       bit_of(kRightControl) | bit_of(kRightCommand))) |
+                             ((bits & bit_of(kLeftControl)) != 0 ? bit_of(kLeftCommand) : 0U) |
+                             ((bits & bit_of(kLeftCommand)) != 0 ? bit_of(kLeftControl) : 0U) |
+                             ((bits & bit_of(kRightControl)) != 0 ? bit_of(kRightCommand) : 0U) |
+                             ((bits & bit_of(kRightCommand)) != 0 ? bit_of(kRightControl) : 0U);
+    return static_cast<std::uint8_t>(swapped);
+}
+
 std::vector<HeldKey> modifier_keys(std::uint8_t modifiers) {
     std::vector<HeldKey> keys;
     for (std::uint16_t usage = kFirstModifierUsage; usage <= kLastModifierUsage; ++usage) {
