@@ -97,8 +97,9 @@ void Clipboard::announce(std::vector<protocol::AnnouncedFormat> formats) {
     const protocol::ControlMessage message =
         protocol::ClipboardAnnounce{.clip_id = clip_id_, .formats = std::move(formats)};
     for (const DeviceId& device : members_) {
-        mesh_->defer([device, message](mesh::Mesh& mesh, TimePoint now) {
-            static_cast<void>(mesh.send_message(device, message, now)); // offline: it missed it
+        // A non-const copy, so moving the deferred call moves the message instead of copying it.
+        mesh_->defer([device, announce = message](mesh::Mesh& mesh, TimePoint now) {
+            static_cast<void>(mesh.send_message(device, announce, now)); // offline: it missed it
         });
     }
 }

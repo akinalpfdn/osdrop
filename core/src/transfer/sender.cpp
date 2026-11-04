@@ -183,9 +183,11 @@ Status<Error> Sender::offer(const protocol::ObjectRef& item,
                   .tree = nullptr,
                   .scan_error = std::nullopt,
                   .generation = next_generation_++,
-                  .digests = std::make_shared<DigestCache>(),
+                  .digests = nullptr,
                   .content = nullptr,
                   .content_digest = {}};
+    // Assigned on its own: MSVC's analyzer loses a shared_ptr made inside the aggregate temporary.
+    offer.digests = std::make_shared<DigestCache>();
     scan(item, offer);
     return Status<Error>::ok();
 }
