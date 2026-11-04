@@ -131,6 +131,16 @@ std::set<DeviceId> GroupState::file_senders() const {
     return senders;
 }
 
+std::set<DeviceId> GroupState::clipboard_members() const {
+    std::set<DeviceId> members;
+    for (const Member& member : roster.members()) {
+        if (permissions_for(member.device_id).clipboard) {
+            members.insert(member.device_id);
+        }
+    }
+    return members;
+}
+
 std::vector<std::uint8_t> encode_state(const GroupState& state) {
     std::size_t size = kMagic.size() + 1 + protocol::kIdSize + 6;
     for (const auto& [device, member] : state.roster.pairings()) {

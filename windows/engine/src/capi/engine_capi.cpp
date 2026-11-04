@@ -1,3 +1,4 @@
+#include "clipboard/win_clipboard.hpp"
 #include "discovery/dns_sd_discovery.hpp"
 #include "screens/monitors.hpp"
 #include "store/dpapi_store.hpp"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <exception>
 #include <iterator>
 #include <memory>
 #include <new>
@@ -128,6 +130,15 @@ public:
         event.message = message;
         send(event);
     }
+    void clipboard_notice(win::ClipboardNotice notice, const win::DeviceIdBytes& device,
+                          const std::string& name) override {
+        osdrop_engine_event event = blank_event(notice == win::ClipboardNotice::TooLarge
+                                                    ? OSDROP_ENGINE_CLIPBOARD_TOO_LARGE
+                                                    : OSDROP_ENGINE_CLIPBOARD_UNAVAILABLE);
+        std::ranges::copy(device, std::begin(event.device_id));
+        copy_name(name, event.name);
+        send(event);
+    }
 
 private:
     void send(const osdrop_engine_event& event) const { callback_(context_, &event); }
@@ -144,13 +155,25 @@ win::DeviceIdBytes read_id(const std::uint8_t* bytes) {
 
 } // namespace
 
-/// The C handle: storage, DNS-SD and the shell's callback outlive the group engine that uses
-/// them, so they are declared first.
+/// The C handle: storage, DNS-SD, the clipboard and the shell's callback outlive the group engine
+/// that uses them, so they are declared first.
 struct osdrop_engine {
     osdrop_engine(osdrop_engine_callback callback, void* context) : events(callback, context) {}
+    ~osdrop_engine() {
+        try {
+            clipboard.stop(); // its thread runs the group's clipboard work: it stops first
+        } catch (...) {
+            std::terminate(); // only joining can throw: unrecoverable
+        }
+    }
+    osdrop_engine(const osdrop_engine&) = delete;
+    osdrop_engine& operator=(const osdrop_engine&) = delete;
+    osdrop_engine(osdrop_engine&&) = delete;
+    osdrop_engine& operator=(osdrop_engine&&) = delete;
 
     osdrop::engine::DpapiStore store;
     osdrop::engine::DnsSdDiscovery discovery;
+    osdrop::engine::WinClipboard clipboard;
     CallbackEvents events;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
 
@@ -184,12 +207,15 @@ osdrop_result osdrop_engine_create(osdrop_engine_callback callback, void* contex
     }
     auto group = win::GroupEngine::create(
         {.device_name = computer_name(),
-         .random = osdrop_random_source{.fill = system_random, .context = nullptr}},
+         .random = osdrop_random_source{.fill = system_random, .context = nullptr},
+         .clipboard = &engine->clipboard},
         engine->store, engine->discovery, engine->events);
     if (!group) {
         return group.error();
     }
     engine->group = std::move(group.value());
+    engine->clipboard.listen(
+        [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
     if (engine->report_screens() != OSDROP_OK) {
         engine->events.log(OSDROP_LOG_WARNING, "Reporting the monitors failed");
     }

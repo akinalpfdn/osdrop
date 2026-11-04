@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -139,6 +140,8 @@ public:
     void peer_responsive(const DeviceIdBytes& /*device*/, bool /*responsive*/) override {}
     void stats(const DeviceIdBytes& /*device*/, const osdrop_session_stats& /*stats*/) override {}
     void log(osdrop_log_level /*level*/, const char* /*message*/) override {}
+    void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
+                          const std::string& /*name*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);
@@ -174,21 +177,97 @@ private:
     std::vector<std::pair<std::uint64_t, std::uint32_t>> codes_;
 };
 
+/// A clipboard thread that records what is written to the clipboard.
+class ThreadHost final : public osdrop::win::ClipboardHost {
+public:
+    ThreadHost() : thread_([this] { run(); }) {}
+    ~ThreadHost() override { stop(); }
+    ThreadHost(const ThreadHost&) = delete;
+    ThreadHost& operator=(const ThreadHost&) = delete;
+    ThreadHost(ThreadHost&&) = delete;
+    ThreadHost& operator=(ThreadHost&&) = delete;
+
+    void post(std::function<void()> work) override {
+        {
+            const std::scoped_lock lock(mutex_);
+            if (stopping_) {
+                return;
+            }
+            queue_.push_back(std::move(work));
+        }
+        changed_.notify_all();
+    }
+    void write(const osdrop::win::ClipData& data) override {
+        {
+            const std::scoped_lock lock(mutex_);
+            written_.push_back(data);
+        }
+        changed_.notify_all();
+    }
+    std::optional<std::string> make_staging_folder() override { return std::nullopt; }
+    void clear_staging(const std::optional<std::string>& /*kept*/) override {}
+
+    /// Ends the thread; work posted later is dropped. Before the engine goes.
+    void stop() {
+        {
+            const std::scoped_lock lock(mutex_);
+            stopping_ = true;
+        }
+        changed_.notify_all();
+        if (thread_.joinable()) {
+            thread_.join();
+        }
+    }
+    std::optional<osdrop::win::ClipData> wait_for_write() {
+        std::unique_lock lock(mutex_);
+        changed_.wait_for(lock, std::chrono::seconds(5), [&] { return !written_.empty(); });
+        return written_.empty() ? std::nullopt : std::optional(written_.front());
+    }
+
+private:
+    void run() {
+        for (;;) {
+            std::function<void()> work;
+            {
+                std::unique_lock lock(mutex_);
+                changed_.wait(lock, [&] { return stopping_ || !queue_.empty(); });
+                if (stopping_) {
+                    return;
+                }
+                work = std::move(queue_.front());
+                queue_.pop_front();
+            }
+            work();
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable changed_;
+    std::deque<std::function<void()>> queue_;
+    std::vector<osdrop::win::ClipData> written_;
+    bool stopping_ = false;
+    std::thread thread_; // declared last: starts once the rest exists
+};
+
 /// One Windows computer with its own fakes.
 struct Computer {
-    explicit Computer(std::uint64_t seed, std::string name) : random_state(seed) {
+    explicit Computer(std::uint64_t seed, std::string name,
+                      osdrop::win::ClipboardHost* clipboard_host = nullptr)
+        : random_state(seed), clipboard(clipboard_host) {
         engine = start(std::move(name));
     }
     std::unique_ptr<GroupEngine> start(std::string name) {
         auto created = GroupEngine::create(
             {.device_name = std::move(name),
-             .random = osdrop_random_source{.fill = fill, .context = &random_state}},
+             .random = osdrop_random_source{.fill = fill, .context = &random_state},
+             .clipboard = clipboard},
             store, discovery, events);
         EXPECT_TRUE(created.has_value());
         return created ? std::move(created.value()) : nullptr;
     }
 
     std::uint64_t random_state;
+    osdrop::win::ClipboardHost* clipboard;
     MemoryStore store;
     FakeDiscovery discovery;
     RecordingEvents events;
@@ -287,6 +366,42 @@ TEST(GroupEngine, StoredStatesAreCheckedBeforeStarting) {
         store, discovery, events);
     ASSERT_FALSE(damaged.has_value());
     EXPECT_EQ(damaged.error(), OSDROP_ERROR_INVALID_KEY);
+}
+
+TEST(GroupEngine, ACopyOnOnePcIsWrittenToAnothersClipboard) {
+    ThreadHost pc_clipboard;
+    ThreadHost laptop_clipboard;
+    {
+        Computer pc(4, "PC", &pc_clipboard);
+        Computer laptop(5, "Laptop", &laptop_clipboard);
+        pc.discovery.report(*laptop.discovery.resolved());
+        laptop.discovery.report(*pc.discovery.resolved());
+        const auto connection = pc.engine->pair(laptop.engine->info().device_id);
+        ASSERT_TRUE(connection.has_value());
+        ASSERT_TRUE(laptop.events.wait_for([&] { return laptop.events.codes_unlocked() > 0; }));
+        ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.codes_unlocked() > 0; }));
+        EXPECT_EQ(pc.engine->confirm_pairing(connection.value(), true), OSDROP_OK);
+        EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
+        ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.connected_unlocked() == 1; }));
+        ASSERT_TRUE(
+            laptop.events.wait_for([&] { return laptop.events.connected_unlocked() == 1; }));
+
+        const std::string text = "copied on the PC";
+        pc_clipboard.post([&] {
+            pc.engine->clipboard()->copied({.contents = {{.format = OSDROP_CLIPBOARD_TEXT,
+                                                          .bytes = {text.begin(), text.end()}}},
+                                            .files = {}});
+        });
+        const auto written = laptop_clipboard.wait_for_write();
+        ASSERT_TRUE(written.has_value());
+        ASSERT_EQ(written->contents.size(), 1U);
+        EXPECT_EQ(written->contents[0].format, OSDROP_CLIPBOARD_TEXT);
+        EXPECT_EQ(std::string(written->contents[0].bytes.begin(), written->contents[0].bytes.end()),
+                  text);
+        // The clipboard threads stop before the engines go.
+        pc_clipboard.stop();
+        laptop_clipboard.stop();
+    }
 }
 
 } // namespace

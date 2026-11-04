@@ -44,7 +44,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 
 ## Core networking
 
-Built in Phases 5–9 and 13 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+Built in Phases 5–9, 13 and 15 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
 bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
 it with a simulated clock and network; one Asio layer drives it in the apps.
 
@@ -57,6 +57,7 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 | Group | `group/` | `Group`: the mesh's observer — trust from the roster, pairing into a group, roster gossip, revocation, leaving, per-member permissions; passes members' events on to the layers above |
 | Layout | `layout/` | `Layout`: next in the chain — screen reports and the layout document between members; the arrangement checks; the crossing engine (below) |
 | Transfer | `transfer/` | `TransferService`: after the layout — files and folder trees between members on transfer streams (below) |
+| Clipboard | `clipboard/` | `Clipboard`: after the transfers — announcements of copies and the newest copy (below) |
 | Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
@@ -106,7 +107,7 @@ physical pixels).
   horizontally then vertically through monitors that continue each other. It comes home to where
   it left when its computer drops out of the arrangement.
 - **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → `TransferService` (files)
-  → the platform, so the layout and the transfers hear only from members.
+  → `Clipboard` → the platform, so these layers hear only from members.
 
 ## Transfers
 
@@ -152,6 +153,36 @@ fetches it into a folder.
   offered to.
 - **Received files are not marked** (no quarantine attribute, no Mark of the Web), by the user's
   decision.
+
+## Shared clipboard
+
+Built in Phase 15. A copy on any member is announced to the members sharing clipboards with it;
+the others fetch it in the background and put it on their own clipboard as real data.
+
+- **Core** (`core/src/clipboard`). `Clipboard` sits after the transfers in the observer chain. A
+  copy gets a clip ID from the wall clock, above every clip ID seen, so the newest copy wins on
+  every member ([`PROTOCOL.md`](PROTOCOL.md), "0x40 ClipboardAnnounce"). Text, RTF, HTML and PNG are
+  offered as single contents from memory; files are offered as an item, scanned at once, and the
+  copy is announced when the scan gives their size. A newer copy from another member withdraws
+  this computer's offers. Receivers fetch formats into memory (`fetch_content`) and files into a
+  folder (`receive`), each with a size limit.
+- **macOS** (`Features/Clipboard`). `ClipboardController` reads the pasteboard's change count
+  every 500 ms. A copy is read only while a member is connected, never when it carries a concealed
+  or transient marker (`org.nspasteboard.ConcealedType` and the older password manager types), and
+  formats over their limit stay behind; a TIFF-only image is converted to PNG off the main thread.
+  Another member's copy is fetched within the limits (text 16 MiB, images 64 MiB, files 512 MiB)
+  and written to the pasteboard once everything arrived, PNG and TIFF for images, files as file
+  URLs from a staging folder; macOS asks for lazily provided data at once, so nothing is provided
+  lazily and no paste waits on the network (DECISIONS.md). What could not be fetched shows a notice
+  in the menu.
+- **Windows** (`windows/shared` and `windows/engine/src/clipboard`). `ClipboardSync` in the
+  portable library does the same as the Mac controller and runs on the clipboard thread of
+  `WinClipboard`, which owns a message-only window: `AddClipboardFormatListener` reports copies;
+  copies marked with `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore`, or
+  `CanIncludeInClipboardHistory` / `CanUploadToCloudClipboard` set to 0 are not read. Text travels
+  as UTF-8 (CF_UNICODETEXT), HTML without the CF_HTML header, images as PNG (from "PNG", CF_DIBV5
+  or CF_DIB through WIC; written as "PNG" and CF_DIB), files as CF_HDROP with "Preferred
+  DropEffect" set to copy. The shell shows a notice in the Computers window.
 
 ## Group on the platforms
 

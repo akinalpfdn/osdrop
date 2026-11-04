@@ -178,6 +178,66 @@ public enum MeshEvent: Sendable, Equatable {
     case transferProgress(TransferProgress)
     /// The end of a transfer this computer receives; after a failure nothing it created is left.
     case transferFinished(id: UInt64, Result<ReceivedItem, CoreError>)
+    /// Another member's copy is now the newest; its formats can be fetched with
+    /// `TransferItem(kind: .clipboard, objectID: clipID, index: format.code)`.
+    case clipboardChanged(DeviceID, clipID: UInt64, formats: [AnnouncedFormat])
+    /// The end of a `fetchContent`.
+    case contentReceived(id: UInt64, Result<Data, CoreError>)
+}
+
+/// A format of the shared clipboard (docs/PROTOCOL.md "0x40 ClipboardAnnounce").
+public enum ClipboardFormat: Sendable, Hashable, CaseIterable {
+    /// UTF-8.
+    case text
+    case rtf
+    /// UTF-8.
+    case html
+    /// PNG.
+    case image
+    /// Fetched with `receive`.
+    case files
+
+    /// The format code, the item index of its transfers.
+    public var code: UInt32 { UInt32(raw.rawValue) }
+
+    var raw: osdrop_clipboard_format {
+        switch self {
+        case .text: OSDROP_CLIPBOARD_TEXT
+        case .rtf: OSDROP_CLIPBOARD_RTF
+        case .html: OSDROP_CLIPBOARD_HTML
+        case .image: OSDROP_CLIPBOARD_IMAGE
+        case .files: OSDROP_CLIPBOARD_FILES
+        }
+    }
+
+    init?(_ raw: osdrop_clipboard_format) {
+        guard let format = Self.allCases.first(where: { $0.raw == raw }) else { return nil }
+        self = format
+    }
+}
+
+/// One format of another member's copy, as announced.
+public struct AnnouncedFormat: Sendable, Equatable {
+    public let format: ClipboardFormat
+    /// For `.files`, the total of the files.
+    public let byteCount: UInt64
+
+    public init(format: ClipboardFormat, byteCount: UInt64) {
+        self.format = format
+        self.byteCount = byteCount
+    }
+}
+
+/// One format of a copy on this computer, with its bytes.
+public struct ClipboardContent: Sendable, Equatable {
+    /// `.text`, `.rtf`, `.html` or `.image`; files are passed as URLs.
+    public let format: ClipboardFormat
+    public let data: Data
+
+    public init(format: ClipboardFormat, data: Data) {
+        self.format = format
+        self.data = data
+    }
 }
 
 /// One item a transfer moves (docs/PROTOCOL.md "Transfer streams").
@@ -249,6 +309,11 @@ public struct ReceivedItem: Sendable, Equatable {
     public let items: [URL]
     /// Links not recreated: they pointed outside the item.
     public let skippedLinks: UInt64
+
+    public init(items: [URL], skippedLinks: UInt64) {
+        self.items = items
+        self.skippedLinks = skippedLinks
+    }
 }
 
 /// A rectangle in 1/16 of a unit (docs/PROTOCOL.md "Conventions").

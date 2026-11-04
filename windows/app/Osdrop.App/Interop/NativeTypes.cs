@@ -54,6 +54,8 @@ internal enum EngineEventKind
     PeerResponsive = 8,
     Stats = 9,
     Log = 10,
+    ClipboardUnavailable = 11,
+    ClipboardTooLarge = 12,
 }
 
 internal static class NativeSizes

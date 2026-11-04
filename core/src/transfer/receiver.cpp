@@ -161,7 +161,8 @@ Receiver::~Receiver() = default;
 
 Expected<TransferId, Error> Receiver::receive(const mesh::DeviceId& device,
                                               const protocol::ObjectRef& item,
-                                              const std::filesystem::path& destination) {
+                                              const std::filesystem::path& destination,
+                                              std::uint64_t max_bytes) {
     using Result = Expected<TransferId, Error>;
     if (!destination.is_absolute()) {
         return Result::failure(Error::InvalidArgument);
@@ -173,7 +174,26 @@ Expected<TransferId, Error> Receiver::receive(const mesh::DeviceId& device,
         return Result::failure(Error::InvalidState);
     }
     const TransferId id = next_id_++;
-    fetches_.try_emplace(id, id, device, item, destination, tunables_.max_entries);
+    fetches_.try_emplace(id, id, device, item, destination, tunables_.max_entries, max_bytes);
+    start_waiting(device);
+    return id;
+}
+
+Expected<TransferId, Error> Receiver::fetch_content(const mesh::DeviceId& device,
+                                                    const protocol::ObjectRef& item,
+                                                    std::uint64_t max_bytes) {
+    using Result = Expected<TransferId, Error>;
+    if (item.kind != protocol::ObjectKind::Clipboard ||
+        item.item_index == protocol::kFilesClipboardFormat) {
+        return Result::failure(Error::InvalidArgument);
+    }
+    if (!peer_limits_.contains(device)) {
+        return Result::failure(Error::InvalidState);
+    }
+    const TransferId id = next_id_++;
+    auto [it, added] =
+        fetches_.try_emplace(id, id, device, item, std::filesystem::path{}, 1, max_bytes);
+    it->second.content = true;
     start_waiting(device);
     return id;
 }
@@ -225,6 +245,20 @@ void Receiver::writable(const StreamKey& key) {
     if (fetch.stage != Stage::Opening) {
         return;
     }
+    if (fetch.content) {
+        fetch.stage = Stage::Fetching;
+        const std::uint32_t request = fetch.next_request++;
+        fetch.pending.emplace(request, Pending{.entry = 0, .received = 0, .link = {}});
+        // One byte past the limit tells a content that is too large.
+        const std::uint64_t length =
+            fetch.max_bytes == UINT64_MAX ? UINT64_MAX : fetch.max_bytes + 1;
+        streams_.send(key, protocol::ContentRequest{.request_id = request,
+                                                    .object = fetch.item,
+                                                    .entry_index = 0,
+                                                    .offset = 0,
+                                                    .length = length});
+        return;
+    }
     fetch.stage = Stage::Listing;
     fetch.manifest_request = fetch.next_request++;
     streams_.send(
@@ -237,6 +271,18 @@ void Receiver::message(const StreamKey& key, const protocol::TransferMessage& me
         return;
     }
     Fetch& fetch = fetches_.at(it->second);
+    if (fetch.content) {
+        if (const auto* chunk = std::get_if<protocol::ContentChunk>(&message)) {
+            received_content_chunk(fetch, *chunk);
+        } else if (const auto* end = std::get_if<protocol::ContentEnd>(&message)) {
+            received_content_end(fetch, *end);
+        } else if (const auto* error = std::get_if<protocol::TransferError>(&message)) {
+            fail(fetch, error_from_wire(error->code));
+        } else {
+            fail(fetch, Error::UnexpectedMessage);
+        }
+        return;
+    }
     if (const auto* manifest = std::get_if<protocol::Manifest>(&message)) {
         received_manifest(fetch, *manifest);
     } else if (const auto* chunk = std::get_if<protocol::ContentChunk>(&message)) {
@@ -314,7 +360,56 @@ void Receiver::received_manifest(Fetch& fetch, const protocol::Manifest& part) {
         return;
     }
     if (fetch.collector.complete()) {
+        if (fetch.collector.plan().total_bytes > fetch.max_bytes) {
+            fail(fetch, Error::TooLarge);
+            return;
+        }
         plan(fetch);
+    }
+}
+
+void Receiver::received_content_chunk(Fetch& fetch, const protocol::ContentChunk& chunk) {
+    const auto pending = fetch.pending.find(chunk.request_id);
+    if (fetch.stage != Stage::Fetching || pending == fetch.pending.end() ||
+        chunk.offset != pending->second.received) {
+        fail(fetch, Error::UnexpectedMessage);
+        return;
+    }
+    if (chunk.data.size() > fetch.max_bytes - fetch.buffer.size()) {
+        fail(fetch, Error::TooLarge);
+        return;
+    }
+    pending->second.received += chunk.data.size();
+    fetch.buffer.insert(fetch.buffer.end(), chunk.data.begin(), chunk.data.end());
+}
+
+void Receiver::received_content_end(Fetch& fetch, const protocol::ContentEnd& end) {
+    const auto pending = fetch.pending.find(end.request_id);
+    if (fetch.stage != Stage::Fetching || pending == fetch.pending.end()) {
+        fail(fetch, Error::UnexpectedMessage);
+        return;
+    }
+    crypto::ContentHasher hasher;
+    hasher.update(fetch.buffer);
+    if (end.byte_count != fetch.buffer.size() || hasher.finish() != end.digest) {
+        fail(fetch, Error::IntegrityFailed);
+        return;
+    }
+    const TransferId id = fetch.id;
+    const mesh::DeviceId device = fetch.device;
+    const ContentOutcome outcome{
+        .id = id, .error = std::nullopt, .content = std::move(fetch.buffer)};
+    finish_stream(fetch);
+    fetches_.erase(id);
+    observer_.on_content_received(outcome);
+    start_waiting(device);
+}
+
+void Receiver::finish_stream(Fetch& fetch) {
+    if (fetch.stream != 0) {
+        by_stream_.erase(key_of(fetch));
+        streams_.close(key_of(fetch), false);
+        fetch.stream = 0;
     }
 }
 
@@ -488,8 +583,7 @@ void Receiver::finalized(TransferId id, std::size_t skipped_links,
     }
     Fetch& fetch = it->second;
     report_progress(fetch, now, true);
-    by_stream_.erase(key_of(fetch));
-    streams_.close(key_of(fetch), false);
+    finish_stream(fetch);
     const mesh::DeviceId device = fetch.device;
     fetches_.erase(it);
     observer_.on_transfer_finished(TransferOutcome{.id = id,
@@ -505,11 +599,7 @@ void Receiver::fail(Fetch& fetch, Error error) {
     }
     fetch.stage = Stage::Failing;
     fetch.error = error;
-    if (fetch.stream != 0) {
-        by_stream_.erase(key_of(fetch));
-        streams_.close(key_of(fetch), false);
-        fetch.stream = 0;
-    }
+    finish_stream(fetch);
     executor_.run_file_work([this, id = fetch.id, disk = fetch.disk] {
         if (disk) {
             rollback(*disk);
@@ -524,10 +614,15 @@ void Receiver::rolled_back(TransferId id) {
         return;
     }
     const mesh::DeviceId device = it->second.device;
-    const TransferOutcome outcome{
-        .id = id, .error = it->second.error, .items = {}, .skipped_links = 0};
+    const bool content = it->second.content;
+    const std::optional<Error> error = it->second.error;
     fetches_.erase(it);
-    observer_.on_transfer_finished(outcome);
+    if (content) {
+        observer_.on_content_received(ContentOutcome{.id = id, .error = error, .content = {}});
+    } else {
+        observer_.on_transfer_finished(
+            TransferOutcome{.id = id, .error = error, .items = {}, .skipped_links = 0});
+    }
     start_waiting(device);
 }
 

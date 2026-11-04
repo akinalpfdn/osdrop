@@ -47,7 +47,15 @@ GroupEngine::create(Config config, StateStore& store, Discovery& discovery, Engi
 
 GroupEngine::GroupEngine(Config config, StateStore& store, Discovery& discovery,
                          EngineEvents& events)
-    : config_(std::move(config)), store_(store), discovery_(discovery), events_(events) {}
+    : config_(std::move(config)), store_(store), discovery_(discovery), events_(events) {
+    if (config_.clipboard != nullptr) {
+        clipboard_ = std::make_unique<ClipboardSync>(
+            *config_.clipboard,
+            [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
+                events_.clipboard_notice(notice, device, name);
+            });
+    }
+}
 
 GroupEngine::~GroupEngine() {
     discovery_.stop();
@@ -82,6 +90,10 @@ osdrop_result GroupEngine::start() {
     }
     if (created != OSDROP_OK) {
         return created;
+    }
+    if (clipboard_) {
+        clipboard_mesh_ = std::make_unique<CoreClipboardMesh>(mesh_);
+        clipboard_->attach(*clipboard_mesh_);
     }
     std::uint16_t listening = 0;
     static_cast<void>(osdrop_mesh_device_id(mesh_, self_.data()));
@@ -199,12 +211,20 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     };
     result.peer_connected = [](void* context, const osdrop_peer* peer, std::uint32_t /*features*/) {
         auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_) {
+            engine->clipboard_->peer_connected(
+                bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(peer->device_id)),
+                std::string(std::data(peer->name)));
+        }
         engine->events_.peer_connected(*peer);
         engine->events_.group_changed();
         engine->events_.nearby_changed();
     };
     result.peer_disconnected = [](void* context, const std::uint8_t* device, osdrop_result reason) {
         auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_) {
+            engine->clipboard_->peer_disconnected(bytes_of<OSDROP_DEVICE_ID_SIZE>(device));
+        }
         engine->events_.peer_disconnected(bytes_of<OSDROP_DEVICE_ID_SIZE>(device), reason);
         engine->events_.group_changed();
     };
@@ -220,6 +240,37 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     };
     result.log = [](void* context, osdrop_log_level level, const char* message) {
         static_cast<GroupEngine*>(context)->events_.log(level, message);
+    };
+    result.clipboard_changed = [](void* context, const std::uint8_t* device, std::uint64_t clip_id,
+                                  const osdrop_announced_format* formats, std::size_t count) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_) {
+            const auto announced = std::span(formats, count);
+            engine->clipboard_->clipboard_changed(
+                bytes_of<OSDROP_DEVICE_ID_SIZE>(device), clip_id,
+                std::vector<osdrop_announced_format>(announced.begin(), announced.end()));
+        }
+    };
+    result.content_received = [](void* context, std::uint64_t id, osdrop_result outcome,
+                                 const std::uint8_t* data, std::size_t size) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_) {
+            const auto content = std::span(data, size);
+            engine->clipboard_->content_received(
+                id, outcome, std::vector<std::uint8_t>(content.begin(), content.end()));
+        }
+    };
+    result.transfer_finished = [](void* context, std::uint64_t id, osdrop_result outcome,
+                                  const char* const* items, std::size_t count,
+                                  std::uint64_t /*skipped_links*/) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_) {
+            std::vector<std::string> paths;
+            for (const char* item : std::span(items, count)) {
+                paths.emplace_back(item);
+            }
+            engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
+        }
     };
     return result;
 }

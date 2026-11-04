@@ -150,4 +150,13 @@
   <data name="MeshRejected" xml:space="preserve">
     <value>Reddedilen datagramlar: {0}</value>
   </data>
+  <data name="ClipboardUnavailable" xml:space="preserve">
+    <value>{0} üzerindeki kopya alınamadı.</value>
+  </data>
+  <data name="ClipboardTooLarge" xml:space="preserve">
+    <value>{0} üzerindeki kopya pano için çok büyük; sürükleyerek taşıyın.</value>
+  </data>
+  <data name="ClipboardOtherComputer" xml:space="preserve">
+    <value>diğer bilgisayar</value>
+  </data>
 </root>

@@ -12,4 +12,5 @@ enum Log {
     static let discovery = Logger(subsystem: subsystem, category: "discovery")
     static let mesh = Logger(subsystem: subsystem, category: "mesh")
     static let group = Logger(subsystem: subsystem, category: "group")
+    static let clipboard = Logger(subsystem: subsystem, category: "clipboard")
 }

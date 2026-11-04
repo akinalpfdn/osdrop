@@ -42,6 +42,9 @@ extension GroupServices {
             keyStore: KeychainKeyStore(), settings: UserDefaultsSettings(), discovery: DNSServiceDiscovery(),
             localNetwork: BonjourLocalNetworkCheck(),
             makeMesh: { configuration throws(CoreError) in try CoreMesh(configuration) },
-            deviceName: DeviceName.current())
+            deviceName: DeviceName.current(),
+            clipboard: ClipboardServices(
+                makePasteboard: { GeneralPasteboard() }, staging: ClipboardStaging(),
+                converter: BitmapImageConverter()))
     }
 }

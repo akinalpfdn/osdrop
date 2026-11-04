@@ -64,6 +64,12 @@ struct TransferOutcome {
     std::size_t skipped_links = 0; ///< links not recreated (outside the item, or not permitted)
 };
 
+struct ContentOutcome {
+    TransferId id = 0;
+    std::optional<Error> error;
+    std::vector<std::uint8_t> content; ///< the whole content; empty after an error
+};
+
 struct OfferReady {
     protocol::ObjectRef item;
     std::optional<Error> error;
@@ -80,6 +86,8 @@ public:
     virtual void on_transfer_progress(const TransferProgress& progress) = 0;
     /// The end of a receive(), once nothing is being written any more.
     virtual void on_transfer_finished(const TransferOutcome& outcome) = 0;
+    /// The end of a fetch_content().
+    virtual void on_content_received(const ContentOutcome& outcome) = 0;
 };
 
 /// Where file work runs. Both run their work in the order posted.

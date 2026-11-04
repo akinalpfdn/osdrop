@@ -18,6 +18,74 @@
         }
       }
     },
+    "clipboard.dismiss" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tamam"
+          }
+        }
+      }
+    },
+    "clipboard.otherComputer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "another computer"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "diğer bilgisayar"
+          }
+        }
+      }
+    },
+    "clipboard.tooLarge %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The copy from %@ is too large for the clipboard; drag it instead."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ üzerindeki kopya pano için çok büyük; sürükleyerek taşıyın."
+          }
+        }
+      }
+    },
+    "clipboard.unavailable %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The copy from %@ could not be fetched."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ üzerindeki kopya alınamadı."
+          }
+        }
+      }
+    },
     "developer.accessibility.granted" : {
       "extractionState" : "manual",
       "localizations" : {
