@@ -66,6 +66,15 @@ turns by the hotkey, local takeover and pushing back, leaves nothing pressed on 
 input to another member and the hotkey brings it back. The Mac's `InputController` runs against
 an event tap, an injector and a mesh in memory.
 
+The input fidelity tests (Phase 12) cross from a Mac to a PC and on to a Mac in the simulated
+network: Control and Command swap between platforms by default and stay as they are Mac to Mac or
+when the user chose keys by position; a mapping changed during control waits for the next
+crossing; Caps Lock travels as a state and comes back home; crossing only with a modifier, the
+push time and the pointer speed per computer apply. Windows scan codes round-trip for every key
+in the table (ISO, JIS, keypad, F13–F24, media keys) and scrolling converts to wheel units with
+the right directions and without losing slow trackpad steps. The Mac's `InputController` applies
+the stored settings at start and keeps Caps Lock in step.
+
 ### Protocol fixtures and fuzzing
 
 `protocol/fixtures/` holds valid and malformed samples of every message, written by an independent
@@ -213,6 +222,24 @@ second Mac. Before each run, say which computer's mouse and keyboard will be use
 | I7 | Refusals | Lock the other computer's screen, then push into it; deny control in its permissions, then push | The cursor stays home; the menu says it is locked; with control denied the edge is a wall |
 | I8 | Being controlled | While controlled, look at the controlled Mac's menu bar and menu | Another icon, and the menu names the controller |
 | I9 | Latency | Developer… › Mesh on the controlled computer while moving the cursor on it for 10 s: wired gigabit, then 5 GHz Wi-Fi | Wired: median under 8 ms, p99 under 20 ms; Wi-Fi: median under 15 ms |
+
+### Input fidelity (Phase 12)
+
+Run in the four directions (Mac → PC, PC → Mac, Mac → Mac, PC → PC) with the default modifier
+mapping, then Mac → PC with keys by position (`defaults write com.akinalpfdn.osdrop
+input.modifierMapping positions`). Use TextEdit or Notes on a Mac and Notepad or WordPad on a PC.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| K1 | Shortcuts | On the other computer: copy, paste, cut, undo, select all, find, save, new tab and close tab in a browser, switch apps (⌘Tab or Alt+Tab, Win+Tab) | Each does what it does on that computer; with the default mapping ⌘C copies on a PC and Ctrl+C on a PC keyboard copies on a Mac |
+| K2 | Turkish | Both computers use the Turkish Q layout, then Turkish F: type ğ ü ş ı ö ç Ğ Ü Ş İ Ö Ç | Every letter as typed |
+| K3 | Other layouts | US and German on the other computer: type @ # { } [ ] \ \| and the German dead keys ^ ´ ` followed by a vowel | The other computer's layout applies, dead keys combine |
+| K4 | Extra keys | An ISO keyboard's key beside left Shift, a JIS keyboard's ¥ ろ 英数 かな (if at hand), keypad with Num Lock on and off, F13–F19, volume and play/pause | The same key on the other computer; keys it lacks do nothing |
+| K5 | Caps Lock | Caps Lock on at home, cross, type; press Caps Lock over there, type; come back, type | Capitals over there; lower case after the press; lower case at home too |
+| K6 | Key repeat | Hold a letter and an arrow key on the other computer | One repeat stream at the controller's rate, stopping on release |
+| K7 | Scrolling | Scroll with a wheel and with a trackpad (two fingers, a fling) on the other computer, with natural scrolling on one side only | Content moves the same way as at home; fine trackpad steps and momentum arrive |
+| K8 | Crossing settings | Push time 300 ms (`input.pushMilliseconds`), immediate crossing (`input.immediate`), crossing only with Control (`input.crossingModifiers` 17) | The cursor crosses after the set time, at once, or only with Control held |
+| K9 | Pointer speed | `input.pointerSpeeds` with the other computer at 2000 | The cursor moves twice as far there for the same hand movement |
 
 Latency is measured on the controlled computer for every motion datagram: the arrival time minus
 the controller's capture time, which core converts to the controlled computer's clock with the

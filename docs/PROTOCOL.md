@@ -321,8 +321,18 @@ something other than the controller moved its cursor by more than one unit.
 | x | coord | entry point |
 | y | coord | |
 | modifiers | u8 | held when crossing |
-| reserved | bytes[3] | 0 |
+| locks | u8 | bit 0 Caps Lock on at the controller; other bits 0 |
+| reserved | bytes[2] | 0 |
 | drag_id | u32 | 0, or the drag carried across (see DragOffer) |
+
+Caps Lock travels as a state: the endpoint sets it from `locks` on Enter and turns it over on each
+KeyEvent down of usage 0x39, which it never injects as a key press. A controller that comes back
+home sets its own Caps Lock to the state it left the endpoints in.
+
+Between a Mac and a PC, a controller swaps Control and Command/Windows (usages 0xE0 ↔ 0xE3,
+0xE4 ↔ 0xE7) in Enter's `modifiers` and in KeyEvents by default, so shortcuts keep their place;
+the user can turn this off. The choice holds for a whole entry, so every release matches its
+press. Endpoints inject what they receive.
 
 #### 0x21 Leave
 
@@ -377,6 +387,10 @@ network delay never splits a double-click. macOS endpoints set the event's click
 | dy | i32 | 1/256 of a unit; positive moves content down |
 | x | coord | where the scroll happens |
 | y | coord | |
+
+A line is one notch of a wheel on every platform, so each computer scrolls a notch as its own
+settings say; a point is a trackpad point (on Windows, 1/48 of a notch). Endpoints apply the
+content movement as it is, whatever their own scroll direction setting.
 
 #### 0x26 ReleaseAll
 
