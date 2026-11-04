@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A key identified by its USB HID usage, the platform-neutral key identity Osdrop sends between
@@ -100,4 +101,17 @@ struct CapturedInput: Sendable, Equatable {
     let event: InputEvent
     /// Nanoseconds since the system started, as CoreGraphics stamps events.
     let timestamp: UInt64
+    /// Where the cursor was, in global display points (top left origin); held in place while
+    /// the input is captured.
+    let location: CGPoint
+    /// `DispatchTime` uptime nanoseconds when the event tap received it, for latency: event
+    /// timestamps do not use one unit on every Mac.
+    let tapTime: UInt64
+
+    init(event: InputEvent, timestamp: UInt64, location: CGPoint = .zero, tapTime: UInt64 = 0) {
+        self.event = event
+        self.timestamp = timestamp
+        self.location = location
+        self.tapTime = tapTime
+    }
 }

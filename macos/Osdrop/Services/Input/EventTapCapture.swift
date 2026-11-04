@@ -251,6 +251,12 @@ private final class TapContext: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        if TapPolicy.isLockChord(type: type, keyCode: keyCode, flags: event.flags) {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                continuation.yield(.hotkey(.lockInput))
+            }
+            return nil
+        }
         let isReleaseChord = TapPolicy.isReleaseChord(type: type, keyCode: keyCode, flags: event.flags)
         let (mode, inputs) = state.withLock { state -> (CaptureMode, [InputEvent]) in
             // The release chord belongs to this Mac; it is never reported as input.
@@ -263,8 +269,12 @@ private final class TapContext: @unchecked Sendable {
             onReleaseChord?()
             return nil
         }
+        let tapTime = DispatchTime.now().uptimeNanoseconds
         for input in inputs {
-            continuation.yield(.input(CapturedInput(event: input, timestamp: event.timestamp)))
+            continuation.yield(
+                .input(
+                    CapturedInput(
+                        event: input, timestamp: event.timestamp, location: event.location, tapTime: tapTime)))
         }
         return TapPolicy.decide(mode: mode, isInjected: false) == .swallow ? nil : Unmanaged.passUnretained(event)
     }

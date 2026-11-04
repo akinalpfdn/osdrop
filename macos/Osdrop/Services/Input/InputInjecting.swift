@@ -12,11 +12,20 @@ protocol InputInjecting: AnyObject {
 
     func moveCursor(to point: CGPoint)
     func button(_ button: MouseButton, isDown: Bool, at point: CGPoint)
+    /// As `button(_:isDown:at:)`, with the click count the controller counted, so network delay
+    /// never splits a double click (docs/PROTOCOL.md "0x24 ButtonEvent").
+    func button(_ button: MouseButton, isDown: Bool, at point: CGPoint, clickCount: Int)
     func scroll(_ delta: ScrollDelta)
     func key(_ key: HIDKey, _ action: KeyAction)
     /// Releases every key and button this injector pressed. Called on every way out of control
     /// (DEVPLAN, input safety invariants).
     func releaseAll()
+    /// Releases keys that went down on this Mac before its input was captured, whether or not this
+    /// injector pressed them: their physical release now goes to another computer.
+    func releaseHere(_ keys: [HIDKey])
+    /// Puts the cursor at `point` without an input event (the cursor came back from another
+    /// computer).
+    func placeCursor(at point: CGPoint)
 }
 
 /// Posts events into the system. Separate from building them so tests can observe the events.

@@ -197,6 +197,14 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     let events = AsyncStream<MeshEvent> { _ in }
     let deviceID = makeDeviceID(0x31)
     let listenPort: UInt16 = 1
+
+    // Input control is not driven here.
+    let control = AsyncStream<ControlEvent> { _ in }
+    func input(_ input: ControlInput, ageMicroseconds: UInt64) {}
+    func returnHome(inputLost: Bool) {}
+    func lockInput(_ locked: Bool) {}
+    func setUnavailable(_ reason: ControlUnavailability?) {}
+    func cursorMoved(to position: CoordPoint) {}
     private let lock = NSLock()
     private var nextID: UInt64 = 1
     private var copied: [(contents: [ClipboardContent], files: [URL])] = []

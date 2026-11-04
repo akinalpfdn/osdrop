@@ -26,8 +26,16 @@ enum TapDisableReason: Sendable, Equatable {
     case userInput
 }
 
+/// Key chords Osdrop keeps for itself; apps and other computers never see them.
+enum CaptureHotkey: Sendable, Equatable {
+    /// Control, Option and Command held with L: keep the cursor on the computer it is on, or let
+    /// it cross again.
+    case lockInput
+}
+
 enum CaptureEvent: Sendable, Equatable {
     case input(CapturedInput)
+    case hotkey(CaptureHotkey)
     /// macOS disabled the event tap and Osdrop turned it back on.
     case tapReenabled(TapDisableReason)
     /// Capture ended and normal input is back.
@@ -76,7 +84,16 @@ enum TapPolicy {
 
     /// The release chord: Control, Option and Command held with Escape pressed.
     static func isReleaseChord(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
-        type == .keyDown && keyCode == Int64(Tunables.Input.releaseChordKeyCode)
+        isChord(Tunables.Input.releaseChordKeyCode, type: type, keyCode: keyCode, flags: flags)
+    }
+
+    /// The "lock input here" chord: Control, Option and Command held with L, in either mode.
+    static func isLockChord(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
+        isChord(Tunables.Input.lockChordKeyCode, type: type, keyCode: keyCode, flags: flags)
+    }
+
+    private static func isChord(_ chordKey: Int, type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
+        type == .keyDown && keyCode == Int64(chordKey)
             && flags.contains([.maskControl, .maskAlternate, .maskCommand])
     }
 }

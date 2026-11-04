@@ -1,9 +1,21 @@
 import CoreBridge
 import Foundation
 
+/// Input control as the app drives it (docs/PROTOCOL.md "Input control messages"). Every command
+/// returns at once and may be called from any thread, so captured input never waits for an actor.
+protocol ControlDriving: Sendable {
+    var control: AsyncStream<ControlEvent> { get }
+    /// Physical input on this Mac, captured `ageMicroseconds` ago.
+    func input(_ input: ControlInput, ageMicroseconds: UInt64)
+    func returnHome(inputLost: Bool)
+    func lockInput(_ locked: Bool)
+    func setUnavailable(_ reason: ControlUnavailability?)
+    func cursorMoved(to position: CoordPoint)
+}
+
 /// The mesh as the app drives it. Core's commands wait for its I/O thread, so the real one runs
 /// them on an actor, off the main thread.
-protocol MeshDriving: Sendable {
+protocol MeshDriving: ControlDriving {
     var events: AsyncStream<MeshEvent> { get }
     var deviceID: DeviceID { get }
     var listenPort: UInt16 { get }
@@ -32,6 +44,7 @@ protocol MeshDriving: Sendable {
 
 actor CoreMesh: MeshDriving {
     nonisolated let events: AsyncStream<MeshEvent>
+    nonisolated let control: AsyncStream<ControlEvent>
     nonisolated let deviceID: DeviceID
     nonisolated let listenPort: UInt16
     private let mesh: Mesh
@@ -40,6 +53,7 @@ actor CoreMesh: MeshDriving {
         let mesh = try Mesh(configuration)
         self.mesh = mesh
         events = mesh.events
+        control = mesh.control
         deviceID = mesh.deviceID
         listenPort = mesh.listenPort
     }
@@ -67,6 +81,36 @@ actor CoreMesh: MeshDriving {
     func setScreens(_ monitors: [ScreenMonitor]) throws(CoreError) { try mesh.setScreens(monitors) }
 
     nonisolated func closeAll(sleeping: Bool) { mesh.closeAll(sleeping: sleeping) }
+
+    // The input commands only queue work for core's I/O thread; their only failure is an argument
+    // the app built wrong.
+    nonisolated func input(_ input: ControlInput, ageMicroseconds: UInt64) {
+        report { () throws(CoreError) in try mesh.input(input, ageMicroseconds: ageMicroseconds) }
+    }
+
+    nonisolated func returnHome(inputLost: Bool) {
+        report { () throws(CoreError) in try mesh.returnHome(inputLost: inputLost) }
+    }
+
+    nonisolated func lockInput(_ locked: Bool) {
+        report { () throws(CoreError) in try mesh.lockInput(locked) }
+    }
+
+    nonisolated func setUnavailable(_ reason: ControlUnavailability?) {
+        report { () throws(CoreError) in try mesh.setUnavailable(reason) }
+    }
+
+    nonisolated func cursorMoved(to position: CoordPoint) {
+        report { () throws(CoreError) in try mesh.cursorMoved(to: position) }
+    }
+
+    private nonisolated func report(_ command: () throws(CoreError) -> Void) {
+        do throws(CoreError) {
+            try command()
+        } catch {
+            Log.input.error("Input command failed: \(String(describing: error), privacy: .public)")
+        }
+    }
 
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) throws(CoreError) -> UInt64 {
         try mesh.clipboardCopied(contents, files: files)

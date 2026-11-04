@@ -315,11 +315,14 @@ public enum CaptureEnd: Sendable, Equatable {
 public enum ControlUnavailability: Sendable, Equatable {
     case screenLocked
     case asleep
+    /// This computer may not inject input: a permission is missing.
+    case notPermitted
 
     var code: UInt8 {
         switch self {
         case .screenLocked: 1
         case .asleep: 2
+        case .notPermitted: 3
         }
     }
 }

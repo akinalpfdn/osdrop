@@ -1,3 +1,4 @@
+import AppKit
 import CoreBridge
 
 /// Composition root: the single place where concrete services are created and injected.
@@ -45,6 +46,17 @@ extension GroupServices {
             deviceName: DeviceName.current(),
             clipboard: ClipboardServices(
                 makePasteboard: { GeneralPasteboard() }, staging: ClipboardStaging(),
-                converter: BitmapImageConverter()))
+                converter: BitmapImageConverter()),
+            input: .system)
+    }
+}
+
+extension InputServices {
+    /// An event tap and an injector of input control's own, apart from the developer tools'.
+    static var system: InputServices {
+        InputServices(
+            makeCapture: { EventTapCapture() }, makeInjector: { CGEventInjector() },
+            isTrusted: { AXIsProcessTrusted() }, cursorLocation: { CGEventInjector.currentCursorLocation() },
+            doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() })
     }
 }
