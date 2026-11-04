@@ -372,3 +372,30 @@ choices the plan leaves open are logged here.
 **Why:** The digest is computed from what is read, so it cannot tell a file that changed while it was being read; size and time can, at no cost. Reusing digests keeps a ranged request from rereading the whole file.
 **Trade-offs:** A change that keeps both size and time (rare; tools that restore times) is caught by the receiver only when a cached digest no longer matches.
 **Revisit if:** Snapshots become available (APFS clones, VSS) for the drag source.
+
+---
+
+## 2026-11-04 — Copies from other computers are fetched at once and written as real data
+**Chosen:** User decisions after a spike on the M3 Air: Finder does not paste a file promise from the general pasteboard ("nothing to paste"), and macOS asked for a lazily provided `public.file-url` 0.03 s after it was written, before any paste (Handoff on, no clipboard manager running). So a copy on another computer is fetched in the background as soon as it is announced, within limits (text 16 MiB, images 64 MiB, files 512 MiB; settings in Phase 16), and written to the pasteboard or clipboard as real data once everything arrived; files are staged in a temporary folder and placed as file URLs (Mac) or CF_HDROP (PC). The same on both platforms (user, for Windows as well).
+**Alternatives:** Lazy data providers and delayed rendering with on-demand fetches (DEVPLAN's plan); file promises; a File Provider extension on the Mac; OLE virtual files on Windows; no file paste on the Mac.
+**Why:** Lazily provided data is requested at once on such Macs anyway, and a provider would block the main thread for the whole download. Real data never makes a paste wait and never hangs when the source disappears. Plain Win32 can be written without the PC; OLE virtual files could not be tried.
+**Trade-offs:** Every copy is transferred even when it is never pasted (bounded by the limits). Copies over the limits do not reach the clipboard; drag and drop moves them. Explorer and Finder show progress only for the local copy from the staging folder.
+**Revisit if:** Users copy large files often without pasting them, or Phase 18 measurements show the traffic matters.
+
+---
+
+## 2026-11-04 — Clip IDs from the wall clock make the newest copy win everywhere
+**Chosen:** A copy's clip ID is microseconds since 1970, but always above every clip ID the computer has seen; members keep the copy with the highest (clip ID, device ID).
+**Alternatives:** The last announcement to arrive wins; a vector clock.
+**Why:** With arrival order, two copies made within a round trip leave members disagreeing. The rule needs no new fields (clip IDs were already "a new value for every change") and lets a copy made after hearing another win even on a computer whose clock runs behind.
+**Trade-offs:** Of two copies made at nearly the same moment on computers whose clocks differ, the one with the later clock wins, not necessarily the one made last.
+**Revisit if:** Users see a copy lose to an earlier one in practice.
+
+---
+
+## 2026-11-04 — Concealed copies are never read, and copies are read only while a member is connected
+**Chosen:** A copy marked concealed or transient (nspasteboard.org types and older password manager types on the Mac; the exclusion and history/cloud formats on Windows) is not read at all; any copy is read only while a member that shares clipboards is connected.
+**Alternatives:** Reading everything and filtering in core; marking sensitive copies on the receiving side.
+**Why:** The acceptance requires that passwords never leave the computer; not reading them at all is the simplest guarantee. Not reading copies while alone avoids needless work and the Files and Folders prompt for copied files.
+**Trade-offs:** A copy made while no member was connected is not shared when one connects later; copy again.
+**Revisit if:** Users expect the clipboard to sync on connect.

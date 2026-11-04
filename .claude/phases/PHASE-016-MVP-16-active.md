@@ -7,13 +7,14 @@ DEVPLAN reference: Phase 15. Depends on: Phase 13
 Copy on one computer and paste on another, for text, images and files.
 
 ## Tasks
-- [ ] Clipboard watchers (pasteboard change count on macOS, format listener on Windows); announcements carry formats only, never content.
-- [ ] Lazy proxies on the other members (pasteboard data providers, delayed rendering); latest copy wins.
-- [ ] Formats: plain text, RTF, HTML, PNG (TIFF and DIB converted); files through promises and virtual files, with staged URLs where a paste target needs them. Whether Finder pastes file promises from the general pasteboard is verified at the start of the phase and the approach chosen accordingly.
-- [ ] Concealed and transient markers respected in both directions (`org.nspasteboard.ConcealedType` and related types; Windows exclusion formats set on proxied sensitive data).
-- [ ] Size caps, the per-device clipboard permission, behaviour with clipboard history verified on Windows and documented.
+- [x] Clipboard watchers (pasteboard change count on macOS, format listener on Windows); announcements carry formats only, never content.
+- [x] Copies on the other members fetched in the background and written as real data (user decisions replace lazy proxies); latest copy wins (clip IDs from the wall clock).
+- [x] Formats: plain text, RTF, HTML, PNG (TIFF and DIB converted); files staged and placed as file URLs (Mac) and CF_HDROP (PC). Finder spike done at the start (no promise paste).
+- [x] Concealed and transient markers respected in both directions: such copies are never read, so they never reach another computer (nothing sensitive is proxied to mark).
+- [x] Size caps and the per-device clipboard permission. Windows clipboard history needs the PC (TESTING CL8).
 
 ## Acceptance Criteria
+(all need two computers: TESTING CL1–CL8; Mac ↔ Mac needs the second Mac, the rest the PC)
 - [ ] Text, rich text, HTML and images paste correctly in all four directions.
 - [ ] Passwords copied from a password manager never leave the computer.
 - [ ] Pasting copied files in Finder and Explorer copies them with progress.

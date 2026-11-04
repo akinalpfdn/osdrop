@@ -48,6 +48,13 @@ of Unicode, emoji, reserved names and long names, and NFC against random strings
 Python's `unicodedata` (the same Unicode version as the tables).
 Through the C API, members on loopback send files and quit in the middle of a transfer.
 
+The clipboard tests announce copies over the simulated network and fetch their formats and files
+within limits; two members that copy at the same moment end with the same newest copy everywhere,
+a later copy wins even with a clock behind, the clipboard permission keeps copies at home, and a
+fetch from a computer that left ends at once. The Mac's `ClipboardController` and the PC's
+`ClipboardSync` run against a pasteboard and a mesh in memory (concealed copies are never read,
+results that arrive early, newer copies, notices), and two PC engines share a copy over loopback.
+
 ### Protocol fixtures and fuzzing
 
 `protocol/fixtures/` holds valid and malformed samples of every message, written by an independent
@@ -162,6 +169,21 @@ apps can start transfers (drag and drop, Phase 14).
 | F2 | Throughput PC → Mac | As F1 the other way | At least 90 MB/s |
 | F3 | Mac ↔ Mac | A folder with nested folders, links and long names | Arrives intact; links inside the folder work |
 | F4 | Cancel | Cancel in the middle of a large file, on either side | Nothing is left in the destination |
+
+### Shared clipboard (Phase 15)
+
+Run with Osdrop on every computer, members of one group. The rows marked PC need the PC.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| CL1 | Text both ways | Copy text in TextEdit on a Mac, paste in Notepad on the PC; then the other way, and Mac ↔ Mac | The same text, accents and emoji included |
+| CL2 | Rich text and HTML | Copy formatted text from Pages or Word and from a web page; paste into Word / TextEdit on the other computer | Formatting arrives |
+| CL3 | Images | Copy a screenshot (Cmd+Ctrl+Shift+4) and an image in Preview / Paint; paste on the other computer | The image arrives, also in apps that take only TIFF (Mac) or DIB (PC) |
+| CL4 | Passwords | Copy a password in 1Password or Passwords (Mac), and in a password manager on the PC | Nothing changes on the other computers |
+| CL5 | Files | Copy files and a folder in Finder / Explorer; paste in the other's Finder / Explorer | They are copied, with progress for large ones |
+| CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and shows that the copy is too large |
+| CL7 | Source gone | Copy on one computer, quit Osdrop there at once, paste on another | The paste is immediate (the old clipboard) and a notice says the copy could not be fetched |
+| CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
 
 ### Runs
 

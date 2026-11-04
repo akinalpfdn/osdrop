@@ -553,8 +553,8 @@ Phases 1–4 retire the platform risks first. They build production modules, tes
 **Goal**: Copy on one computer and paste on another, for text, images and files.
 **Delivers**:
 - Clipboard watchers (pasteboard change count on macOS, format listener on Windows); announcements carry formats only, never content.
-- Lazy proxies on the other members (pasteboard data providers, delayed rendering); latest copy wins.
-- Formats: plain text, RTF, HTML, PNG (TIFF and DIB converted); files through promises and virtual files, with staged URLs where a paste target needs them. Whether Finder pastes file promises from the general pasteboard is verified at the start of the phase and the approach chosen accordingly.
+- Copies on the other members fetched in the background within limits and written as real data (user decision after the start-of-phase spike: Finder does not paste file promises, and macOS requests lazily provided data at once); latest copy wins.
+- Formats: plain text, RTF, HTML, PNG (TIFF and DIB converted); files staged and placed as file URLs (Mac) and CF_HDROP (PC).
 - Concealed and transient markers respected in both directions (`org.nspasteboard.ConcealedType` and related types; Windows exclusion formats set on proxied sensitive data).
 - Size caps, the per-device clipboard permission, behaviour with clipboard history verified on Windows and documented.
 **Depends on**: Phase 13
