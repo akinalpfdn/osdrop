@@ -165,7 +165,7 @@ CLIPBOARD: copy anywhere ─► announce formats to the group ─► peers insta
 - `mesh` — one session per pair, dial direction, duplicate resolution, reconnect with backoff.
 - `group` — roster two-phase set, introductions, revocation propagation, local permission enforcement.
 - `layout` — screen reports, layout document and merges, global geometry, crossing detection, entry mapping, edge push state machine, virtual cursor, conversion to each platform's injection coordinates.
-- `input` — platform-neutral input events: USB HID usages for keys, buttons, scroll in content-movement semantics with phases, modifier state, the held-key ledger.
+- `control` — the cursor and keyboard across computers, controller and endpoint at once: platform-neutral input events (USB HID usages for keys, buttons, scroll with phases), crossings through the `layout` engine, Enter/Leave and refusals, the held-key ledger, local takeover and peer-loss safety (Phase 11; DECISIONS.md 2026-11-04).
 - `clipboard` — format model, announcements, sensitivity flags, size caps.
 - `transfer` — manifests, ranged reads, integrity hashes, cancellation, portable file name mapping.
 - `capi` — flat C API: opaque handles, POD structs, callbacks with a context pointer, error codes. The only public header.
@@ -174,8 +174,7 @@ CLIPBOARD: copy anywhere ─► announce formats to the group ─► peers insta
 
 **macOS app**
 - `App` — SwiftUI scenes: menu bar panel, settings, onboarding, pairing sheet, arrangement editor.
-- `Features/Control` — `InputController` actor: capture state, crossings, local takeover, safety timers.
-- `Features/Endpoint` — injection, refusal rules (locked, asleep, permission), cursor reports.
+- `Features/Control` — `InputController`: watches this Mac's input and hands it to core, captures it while the cursor is elsewhere, injects what a controller sends, capture heartbeat, cursor reports, screen-lock and permission refusals.
 - `Features/Drag` — edge panels, drag capture, promise drag sessions, staging.
 - `Features/Clipboard` — pasteboard watcher, lazy proxies.
 - `Features/Transfers` — progress, history, notifications.

@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <thread>
@@ -78,10 +79,26 @@ struct Events {
     };
     std::vector<Clip> clips;
     std::vector<std::pair<osdrop_result, Bytes>> contents;
+    std::vector<std::vector<osdrop_input>> captures; ///< keys to release here, per capture
+    struct Ended {
+        std::uint8_t reason = 0;
+        std::uint8_t refused = 0;
+        std::int32_t x = 0;
+        std::int32_t y = 0;
+    };
+    std::vector<Ended> ended;
+    std::vector<std::optional<DeviceId>> controlled;
+    std::vector<osdrop_input> injected;
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex);
         return changed.wait_for(lock, milliseconds(5'000), condition);
+    }
+    /// What `read` returns, copied under the lock while callbacks may still arrive.
+    template <typename Read>
+    auto read(Read&& read) {
+        const std::lock_guard lock(mutex);
+        return read();
     }
     template <typename Change>
     void update(Change&& change) {
@@ -168,6 +185,35 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
             const auto content = std::span(data, size);
             e->contents.emplace_back(result, Bytes(content.begin(), content.end()));
         });
+    };
+    callbacks.capture_began = [](void* context, const uint8_t* /*device*/, const osdrop_input* keys,
+                                 size_t count) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            const auto released = std::span(keys, count);
+            e->captures.emplace_back(released.begin(), released.end());
+        });
+    };
+    callbacks.capture_ended = [](void* context, const uint8_t* /*device*/, int32_t x, int32_t y,
+                                 uint8_t reason, uint8_t refused) {
+        auto* e = static_cast<Events*>(context);
+        e->update(
+            [&] { e->ended.push_back({.reason = reason, .refused = refused, .x = x, .y = y}); });
+    };
+    callbacks.controlled = [](void* context, const uint8_t* controller) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            std::optional<DeviceId> device;
+            if (controller != nullptr) {
+                device.emplace();
+                std::memcpy(device->data(), controller, device->size());
+            }
+            e->controlled.push_back(device);
+        });
+    };
+    callbacks.inject = [](void* context, const osdrop_input* input) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->injected.push_back(*input); });
     };
     callbacks.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* e = static_cast<Events*>(context);
@@ -769,6 +815,138 @@ TEST(CapiMesh, ClipboardCommandsCheckTheirArguments) {
     EXPECT_EQ(osdrop_mesh_fetch_content(mac.mesh, stranger.data(), &text, 64, &id),
               OSDROP_ERROR_INVALID_STATE)
         << "not connected";
+}
+
+osdrop_input pointer(int32_t x, int32_t y, int32_t dx, int32_t dy) {
+    osdrop_input input{};
+    input.kind = OSDROP_INPUT_POINTER;
+    input.x = x * 16;
+    input.y = y * 16;
+    input.dx = dx * 16;
+    input.dy = dy * 16;
+    return input;
+}
+
+osdrop_input key(uint16_t usage, uint8_t action) {
+    osdrop_input input{};
+    input.kind = OSDROP_INPUT_KEY;
+    input.page = 7;
+    input.usage = usage;
+    input.action = action;
+    return input;
+}
+
+TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
+    CMesh mac(31, "Mac");
+    CMesh pc(32, "PC");
+    connect_pair(mac, pc);
+    const osdrop_monitor screen = monitor(1, points(0, 0, 1000, 800), points(0, 0, 1000, 800), 1);
+    ASSERT_EQ(osdrop_mesh_set_screens(mac.mesh, &screen, 1), OSDROP_OK);
+    ASSERT_EQ(osdrop_mesh_set_screens(pc.mesh, &screen, 1), OSDROP_OK);
+    ASSERT_TRUE(wait_until([&] { return placed_side_by_side(mac) && placed_side_by_side(pc); }));
+    std::vector<osdrop_placement> row;
+    for (const osdrop_layout_computer& c : mac.layout()) {
+        osdrop_placement placement = c.placement;
+        const bool is_mac = std::ranges::equal(placement.device_id, mac.device_id);
+        placement.x = is_mac ? 0 : 1000 * 16;
+        placement.y = 0;
+        row.push_back(placement);
+    }
+    ASSERT_EQ(osdrop_mesh_set_layout(mac.mesh, row.data(), row.size()), OSDROP_OK);
+    ASSERT_TRUE(wait_until([&] {
+        const auto seen = mac.layout();
+        return std::ranges::any_of(seen, [](const auto& c) { return c.placement.x == 16'000; });
+    }));
+
+    // Shift held on the Mac, then a push against its right edge for over a second.
+    const osdrop_input shift = key(0xE1, 1);
+    ASSERT_EQ(osdrop_mesh_input(mac.mesh, &shift, 0), OSDROP_OK);
+    const auto captured = [&] {
+        const std::lock_guard lock(mac.events.mutex);
+        return !mac.events.captures.empty();
+    };
+    for (int i = 0; i < 70 && !captured(); ++i) {
+        const osdrop_input push = pointer(999, 400, 4, 0);
+        ASSERT_EQ(osdrop_mesh_input(mac.mesh, &push, 0), OSDROP_OK);
+        std::this_thread::sleep_for(milliseconds(20));
+    }
+    ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.captures.size() == 1; }));
+    const auto released = mac.events.read([&] { return mac.events.captures.back(); });
+    ASSERT_EQ(released.size(), 1U);
+    EXPECT_EQ(released.front().usage, 0xE1) << "released on the Mac";
+    EXPECT_EQ(released.front().action, 2);
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.injected.size() >= 2; }));
+    const auto entered = pc.events.read([&] { return pc.events.injected; });
+    EXPECT_EQ(entered.front().kind, OSDROP_INPUT_POINTER);
+    EXPECT_EQ(entered.front().x, 0) << "it enters at the PC's left edge";
+    EXPECT_EQ(entered.front().y, 400 * 16);
+    EXPECT_EQ(entered.at(1).usage, 0xE1) << "Shift is held on the PC";
+    EXPECT_EQ(pc.events.read([&] { return pc.events.controlled; }),
+              (std::vector<std::optional<DeviceId>>{mac.device_id}));
+
+    const osdrop_input a = key(0x04, 1);
+    ASSERT_EQ(osdrop_mesh_input(mac.mesh, &a, 0), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] {
+        return std::ranges::any_of(pc.events.injected, [](const osdrop_input& input) {
+            return input.kind == OSDROP_INPUT_KEY && input.usage == 0x04;
+        });
+    }));
+
+    ASSERT_EQ(osdrop_mesh_return_home(mac.mesh, 0), OSDROP_OK);
+    ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.ended.size() == 1; }));
+    const auto ended = mac.events.read([&] { return mac.events.ended.back(); });
+    EXPECT_EQ(ended.reason, 2);
+    EXPECT_EQ(ended.x, 999 * 16) << "the cursor comes back where it left";
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.controlled.size() == 2; }));
+    EXPECT_EQ(pc.events.read([&] { return pc.events.controlled.back(); }), std::nullopt);
+    std::set<uint16_t> held;
+    for (const osdrop_input& input : pc.events.read([&] { return pc.events.injected; })) {
+        if (input.kind == OSDROP_INPUT_KEY) {
+            input.action == 2 ? static_cast<void>(held.erase(input.usage))
+                              : static_cast<void>(held.insert(input.usage));
+        }
+    }
+    EXPECT_TRUE(held.empty()) << "nothing stays pressed on the PC";
+}
+
+TEST(CapiMesh, InputCommandsCheckTheirArguments) {
+    CMesh mac(33, "Mac");
+    const osdrop_input fine = pointer(1, 1, 1, 0);
+    EXPECT_EQ(osdrop_mesh_input(nullptr, &fine, 0), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, nullptr, 0), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &fine, 0), OSDROP_OK);
+    osdrop_input bad = key(0, 1);
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "usage 0";
+    bad = key(4, 4);
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "action";
+    bad = key(4, 1);
+    bad.page = 9;
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "page";
+    bad = osdrop_input{};
+    bad.kind = OSDROP_INPUT_BUTTON;
+    bad.action = 1;
+    bad.click_count = 0;
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "clicks";
+    bad.click_count = 1;
+    bad.button = 32;
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "button";
+    bad = osdrop_input{};
+    bad.kind = OSDROP_INPUT_SCROLL;
+    bad.scroll_unit = 3;
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "unit";
+    bad.scroll_unit = 1;
+    bad.scroll_phase = 6;
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "phase";
+    bad = osdrop_input{};
+    EXPECT_EQ(osdrop_mesh_input(mac.mesh, &bad, 0), OSDROP_ERROR_INVALID_ARGUMENT) << "kind";
+    EXPECT_EQ(osdrop_mesh_return_home(mac.mesh, 2), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_return_home(mac.mesh, 0), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_lock_input(mac.mesh, 2), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_lock_input(mac.mesh, 1), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 4), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 1), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_cursor_moved(nullptr, 0, 0), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_cursor_moved(mac.mesh, 0, 0), OSDROP_OK);
 }
 
 TEST(CapiMesh, TransferCommandsCheckTheirArguments) {

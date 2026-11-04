@@ -30,6 +30,7 @@ struct DeveloperMeshView: View {
             ForEach(controller.members) { member in
                 SessionRow(
                     member: member, statistics: controller.statistics[member.deviceID],
+                    latency: controller.input?.latency[member.deviceID],
                     isResponsive: !controller.unresponsive.contains(member.deviceID))
             }
         }
@@ -41,6 +42,8 @@ struct DeveloperMeshView: View {
 private struct SessionRow: View {
     let member: GroupMember
     let statistics: SessionStatistics?
+    /// While the member controls this Mac.
+    let latency: InputLatency?
     let isResponsive: Bool
 
     var body: some View {
@@ -60,6 +63,11 @@ private struct SessionRow: View {
                 Text("developer.mesh.offset \(statistics.clockOffsetMicroseconds)")
                 Text("developer.mesh.rejected \(Int64(clamping: statistics.datagramsRejected))")
                 Text("developer.mesh.stale \(Int64(clamping: statistics.staleMotionDropped))")
+                if let latency {
+                    Text(
+                        "developer.mesh.latency \(Self.milliseconds(latency.median)) \(Self.milliseconds(latency.p99)) \(Int64(latency.samples))"
+                    )
+                }
                 if !isResponsive {
                     Text("group.member.unresponsive")
                         .foregroundStyle(Theme.Colors.warning)
@@ -74,5 +82,10 @@ private struct SessionRow: View {
     /// Microseconds as milliseconds with one decimal.
     private static func milliseconds(_ microseconds: UInt32) -> String {
         (Double(microseconds) / 1000).formatted(.number.precision(.fractionLength(1)))
+    }
+
+    private static func milliseconds(_ duration: Duration) -> String {
+        let (seconds, attoseconds) = duration.components
+        return (Double(seconds) * 1000 + Double(attoseconds) / 1e15).formatted(.number.precision(.fractionLength(1)))
     }
 }

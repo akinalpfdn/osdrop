@@ -137,6 +137,8 @@
                 recording?.append(input)
             case .tapReenabled:
                 tapReenableCount += 1
+            case .hotkey:
+                break  // input control's, not the developer tools'
             case .released(let reason):
                 if recording != nil {
                     captureRelease = reason

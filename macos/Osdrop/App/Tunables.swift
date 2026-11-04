@@ -6,6 +6,9 @@ enum Tunables {
     enum Input {
         /// Escape, pressed with Control, Option and Command, ends a capture at once.
         static let releaseChordKeyCode = kVK_Escape
+        /// L, pressed with Control, Option and Command, keeps the cursor on the computer it is on
+        /// until pressed again.
+        static let lockChordKeyCode = kVK_ANSI_L
         /// Written into the source user data of every event Osdrop posts ("OSDROP" in ASCII), so
         /// its own event tap never mistakes injected input for the user's.
         static let injectedEventTag: Int64 = 0x4F53_4452_4F50
@@ -26,6 +29,16 @@ enum Tunables {
         static let eventBufferLimit = 4096
         /// How long `stop` waits for the event tap thread to finish.
         static let tapThreadStopTimeout: Duration = .seconds(2)
+    }
+
+    enum Control {
+        /// How often Osdrop checks whether Accessibility was granted, until it can watch input.
+        static let permissionCheckInterval: Duration = .seconds(1)
+        /// How often a controlled Mac compares its cursor with where the controller put it.
+        static let cursorCheckInterval: Duration = .milliseconds(100)
+        /// A cursor further than this (points) from where the controller put it was moved by an
+        /// application, and the controller is told.
+        static let cursorReportDistance = 1.0
     }
 
     enum Drag {

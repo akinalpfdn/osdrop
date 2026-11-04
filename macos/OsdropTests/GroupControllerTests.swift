@@ -150,7 +150,7 @@ private final class Fixture {
             makeMesh: { configuration throws(CoreError) in
                 if let error = failure(configuration) { throw error }
                 return mesh
-            }, deviceName: "Test Mac", clipboard: .fake())
+            }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
         let controller = GroupController(services: services, screens: screens)
         controller.start()
         return controller
@@ -194,6 +194,14 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
     let events: AsyncStream<MeshEvent>
     let deviceID = Fixture.id(0x30)
     let listenPort = FakeMesh.port
+
+    // Input control is not driven here.
+    let control = AsyncStream<ControlEvent> { _ in }
+    func input(_ input: ControlInput, ageMicroseconds: UInt64) {}
+    func returnHome(inputLost: Bool) {}
+    func lockInput(_ locked: Bool) {}
+    func setUnavailable(_ reason: ControlUnavailability?) {}
+    func cursorMoved(to position: CoordPoint) {}
     private let continuation: AsyncStream<MeshEvent>.Continuation
     private let lock = NSLock()
     private var group: GroupID?

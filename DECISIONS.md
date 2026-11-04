@@ -399,3 +399,48 @@ choices the plan leaves open are logged here.
 **Why:** The acceptance requires that passwords never leave the computer; not reading them at all is the simplest guarantee. Not reading copies while alone avoids needless work and the Files and Folders prompt for copied files.
 **Trade-offs:** A copy made while no member was connected is not shared when one connects later; copy again.
 **Revisit if:** Users expect the clipboard to sync on connect.
+
+---
+
+## 2026-11-04 — Input control logic lives in core, not in each app
+**Chosen:** A `control` layer in core is controller and endpoint at once: it takes all physical input, drives the crossing engine, sends Enter, Leave, motion and events, injects through the platform, keeps the ledger of held keys and buttons and every safety rule (peer loss, local takeover, refusals). The apps capture, inject, hide the cursor, register hotkeys and show state. User decision: Phase 11 is done now for core and the Mac, with the PC side after Phase 3.
+**Alternatives:** DEVPLAN's first layout, an `InputController` on each platform (Swift and C++) with core providing the crossing engine and message types.
+**Why:** The rules are the same on both platforms and are the riskiest part of the phase (stuck keys, input that never comes back). One implementation runs in the simulated network, where 1000 crossings with keys and buttons held and every way out can be tested without hardware; the Windows engine gets the same behaviour by forwarding events.
+**Trade-offs:** Every mouse event of a computer in a group goes through core's I/O thread, also while the cursor is home; a thread hop per event.
+**Revisit if:** The hop shows up in the latency measurements.
+
+---
+
+## 2026-11-04 — No crossing while a mouse button is held
+**Chosen:** Edges are walls while any button is physically held, at home or on another computer.
+**Alternatives:** Crossing with the button and pressing it again on the other side.
+**Why:** The press went to one computer; carrying it would leave the button down there (or a drag half done) until Phase 14's drag and drop moves drags across properly.
+**Trade-offs:** A drag that reaches an edge stops there.
+**Revisit if:** Phase 14 carries drags across edges.
+
+---
+
+## 2026-11-04 — One controller at a time; a busy computer refuses
+**Chosen:** An endpoint controlled by one computer answers another's Enter with Refuse 4 (busy); so does a computer whose own input is on another computer. The same controller may enter again with a new control_id.
+**Alternatives:** The newest controller wins.
+**Why:** Two people would fight over one cursor; local input already ends control, so the person at the computer keeps the last word.
+**Trade-offs:** Two controllers cannot hand a computer over without one leaving first.
+**Revisit if:** Users ask for shared control.
+
+---
+
+## 2026-11-04 — Keys held while crossing are released on the computer the cursor leaves
+**Chosen:** When the cursor leaves home, the keys held there are released on this computer (the platform posts their release) and the held modifiers travel in Enter, so the other computer presses them; their physical release then goes to the other computer. Coming back, nothing is pressed again at home.
+**Alternatives:** Leaving local keys alone; refusing to cross with a key held.
+**Why:** The capture swallows the physical release, so without it Shift or Command would stay down on the computer left behind.
+**Trade-offs:** A modifier held while coming back home is not held at home until pressed again (Phase 12 input fidelity).
+**Revisit if:** Phase 12 adds modifier state sync.
+
+---
+
+## 2026-11-04 — Default hotkeys: ⌃⌥⌘⎋ returns the cursor, ⌃⌥⌘L locks it
+**Chosen:** Control, Option and Command with Escape bring the cursor home (the Phase 1 release chord, which also ends any capture); with L they lock the cursor to the computer it is on, or unlock it. Both are kept by Osdrop and never reach apps or other computers.
+**Alternatives:** Registered global hotkeys (Carbon `RegisterEventHotKey`); configurable keys now.
+**Why:** The event tap already sees every key in both modes, so no second mechanism is needed, and the chords are unlikely to clash with app shortcuts. Settings come with Phase 16.
+**Trade-offs:** The chords are fixed until then.
+**Revisit if:** Users report clashes.

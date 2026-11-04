@@ -54,12 +54,22 @@ final class CGEventInjector: InputInjecting {
     }
 
     func button(_ button: MouseButton, isDown: Bool, at point: CGPoint) {
+        press(button, isDown: isDown, at: point, clickCount: nil)
+    }
+
+    func button(_ button: MouseButton, isDown: Bool, at point: CGPoint, clickCount: Int) {
+        press(button, isDown: isDown, at: point, clickCount: clickCount)
+    }
+
+    /// `clickCount`: from the controller, or nil to count here.
+    private func press(_ button: MouseButton, isDown: Bool, at point: CGPoint, clickCount: Int?) {
         if point != cursorLocation {
             moveCursor(to: point)
         }
         let count: Int
         if isDown {
-            count = clickCounter.press(button, at: point, time: now())
+            let counted = clickCounter.press(button, at: point, time: now())
+            count = clickCount ?? counted
             clickCounts[button] = count
             if !heldButtons.contains(button) {
                 heldButtons.append(button)
@@ -112,6 +122,28 @@ final class CGEventInjector: InputInjecting {
             self.button(button, isDown: false, at: cursorLocation)
         }
         clickCounter.reset()
+    }
+
+    func releaseHere(_ keys: [HIDKey]) {
+        let layout = layout()
+        var held = ModifierKeys.state(from: CGEventSource.flagsState(.combinedSessionState))
+        for key in keys {
+            guard let keyCode = MacKeyMap.keyCode(for: key, layout: layout) else { continue }
+            if let entry = ModifierKeys.entry(for: key) {
+                held.remove(entry.state)
+                post(factory.modifierChange(keyCode: keyCode, flags: ModifierKeys.flags(for: held)))
+            } else {
+                post(
+                    factory.key(keyCode: keyCode, isDown: false, isRepeat: false, flags: ModifierKeys.flags(for: held)))
+            }
+        }
+    }
+
+    func placeCursor(at point: CGPoint) {
+        if CGWarpMouseCursorPosition(point) != .success {
+            Log.input.error("Placing the cursor failed")
+        }
+        cursorLocation = point
     }
 
     private var flags: CGEventFlags {

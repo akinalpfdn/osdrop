@@ -44,7 +44,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 
 ## Core networking
 
-Built in Phases 5–9, 13 and 15 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
+Built in Phases 5–9, 11, 13 and 15 (`core/src`). Everything that decides what goes on the wire is sans-I/O:
 bytes, datagrams, time and commands go in; bytes, datagrams and callbacks come out. Tests drive
 it with a simulated clock and network; one Asio layer drives it in the apps.
 
@@ -58,6 +58,7 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 | Layout | `layout/` | `Layout`: next in the chain — screen reports and the layout document between members; the arrangement checks; the crossing engine (below) |
 | Transfer | `transfer/` | `TransferService`: after the layout — files and folder trees between members on transfer streams (below) |
 | Clipboard | `clipboard/` | `Clipboard`: after the transfers — announcements of copies and the newest copy (below) |
+| Control | `control/` | `Control`: last before the platform — the cursor and keyboard across computers, as controller and endpoint (below) |
 | Transport | `transport/` | `AsioNode`: runs a `Mesh` over one TCP listener, one UDP input socket per session and a timer |
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
@@ -107,7 +108,7 @@ physical pixels).
   horizontally then vertically through monitors that continue each other. It comes home to where
   it left when its computer drops out of the arrangement.
 - **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → `TransferService` (files)
-  → `Clipboard` → the platform, so these layers hear only from members.
+  → `Clipboard` → `Control` (input) → the platform, so these layers hear only from members.
 
 ## Transfers
 
@@ -183,6 +184,37 @@ the others fetch it in the background and put it on their own clipboard as real 
   as UTF-8 (CF_UNICODETEXT), HTML without the CF_HTML header, images as PNG (from "PNG", CF_DIBV5
   or CF_DIB through WIC; written as "PNG" and CF_DIB), files as CF_HDROP with "Preferred
   DropEffect" set to copy. The shell shows a notice in the Computers window.
+
+## Cursor and keyboard across computers
+
+Built in Phase 11 for `core` and the Mac; the Windows side comes with Phase 3. Core decides every
+crossing, refusal and release; the platforms capture, inject, hide the cursor and show state.
+
+- **Core** (`core/src/control`). `Control` is both parts of every computer. As a controller it
+  takes all of the computer's physical input from the platform and drives the crossing engine with
+  it, among the members that are connected, answering and accepting control. When the cursor
+  crosses, it tells the platform to capture (with the keys held at that moment, which the
+  platform releases locally), sends Enter with the held modifiers, then motion as datagrams and
+  keys, buttons and scrolls with the cursor's position on the control connection. Crossing on or
+  back sends Leave. No crossing happens while a button is held or input is locked ("lock input
+  here"). The cursor comes home to where it left on the user's hotkey, a capture the platform
+  lost, a Refuse, a LocalTakeover, or a computer that stops answering for 750 ms, leaves, or stops
+  accepting control. As an endpoint it accepts one controller at a time (others get Refuse busy,
+  as does a computer whose own input is away), refuses while the platform reports the screen
+  locked or injection not permitted, and hands each event to the platform to inject. Its ledger
+  of injected keys and buttons is released on Leave, ReleaseAll, local takeover, a controller that
+  stops answering or leaves, a permission withdrawn and the screen locking. Physical input on a
+  controlled computer ends the control at once (local input wins). It reports its cursor when an
+  application moves it, and measures motion latency through the session clock offset (median and
+  99th percentile of the last 1000 datagrams).
+- **macOS** (`Features/Control`). `InputController` runs an event tap and an injector of its own
+  (the developer tools keep theirs). The tap's events go to core from a detached task, so a busy
+  main thread never delays the cursor elsewhere; click counts come from the Mac's double-click
+  settings. Core's events are applied on the main actor, which also sends the capture heartbeat, so
+  a hung main thread ends the capture. The lock chord ⌃⌥⌘L is swallowed in the tap in both modes;
+  ⌃⌥⌘⎋ remains the way out of a capture. Without Accessibility the Mac does not watch input and
+  refuses control (not permitted); a locked screen refuses too. The menu bar icon changes and the
+  menu names the controller while another computer controls the Mac.
 
 ## Group on the platforms
 

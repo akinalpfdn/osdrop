@@ -164,6 +164,7 @@ TEST(Group, OnlyOnePairingCodeIsShownAtATime) {
 
 TEST(Group, PermissionsRefuseWhatTheyDoNotAllowWithSpecificCodes) {
     SimulatedMeshNetwork network;
+    network.control_layer = false; // refusals reach the observer instead of the input control
     form_group(network, 2);
     SimulatedNode& here = network.node(0);
     SimulatedNode& peer = network.node(1);

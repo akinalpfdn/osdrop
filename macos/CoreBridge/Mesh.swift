@@ -36,6 +36,8 @@ public final class Mesh: Sendable {
     }
 
     public let events: AsyncStream<MeshEvent>
+    /// Input control, apart from `events` so injection never waits behind other events.
+    public let control: AsyncStream<ControlEvent>
     public let deviceID: DeviceID
     public let listenPort: UInt16
 
@@ -47,7 +49,8 @@ public final class Mesh: Sendable {
     /// written by a newer Osdrop (keep it; do not overwrite it).
     public init(_ configuration: Configuration) throws(CoreError) {
         let (events, continuation) = AsyncStream.makeStream(of: MeshEvent.self)
-        let box = MeshCallbackBox(continuation: continuation)
+        let (control, controlContinuation) = AsyncStream.makeStream(of: ControlEvent.self)
+        let box = MeshCallbackBox(continuation: continuation, control: controlContinuation)
         var created: OpaquePointer?
         let groupState = configuration.groupState ?? []
         let layoutState = configuration.layoutState ?? []
@@ -75,15 +78,18 @@ public final class Mesh: Sendable {
         }
         if let error = CoreError(result: result) {
             continuation.finish()
+            controlContinuation.finish()
             throw error
         }
         guard let created else {
             continuation.finish()
+            controlContinuation.finish()
             throw .internalFailure
         }
         var port: UInt16 = 0
         _ = osdrop_mesh_listen_port(created, &port)
         self.events = events
+        self.control = control
         self.box = box
         self.handle = MeshHandle(created)
         self.deviceID = configuration.identity.id
@@ -93,6 +99,7 @@ public final class Mesh: Sendable {
     deinit {
         handle.destroy()
         box.continuation.finish()
+        box.control.finish()
     }
 
     /// The group to advertise; `nil` in no group.
@@ -242,6 +249,35 @@ public final class Mesh: Sendable {
         return id
     }
 
+    // MARK: Input control
+
+    /// Physical input on this Mac, captured `age` microseconds ago: all of it, wherever the cursor
+    /// is. Returns at once, from any thread.
+    public func input(_ input: ControlInput, ageMicroseconds age: UInt64) throws(CoreError) {
+        var raw = input.raw
+        try check(handle.withPointer { osdrop_mesh_input($0, &raw, age) })
+    }
+
+    /// Brings the cursor home: the user's hotkey, or `inputLost` when the capture ended by itself.
+    public func returnHome(inputLost: Bool) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_return_home($0, inputLost ? 1 : 0) })
+    }
+
+    /// "Lock input here": the cursor stays on the computer it is on.
+    public func lockInput(_ locked: Bool) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_lock_input($0, locked ? 1 : 0) })
+    }
+
+    /// Whether other computers may control this one now.
+    public func setUnavailable(_ reason: ControlUnavailability?) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_set_unavailable($0, reason?.code ?? 0) })
+    }
+
+    /// While controlled: where this Mac's cursor really is, when something else moved it.
+    public func cursorMoved(to position: CoordPoint) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_cursor_moved($0, position.x, position.y) })
+    }
+
     /// A copy on this computer: the contents of its text, RTF, HTML and PNG formats, and copied
     /// files. It is announced to the members sharing clipboards with this computer; the new clip's
     /// ID.
@@ -306,9 +342,11 @@ private final class MeshHandle: @unchecked Sendable {
 /// Context of the C callbacks: forwards everything to the event stream.
 private final class MeshCallbackBox: Sendable {
     let continuation: AsyncStream<MeshEvent>.Continuation
+    let control: AsyncStream<ControlEvent>.Continuation
 
-    init(continuation: AsyncStream<MeshEvent>.Continuation) {
+    init(continuation: AsyncStream<MeshEvent>.Continuation, control: AsyncStream<ControlEvent>.Continuation) {
         self.continuation = continuation
+        self.control = control
     }
 
     var callbacks: osdrop_mesh_callbacks {
@@ -402,6 +440,32 @@ private final class MeshCallbackBox: Sendable {
                     .success(data.map { Data(bytes: $0, count: size) } ?? Data())
                 }
             MeshCallbackBox.from(context)?.continuation.yield(.contentReceived(id: id, outcome))
+        }
+        callbacks.capture_began = { context, device, keys, count in
+            guard let device else { return }
+            let released = (0..<count).compactMap { index in keys.map { ControlInput($0[index]) } }
+            MeshCallbackBox.from(context)?.control.yield(.captureBegan(deviceID(device), releaseHere: released))
+        }
+        callbacks.capture_ended = { context, device, x, y, reason, refused in
+            guard let device else { return }
+            MeshCallbackBox.from(context)?.control.yield(
+                .captureEnded(
+                    deviceID(device), cursor: CoordPoint(x: x, y: y),
+                    reason: CaptureEnd(reason: reason, refused: refused)
+                ))
+        }
+        callbacks.controlled = { context, controller in
+            MeshCallbackBox.from(context)?.control.yield(.controlled(by: controller.map { deviceID($0) }))
+        }
+        callbacks.inject = { context, input in
+            guard let input = input?.pointee else { return }
+            MeshCallbackBox.from(context)?.control.yield(.inject(ControlInput(input)))
+        }
+        callbacks.input_latency = { context, controller, samples, median, p99 in
+            guard let controller else { return }
+            MeshCallbackBox.from(context)?.control.yield(
+                .inputLatency(
+                    deviceID(controller), samples: samples, medianMicroseconds: median, p99Microseconds: p99))
         }
         return callbacks
     }

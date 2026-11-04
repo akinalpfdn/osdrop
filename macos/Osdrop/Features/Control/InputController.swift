@@ -1,0 +1,268 @@
+import CoreBridge
+import CoreGraphics
+import Foundation
+import Observation
+
+/// Why the cursor came back without being pushed back, shown in the menu until dismissed.
+enum ControlNotice: Equatable {
+    case refused(name: String, ControlRefusal)
+    /// The other computer stopped answering or left while it had the cursor.
+    case lost(name: String)
+}
+
+/// Motion latency on this Mac while another computer controls it, for the developer tools.
+struct InputLatency: Equatable {
+    let samples: UInt32
+    let median: Duration
+    let p99: Duration
+}
+
+/// What input control needs from the system, made when the mesh starts.
+struct InputServices: Sendable {
+    let makeCapture: @MainActor @Sendable () -> any InputCapturing
+    let makeInjector: @MainActor @Sendable () -> any InputInjecting
+    /// Whether macOS lets Osdrop watch and post input (Accessibility).
+    let isTrusted: @MainActor @Sendable () -> Bool
+    /// Where the system cursor is, in global display points.
+    let cursorLocation: @MainActor @Sendable () -> CGPoint
+    let doubleClickInterval: @MainActor @Sendable () -> TimeInterval
+    let keyboardLayout: @MainActor @Sendable () -> KeyboardPhysicalLayout
+}
+
+/// Cursor and keyboard across computers on this Mac (DEVPLAN Phase 11). Core decides crossings,
+/// refusals and releases; this controller watches the Mac's input and hands all of it to core,
+/// captures it while the cursor is elsewhere, injects what a controller sends, and keeps the
+/// safety timers: the capture heartbeat, so a hung main thread gives the cursor back, and the
+/// cursor reports of a controlled Mac.
+@MainActor
+@Observable
+final class InputController {
+    /// The computer this Mac's input goes to; nil while the cursor is home.
+    private(set) var capturingFor: DeviceID?
+    /// The computer controlling this Mac; nil when none.
+    private(set) var controller: DeviceID?
+    /// "Lock input here" (⌃⌥⌘L): the cursor stays on the computer it is on.
+    private(set) var isLocked = false
+    private(set) var notice: ControlNotice?
+    private(set) var latency: [DeviceID: InputLatency] = [:]
+    /// The event tap runs: a member is connected and macOS allows it (Accessibility).
+    private(set) var isWatching = false
+
+    @ObservationIgnored private let mesh: any ControlDriving
+    @ObservationIgnored private let services: InputServices
+    @ObservationIgnored private let capture: any InputCapturing
+    @ObservationIgnored private let injector: any InputInjecting
+    @ObservationIgnored private let nameOf: @MainActor (DeviceID) -> String
+    @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+    @ObservationIgnored private var heartbeat: Task<Void, Never>?
+    @ObservationIgnored private var cursorWatch: Task<Void, Never>?
+    @ObservationIgnored private var screenLocked = false
+    @ObservationIgnored private var isActive = false
+    @ObservationIgnored private var isPermitted = false
+    @ObservationIgnored private var unavailable: ControlUnavailability??
+
+    init(mesh: any ControlDriving, services: InputServices, nameOf: @escaping @MainActor (DeviceID) -> String) {
+        self.mesh = mesh
+        self.services = services
+        self.capture = services.makeCapture()
+        self.injector = services.makeInjector()
+        self.nameOf = nameOf
+    }
+
+    func start() {
+        tasks.append(
+            Task { [weak self, control = mesh.control] in
+                for await event in control {
+                    self?.handle(event)
+                }
+            })
+        let forwarder = InputForwarder(doubleClickInterval: services.doubleClickInterval())
+        // Off the main thread: every mouse movement goes to core, so a busy main thread never
+        // delays the cursor on another computer.
+        tasks.append(
+            Task.detached { [weak self, mesh, events = capture.events] in
+                var forwarder = forwarder
+                for await event in events {
+                    switch event {
+                    case .input(let captured):
+                        if let input = forwarder.convert(captured) {
+                            mesh.input(input, ageMicroseconds: Self.age(of: captured))
+                        }
+                    case .hotkey(.lockInput):
+                        await self?.toggleLock()
+                    case .released(let reason):
+                        // `.requested` is this controller giving the input back.
+                        if reason != .requested {
+                            mesh.returnHome(inputLost: reason != .releaseChord)
+                        }
+                    case .tapReenabled(let reason):
+                        Log.input.info("Event tap turned back on: \(String(describing: reason), privacy: .public)")
+                    }
+                }
+            })
+        tasks.append(
+            Task { [weak self] in
+                // Accessibility can be granted or taken away at any time.
+                while !Task.isCancelled, self?.watchIfNeeded() != nil {
+                    try? await Task.sleep(for: Tunables.Control.permissionCheckInterval)
+                }
+            })
+    }
+
+    func stop() {
+        tasks.forEach { $0.cancel() }
+        tasks.removeAll()
+        unwatch()
+        injector.releaseAll()
+    }
+
+    /// Whether a member is connected: this Mac's input is watched only then.
+    func setActive(_ active: Bool) {
+        isActive = active
+        if active {
+            watchIfNeeded()
+        } else {
+            unwatch()
+        }
+    }
+
+    func screenLockChanged(_ locked: Bool) {
+        screenLocked = locked
+        updateAvailability()
+    }
+
+    func dismissNotice() {
+        notice = nil
+    }
+
+    // MARK: - Watching this Mac's input
+
+    private func watchIfNeeded() {
+        isPermitted = services.isTrusted()
+        defer { updateAvailability() }
+        guard isActive, isPermitted, !isWatching else { return }
+        do throws(CaptureError) {
+            try capture.start(layout: services.keyboardLayout())
+            isWatching = true
+        } catch {
+            Log.input.error("Watching input failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func unwatch() {
+        guard isWatching else { return }
+        stopHeartbeat()
+        capture.stop()
+        isWatching = false
+    }
+
+    private nonisolated static func age(of captured: CapturedInput) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard captured.tapTime != 0, now > captured.tapTime else { return 0 }
+        return (now - captured.tapTime) / 1_000
+    }
+
+    private func toggleLock() {
+        isLocked.toggle()
+        mesh.lockInput(isLocked)
+    }
+
+    /// Other computers are refused while this Mac's screen is locked or it cannot inject.
+    private func updateAvailability() {
+        let reason: ControlUnavailability? =
+            if screenLocked {
+                .screenLocked
+            } else if !isPermitted {
+                .notPermitted
+            } else {
+                nil
+            }
+        guard unavailable != .some(reason) else { return }
+        unavailable = .some(reason)
+        mesh.setUnavailable(reason)
+    }
+
+    // MARK: - Core's events
+
+    private func handle(_ event: ControlEvent) {
+        switch event {
+        case .captureBegan(let device, let releaseHere):
+            capture.setMode(.capture)
+            injector.releaseHere(Injection.keys(releaseHere))
+            capturingFor = device
+            notice = nil
+            startHeartbeat()
+        case .captureEnded(let device, let cursor, let reason):
+            stopHeartbeat()
+            capture.setMode(.observe)
+            injector.placeCursor(at: ControlCoordinates.point(cursor))
+            capturingFor = nil
+            switch reason {
+            case .refused(let refusal): notice = .refused(name: nameOf(device), refusal)
+            case .peerLost: notice = .lost(name: nameOf(device))
+            case .returned, .hotkey, .inputLost, .takeover: break
+            }
+        case .controlled(let by):
+            controller = by
+            if by == nil {
+                stopCursorWatch()
+                injector.releaseAll()  // core released what it pressed; this covers the rest
+            } else {
+                startCursorWatch()
+            }
+        case .inject(let input):
+            Injection.apply(input, to: injector)
+        case .inputLatency(let device, let samples, let median, let p99):
+            latency[device] = InputLatency(
+                samples: samples, median: .microseconds(median), p99: .microseconds(p99))
+        }
+    }
+
+    // MARK: - Safety timers
+
+    /// While captured, the capture stays only as long as the main thread confirms it.
+    private func startHeartbeat() {
+        heartbeat?.cancel()
+        capture.heartbeat()
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Tunables.Input.captureHeartbeatInterval)
+                self?.capture.heartbeat()
+            }
+        }
+    }
+
+    private func stopHeartbeat() {
+        heartbeat?.cancel()
+        heartbeat = nil
+    }
+
+    /// While controlled, an application that moves the cursor is reported, so the controller's
+    /// cursor follows. A position must hold for two checks: posted movement lands a little later.
+    private func startCursorWatch() {
+        cursorWatch?.cancel()
+        cursorWatch = Task { [weak self] in
+            var previous: CGPoint?
+            var reported: CGPoint?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Tunables.Control.cursorCheckInterval)
+                guard let self else { return }
+                let actual = services.cursorLocation()
+                let expected = injector.cursorLocation
+                let moved =
+                    abs(actual.x - expected.x) > Tunables.Control.cursorReportDistance
+                    || abs(actual.y - expected.y) > Tunables.Control.cursorReportDistance
+                if moved, actual == previous, actual != reported {
+                    mesh.cursorMoved(to: ControlCoordinates.coord(actual))
+                    reported = actual
+                }
+                previous = moved ? actual : nil
+            }
+        }
+    }
+
+    private func stopCursorWatch() {
+        cursorWatch?.cancel()
+        cursorWatch = nil
+    }
+}

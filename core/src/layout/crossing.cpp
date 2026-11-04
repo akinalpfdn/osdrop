@@ -38,6 +38,18 @@ std::optional<CursorUpdate> CrossingEngine::set_arrangement(Arrangement arrangem
     return std::nullopt;
 }
 
+void CrossingEngine::set_locked(bool locked) {
+    locked_ = locked;
+    push_.reset();
+}
+
+void CrossingEngine::correct(Point position) {
+    const Screens* screens = arrangement_.screens(current_);
+    if (away() && screens != nullptr) {
+        position_ = screens->clamp(position);
+    }
+}
+
 CursorUpdate CrossingEngine::motion(TimePoint now, Point local, Point delta) {
     const Screens* own = arrangement_.screens(self_);
     const Point logical =
@@ -99,6 +111,10 @@ CursorUpdate CrossingEngine::motion_away(TimePoint now, Point logical) {
 
 CursorUpdate CrossingEngine::push_against(TimePoint now, std::size_t monitor,
                                           const std::vector<Push>& pushes) {
+    if (locked_) {
+        push_.reset(); // every edge is a wall
+        return here();
+    }
     // At a corner, the edge pushed harder that has a neighbour.
     std::optional<Push> chosen;
     std::optional<Entry> target;

@@ -62,5 +62,8 @@ enum Theme {
         static let remove = "minus.circle"
         static let pair = "link.badge.plus"
         static let failed = "xmark.octagon.fill"
+        /// Another computer controls this Mac (also the menu bar icon then).
+        static let controlled = "cursorarrow.motionlines"
+        static let locked = "lock.fill"
     }
 }

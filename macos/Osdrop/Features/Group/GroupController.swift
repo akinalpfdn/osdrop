@@ -12,6 +12,7 @@ struct GroupServices: Sendable {
     let makeMesh: @Sendable (Mesh.Configuration) throws(CoreError) -> any MeshDriving
     let deviceName: String
     let clipboard: ClipboardServices
+    let input: InputServices
 }
 
 /// What the shared clipboard needs, started with the mesh.
@@ -91,6 +92,7 @@ final class GroupController {
     /// A member removed this computer from its group.
     private(set) var wasRemoved = false
     private(set) var clipboard: ClipboardController?
+    private(set) var input: InputController?
 
     var isRunning: Bool { mesh != nil }
     var deviceName: String { services.deviceName }
@@ -130,6 +132,7 @@ final class GroupController {
         guard let mesh = makeMesh(configuration) else { return }
         self.mesh = mesh
         startClipboard(mesh)
+        startInput(mesh)
         deviceID = mesh.deviceID
         listenPort = mesh.listenPort
         services.settings.saveListenPort(mesh.listenPort)
@@ -174,6 +177,7 @@ final class GroupController {
 
     func stop() {
         clipboard?.stop()
+        input?.stop()
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
         browsing?.cancel()
@@ -276,6 +280,21 @@ final class GroupController {
             })
         self.clipboard = clipboard
         clipboard.start()
+    }
+
+    // MARK: - Input control
+
+    private func startInput(_ mesh: any MeshDriving) {
+        let input = InputController(mesh: mesh, services: services.input) { [weak self] device in
+            self?.name(of: device) ?? String(localized: "clipboard.otherComputer")
+        }
+        self.input = input
+        input.start()
+    }
+
+    /// A member's name for notices; "the other computer" when unknown.
+    func name(of device: DeviceID) -> String {
+        members.first { $0.deviceID == device }?.name ?? String(localized: "clipboard.otherComputer")
     }
 
     // MARK: - Mesh events
@@ -434,6 +453,7 @@ final class GroupController {
         guard let mesh else { return }
         do throws(CoreError) {
             members = try await mesh.members()
+            input?.setActive(members.contains { !$0.isSelf && $0.isConnected })
         } catch {
             Log.group.error("Listing members failed: \(String(describing: error), privacy: .public)")
         }
