@@ -49,6 +49,8 @@ constexpr std::size_t kReadBufferBytes = std::size_t{64} * 1024;
 constexpr auto kConnectTimeout = std::chrono::seconds(5);
 constexpr auto kShutdownGrace = std::chrono::seconds(1);
 constexpr auto kCommandTimeout = std::chrono::seconds(5);
+/// How long an orderly close waits for the peer to close its side.
+constexpr auto kLingerTimeout = std::chrono::seconds(2);
 /// The timer never sleeps longer, so a wrong next_wakeup cannot stall the mesh for long.
 constexpr auto kMaxTimerWait = std::chrono::seconds(1);
 constexpr int kListenBacklog = 16;
@@ -84,6 +86,8 @@ public:
         bool read_paused = false; ///< the mesh wants no more bytes for now
         /// Closed by the mesh or by the peer: nothing more goes to the mesh.
         bool closing = false;
+        /// Closed by the mesh after its last bytes went out: waiting for the peer to close.
+        bool lingering = false;
         std::array<std::uint8_t, kReadBufferBytes> read_buffer{};
         std::array<std::uint8_t, protocol::kMaxDatagramSize + 1> datagram_buffer{};
     };
@@ -298,8 +302,10 @@ public:
         connection->input.close(ignored);
         if (!connection->writing) {
             // Bytes still queued go out first; a dial in progress is aborted.
-            if (connection->queue.empty() || !connection->connect_done) {
+            if (!connection->connect_done) {
                 close_sockets(*connection);
+            } else if (connection->queue.empty()) {
+                linger_close(connection);
             } else {
                 write_next(connection);
             }
@@ -433,6 +439,11 @@ private:
             [this, connection](const asio::error_code& error, std::size_t size) {
                 connection->reading = false;
                 if (connection->closing) {
+                    if (connection->lingering && error) {
+                        close_sockets(*connection);
+                    } else if (connection->lingering) {
+                        drain(connection);
+                    }
                     return;
                 }
                 if (error) {
@@ -473,7 +484,7 @@ private:
         }
         if (connection->queue.empty()) {
             if (connection->closing) {
-                close_sockets(*connection);
+                linger_close(connection);
             }
             return;
         }
@@ -535,6 +546,43 @@ private:
         }
         connection.queued = 0;
         connection.dropped = true;
+    }
+
+    /// An orderly close once the last bytes went out: only the sending side is shut, and what the
+    /// peer still sends is read and dropped until it closes too or kLingerTimeout passes. Closing
+    /// a socket with unread bytes resets the connection, and Windows then drops what the peer had
+    /// not read yet, the last message (a pairing refusal, a Bye) included.
+    static void linger_close(const ConnectionPtr& connection) {
+        if (connection->lingering) {
+            return;
+        }
+        connection->lingering = true;
+        asio::error_code ignored;
+        connection->socket.shutdown(tcp::socket::shutdown_send, ignored);
+        connection->connect_timer.expires_after(kLingerTimeout);
+        connection->connect_timer.async_wait([connection](const asio::error_code& error) {
+            if (error != asio::error::operation_aborted) {
+                close_sockets(*connection);
+            }
+        });
+        drain(connection);
+    }
+
+    static void drain(const ConnectionPtr& connection) {
+        if (connection->reading || !connection->socket.is_open()) {
+            return; // a read in progress drains on when it completes
+        }
+        connection->reading = true;
+        connection->socket.async_read_some(
+            asio::buffer(connection->read_buffer),
+            [connection](const asio::error_code& error, std::size_t /*size*/) {
+                connection->reading = false;
+                if (error) {
+                    close_sockets(*connection); // the peer closed too, or the socket failed
+                } else {
+                    drain(connection);
+                }
+            });
     }
 
     static void close_sockets(Connection& connection) {
