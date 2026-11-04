@@ -120,7 +120,8 @@ protected:
 };
 
 TEST_F(ClipboardSyncTest, CopiesAreReportedOnlyWhileAMemberIsConnectedAndWithinLimits) {
-    sync.copied({.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("alone")}}});
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("alone")}}, .files = {}});
     EXPECT_TRUE(mesh.copies.empty());
 
     connect();
@@ -135,7 +136,8 @@ TEST_F(ClipboardSyncTest, CopiesAreReportedOnlyWhileAMemberIsConnectedAndWithinL
 
     sync.peer_disconnected(kMac);
     host.drain();
-    sync.copied({.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("gone")}}});
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("gone")}}, .files = {}});
     EXPECT_EQ(mesh.copies.size(), 1U);
 }
 
@@ -209,7 +211,8 @@ TEST_F(ClipboardSyncTest, ANewerCopyReplacesOneStillOnItsWay) {
 
     // A copy on this PC wins over one still being fetched.
     announce(14, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 3}});
-    sync.copied({.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("mine")}}});
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("mine")}}, .files = {}});
     sync.content_received(std::get<0>(mesh.fetches[2]), OSDROP_OK, bytes("late"));
     host.drain();
     EXPECT_EQ(host.written.size(), 1U);

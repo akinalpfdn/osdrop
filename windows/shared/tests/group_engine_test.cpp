@@ -389,7 +389,8 @@ TEST(GroupEngine, ACopyOnOnePcIsWrittenToAnothersClipboard) {
         const std::string text = "copied on the PC";
         pc_clipboard.post([&] {
             pc.engine->clipboard()->copied({.contents = {{.format = OSDROP_CLIPBOARD_TEXT,
-                                                          .bytes = {text.begin(), text.end()}}}});
+                                                          .bytes = {text.begin(), text.end()}}},
+                                            .files = {}});
         });
         const auto written = laptop_clipboard.wait_for_write();
         ASSERT_TRUE(written.has_value());

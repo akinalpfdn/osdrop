@@ -24,14 +24,14 @@ using ClipDevice = std::array<std::uint8_t, OSDROP_DEVICE_ID_SIZE>;
 
 struct ClipContent {
     osdrop_clipboard_format format = OSDROP_CLIPBOARD_TEXT;
-    std::vector<std::uint8_t> bytes{};
+    std::vector<std::uint8_t> bytes;
     bool operator==(const ClipContent&) const = default;
 };
 
 /// A copy in the shared formats: UTF-8 text, RTF, plain HTML (UTF-8), PNG, and files.
 struct ClipData {
-    std::vector<ClipContent> contents{};
-    std::vector<std::string> files{}; ///< absolute UTF-8 paths
+    std::vector<ClipContent> contents;
+    std::vector<std::string> files; ///< absolute UTF-8 paths
     bool operator==(const ClipData&) const = default;
 };
 
@@ -126,9 +126,9 @@ private:
         std::uint64_t clip_id = 0;
         std::size_t requests = 0;
         std::size_t settled = 0;
-        std::map<std::uint64_t, osdrop_clipboard_format> pending{};
-        ClipData received{};
-        std::optional<std::string> folder{};
+        std::map<std::uint64_t, osdrop_clipboard_format> pending;
+        ClipData received;
+        std::optional<std::string> folder;
         bool too_large = false;
     };
 

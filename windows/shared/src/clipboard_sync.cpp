@@ -98,7 +98,14 @@ void ClipboardSync::begin(const ClipDevice& device, std::uint64_t clip_id,
     if (mesh_ == nullptr) {
         return;
     }
-    incoming_ = Incoming{.device = device, .clip_id = clip_id};
+    incoming_ = Incoming{.device = device,
+                         .clip_id = clip_id,
+                         .requests = 0,
+                         .settled = 0,
+                         .pending = {},
+                         .received = {},
+                         .folder = std::nullopt,
+                         .too_large = false};
     std::vector<osdrop_clipboard_format> wanted;
     for (const osdrop_announced_format& format : formats) {
         if (format.byte_count > limits_.limit(format.format)) {
