@@ -20,6 +20,13 @@
               HorizontalAlignment="Left" Style="{StaticResource Osdrop.Button}" />
     </StackPanel>
 
+    <StackPanel Visibility="{Binding HasClipboardNotice, Converter={StaticResource Osdrop.Converter.Visible}}"
+                Margin="{StaticResource Osdrop.Thickness.SectionGap}">
+      <TextBlock Text="{Binding ClipboardNotice}" Style="{StaticResource Osdrop.Text.Warning}" />
+      <Button Content="{x:Static res:Strings.GroupDismiss}" Command="{Binding DismissClipboardNoticeCommand}"
+              HorizontalAlignment="Left" Style="{StaticResource Osdrop.Button}" />
+    </StackPanel>
+
     <TextBlock Text="{x:Static res:Strings.GroupMembers}" Style="{StaticResource Osdrop.Text.Title}" />
     <TextBlock Text="{x:Static res:Strings.GroupEmpty}" Style="{StaticResource Osdrop.Text.Caption}"
                Visibility="{Binding IsInGroup, Converter={StaticResource Osdrop.Converter.Hidden}}" />

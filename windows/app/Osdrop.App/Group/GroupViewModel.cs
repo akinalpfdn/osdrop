@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
@@ -31,6 +32,13 @@ public sealed partial class GroupViewModel : ObservableObject
     /// <summary>A member removed this PC from its group.</summary>
     [ObservableProperty]
     public partial bool WasRemoved { get; set; }
+
+    /// <summary>Why another computer's copy is not on the clipboard; null when there is nothing to say.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasClipboardNotice))]
+    public partial string? ClipboardNotice { get; set; }
+
+    public bool HasClipboardNotice => ClipboardNotice is not null;
 
     [ObservableProperty]
     public partial string DeviceId { get; set; } = string.Empty;
@@ -90,6 +98,9 @@ public sealed partial class GroupViewModel : ObservableObject
 
     [RelayCommand]
     private void DismissRemoval() => WasRemoved = false;
+
+    [RelayCommand]
+    private void DismissClipboardNotice() => ClipboardNotice = null;
 
     /// <summary>The user's answer to the code both computers show.</summary>
     internal async Task AnswerAsync(bool accepted)
@@ -168,10 +179,19 @@ public sealed partial class GroupViewModel : ObservableObject
             case EngineEventKind.Log:
                 System.Diagnostics.Trace.WriteLine(received.Message, "Osdrop");
                 break;
+            case EngineEventKind.ClipboardUnavailable:
+                ClipboardNotice = Describe(Localization.Strings.ClipboardUnavailable, received.Name);
+                break;
+            case EngineEventKind.ClipboardTooLarge:
+                ClipboardNotice = Describe(Localization.Strings.ClipboardTooLarge, received.Name);
+                break;
             default:
                 break;
         }
     }
+
+    private static string Describe(string text, string name) => string.Format(
+        CultureInfo.CurrentCulture, text, string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name);
 
     private MemberItem? Find(string deviceId) => Members.FirstOrDefault(member => member.DeviceId == deviceId);
 
