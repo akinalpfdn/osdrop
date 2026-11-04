@@ -185,6 +185,161 @@ public enum MeshEvent: Sendable, Equatable {
     case contentReceived(id: UInt64, Result<Data, CoreError>)
 }
 
+/// A position in 1/16 point of a computer's native desktop (docs/PROTOCOL.md "Conventions").
+public struct CoordPoint: Sendable, Equatable {
+    public var x: Int32
+    public var y: Int32
+
+    public init(x: Int32, y: Int32) {
+        self.x = x
+        self.y = y
+    }
+}
+
+/// Scroll fields with their protocol codes (docs/PROTOCOL.md "0x25 ScrollEvent").
+public struct ScrollStroke: Sendable, Equatable {
+    /// 1 lines (wheels), 2 points (trackpads, continuous wheels).
+    public var unit: UInt8
+    /// 0 none, 1 may begin, 2 began, 3 changed, 4 ended, 5 cancelled.
+    public var phase: UInt8
+    /// 0 none, 1 began, 2 changed, 3 ended.
+    public var momentum: UInt8
+    /// 1/256 of a unit; positive moves content right and down.
+    public var dx: Int32
+    public var dy: Int32
+
+    public init(unit: UInt8, phase: UInt8, momentum: UInt8, dx: Int32, dy: Int32) {
+        self.unit = unit
+        self.phase = phase
+        self.momentum = momentum
+        self.dx = dx
+        self.dy = dy
+    }
+}
+
+/// One input event: physical input this computer captured, or input to inject here.
+public enum ControlInput: Sendable, Equatable {
+    /// Physical: the cursor is at `position` and moved by `delta`. To inject: move the cursor to
+    /// `position` (`delta` is zero).
+    case pointer(position: CoordPoint, delta: CoordPoint)
+    /// `page` 7 keyboard, 12 consumer; `action` 1 down, 2 up, 3 repeat.
+    case key(page: UInt16, usage: UInt16, action: UInt8)
+    /// `button` 0 left, 1 right, 2 middle, 3-31 others. `position` is where it happens when
+    /// injected; physical buttons use the cursor's position.
+    case button(UInt8, isDown: Bool, clickCount: UInt8, position: CoordPoint)
+    case scroll(ScrollStroke, position: CoordPoint)
+
+    init(_ raw: osdrop_input) {
+        let position = CoordPoint(x: raw.x, y: raw.y)
+        switch raw.kind {
+        case OSDROP_INPUT_KEY:
+            self = .key(page: raw.page, usage: raw.usage, action: raw.action)
+        case OSDROP_INPUT_BUTTON:
+            self = .button(raw.button, isDown: raw.action == 1, clickCount: raw.click_count, position: position)
+        case OSDROP_INPUT_SCROLL:
+            self = .scroll(
+                ScrollStroke(
+                    unit: raw.scroll_unit, phase: raw.scroll_phase, momentum: raw.momentum, dx: raw.dx, dy: raw.dy),
+                position: position)
+        default:
+            self = .pointer(position: position, delta: CoordPoint(x: raw.dx, y: raw.dy))
+        }
+    }
+
+    var raw: osdrop_input {
+        var raw = osdrop_input()
+        switch self {
+        case .pointer(let position, let delta):
+            raw.kind = OSDROP_INPUT_POINTER
+            (raw.x, raw.y, raw.dx, raw.dy) = (position.x, position.y, delta.x, delta.y)
+        case .key(let page, let usage, let action):
+            raw.kind = OSDROP_INPUT_KEY
+            (raw.page, raw.usage, raw.action) = (page, usage, action)
+        case .button(let button, let isDown, let clickCount, let position):
+            raw.kind = OSDROP_INPUT_BUTTON
+            (raw.button, raw.action, raw.click_count) = (button, isDown ? 1 : 2, clickCount)
+            (raw.x, raw.y) = (position.x, position.y)
+        case .scroll(let stroke, let position):
+            raw.kind = OSDROP_INPUT_SCROLL
+            (raw.scroll_unit, raw.scroll_phase, raw.momentum) = (stroke.unit, stroke.phase, stroke.momentum)
+            (raw.dx, raw.dy, raw.x, raw.y) = (stroke.dx, stroke.dy, position.x, position.y)
+        }
+        return raw
+    }
+}
+
+/// Why another computer refused control (docs/PROTOCOL.md "0x22 Refuse").
+public enum ControlRefusal: Sendable, Equatable {
+    case locked
+    case asleep
+    case notPermitted
+    case busy
+
+    init?(_ code: UInt8) {
+        switch code {
+        case 1: self = .locked
+        case 2: self = .asleep
+        case 3: self = .notPermitted
+        case 4: self = .busy
+        default: return nil
+        }
+    }
+}
+
+/// Why the cursor came back to this computer.
+public enum CaptureEnd: Sendable, Equatable {
+    /// Pushed back through an edge.
+    case returned
+    case hotkey
+    /// The capture was lost.
+    case inputLost
+    case refused(ControlRefusal)
+    /// Someone used the other computer's own mouse or keyboard.
+    case takeover
+    /// The other computer stopped answering, left, or stopped accepting control.
+    case peerLost
+
+    init(reason: UInt8, refused: UInt8) {
+        switch reason {
+        case 1: self = .returned
+        case 2: self = .hotkey
+        case 3: self = .inputLost
+        case 4: self = .refused(ControlRefusal(refused) ?? .notPermitted)
+        case 5: self = .takeover
+        default: self = .peerLost
+        }
+    }
+}
+
+/// Why this computer cannot be controlled now.
+public enum ControlUnavailability: Sendable, Equatable {
+    case screenLocked
+    case asleep
+
+    var code: UInt8 {
+        switch self {
+        case .screenLocked: 1
+        case .asleep: 2
+        }
+    }
+}
+
+/// Input control events, in order, from core's I/O thread (docs/PROTOCOL.md "Input control
+/// messages").
+public enum ControlEvent: Sendable, Equatable {
+    /// The cursor went to `device`: capture this Mac's input and hide its cursor; release the keys
+    /// in `releaseHere` on this Mac (key events with action 2).
+    case captureBegan(DeviceID, releaseHere: [ControlInput])
+    /// The cursor came back from `device`: give the input back and show the cursor at `cursor`.
+    case captureEnded(DeviceID, cursor: CoordPoint, reason: CaptureEnd)
+    /// `controller` controls this computer now; `nil` when the control ended.
+    case controlled(by: DeviceID?)
+    /// Input from the controller to apply here.
+    case inject(ControlInput)
+    /// While controlled: motion latency from the controller's capture to here, in microseconds.
+    case inputLatency(DeviceID, samples: UInt32, medianMicroseconds: UInt32, p99Microseconds: UInt32)
+}
+
 /// A format of the shared clipboard (docs/PROTOCOL.md "0x40 ClipboardAnnounce").
 public enum ClipboardFormat: Sendable, Hashable, CaseIterable {
     /// UTF-8.
