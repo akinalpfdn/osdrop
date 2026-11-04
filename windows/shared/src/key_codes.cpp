@@ -1,6 +1,5 @@
 #include <osdrop/win/key_codes.hpp>
 
-#include <algorithm>
 #include <array>
 
 namespace osdrop::win {
@@ -192,16 +191,23 @@ constexpr auto kTable = std::to_array<KeyCode>({
 
 } // namespace
 
+// Plain loops: an array's iterator is a pointer in libc++ and a class in MSVC's library.
 std::optional<ScanCode> scan_code_of(HidUsage usage) {
-    const auto found =
-        std::ranges::find_if(kTable, [&](const KeyCode& entry) { return entry.usage == usage; });
-    return found == kTable.end() ? std::nullopt : std::optional(found->scan);
+    for (const KeyCode& entry : kTable) {
+        if (entry.usage == usage) {
+            return entry.scan;
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<HidUsage> usage_of(ScanCode scan) {
-    const auto found =
-        std::ranges::find_if(kTable, [&](const KeyCode& entry) { return entry.scan == scan; });
-    return found == kTable.end() ? std::nullopt : std::optional(found->usage);
+    for (const KeyCode& entry : kTable) {
+        if (entry.scan == scan) {
+            return entry.usage;
+        }
+    }
+    return std::nullopt;
 }
 
 std::span<const KeyCode> key_codes() {
