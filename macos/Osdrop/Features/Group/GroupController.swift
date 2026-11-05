@@ -93,9 +93,12 @@ final class GroupController {
     private(set) var wasRemoved = false
     private(set) var clipboard: ClipboardController?
     private(set) var input: InputController?
+    /// Every member's monitors and placement, for the arrangement editor.
+    private(set) var arrangement: [LayoutComputer] = []
 
     var isRunning: Bool { mesh != nil }
-    var deviceName: String { services.deviceName }
+    /// The name other computers see: the one chosen in Settings, or the Mac's own.
+    var deviceName: String { settings.deviceName ?? services.deviceName }
 
     private let services: GroupServices
     private let screens: any ScreenDescribing
@@ -109,9 +112,12 @@ final class GroupController {
     private var tasks: [Task<Void, Never>] = []
     private var browsing: Task<Void, Never>?
 
-    init(services: GroupServices, screens: any ScreenDescribing) {
+    let settings: AppSettings
+
+    init(services: GroupServices, screens: any ScreenDescribing, settings: AppSettings) {
         self.services = services
         self.screens = screens
+        self.settings = settings
     }
 
     // MARK: - Lifecycle
@@ -121,7 +127,7 @@ final class GroupController {
         let configuration: Mesh.Configuration
         do throws(KeyStoreError) {
             configuration = Mesh.Configuration(
-                identity: try services.keyStore.identity(), name: services.deviceName,
+                identity: try services.keyStore.identity(), name: deviceName,
                 groupState: try services.keyStore.groupState(), layoutState: services.settings.layoutState(),
                 listenPort: services.settings.listenPort())
         } catch {
@@ -160,6 +166,7 @@ final class GroupController {
                 }
                 advertise()
                 await refreshMembers()
+                await refreshArrangement()
             })
     }
 
@@ -257,6 +264,55 @@ final class GroupController {
         }
     }
 
+    /// What `member` may do on this computer; the other computer hears of it at once.
+    func setPermissions(_ permissions: MemberPermissions, for member: GroupMember) {
+        guard let mesh, !member.isSelf else { return }
+        Task { [weak self] in
+            do throws(CoreError) {
+                try await mesh.setPermissions(permissions, for: member.deviceID)
+            } catch {
+                Log.group.error("Changing permissions failed: \(String(describing: error), privacy: .public)")
+            }
+            await self?.refreshMembers()
+        }
+    }
+
+    /// A new arrangement from the editor; members have it within a second. The problem when core
+    /// refuses it (an overlap, a computer that touches no other).
+    func setArrangement(_ placements: [Placement]) async -> CoreError? {
+        guard let mesh else { return .internalFailure }
+        do throws(CoreError) {
+            try await mesh.setLayout(placements)
+        } catch {
+            await refreshArrangement()  // the editor goes back to the arrangement in force
+            return error
+        }
+        await refreshArrangement()
+        return nil
+    }
+
+    /// The name other computers see; the mesh starts again with it, so sessions reconnect.
+    func rename(to name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chosen = trimmed?.isEmpty == false ? trimmed : nil
+        guard chosen != settings.deviceName else { return }
+        settings.deviceName = chosen
+        restart()
+    }
+
+    private func restart() {
+        stop()
+        mesh = nil
+        clipboard = nil
+        input = nil
+        members = []
+        arrangement = []
+        statistics = [:]
+        unresponsive = []
+        discovered = [:]
+        start()
+    }
+
     func dismissRemoval() {
         wasRemoved = false
     }
@@ -272,8 +328,15 @@ final class GroupController {
         let clipboard = ClipboardController(
             mesh: mesh, pasteboard: services.clipboard.makePasteboard(), staging: services.clipboard.staging,
             converter: services.clipboard.converter,
+            limits: { [settings] in
+                ClipboardLimits(
+                    text: Tunables.Clipboard.textLimit, image: Tunables.Clipboard.imageLimit,
+                    files: settings.clipboardFilesLimit)
+            },
+            marksFiles: { [settings] in settings.marksReceivedFiles },
             isShared: { [weak self] in
-                self?.members.contains { !$0.isSelf && $0.isConnected } ?? false
+                guard let self, settings.sharesClipboard else { return false }
+                return members.contains { !$0.isSelf && $0.isConnected }
             },
             nameOf: { [weak self] device in
                 self?.members.first { $0.deviceID == device }?.name ?? String(localized: "clipboard.otherComputer")
@@ -318,6 +381,7 @@ final class GroupController {
             refreshMembersLater()
         case .layoutChanged(let state):
             services.settings.saveLayoutState(state)
+            refreshArrangementLater()
         case .pairingCode(let connection, let code, let peer):
             pairingConnection = connection
             pairingPeer = peer.deviceID
@@ -424,7 +488,7 @@ final class GroupController {
         guard let deviceID else { return }
         do throws(DiscoveryError) {
             advertisement = try services.discovery.advertise(
-                Advertisement(deviceID: deviceID, groupID: groupID, name: services.deviceName), port: listenPort)
+                Advertisement(deviceID: deviceID, groupID: groupID, name: deviceName), port: listenPort)
         } catch {
             Log.discovery.error("Advertising failed: \(String(describing: error), privacy: .public)")
         }
@@ -444,6 +508,19 @@ final class GroupController {
     }
 
     // MARK: - State
+
+    private func refreshArrangementLater() {
+        Task { [weak self] in await self?.refreshArrangement() }
+    }
+
+    private func refreshArrangement() async {
+        guard let mesh else { return }
+        do throws(CoreError) {
+            arrangement = try await mesh.layout()
+        } catch {
+            Log.group.error("Reading the arrangement failed: \(String(describing: error), privacy: .public)")
+        }
+    }
 
     private func refreshMembersLater() {
         Task { [weak self] in await self?.refreshMembers() }

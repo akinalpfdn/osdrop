@@ -170,7 +170,7 @@ private final class ClipboardFixture {
     init(limits: ClipboardLimits = ClipboardLimits(text: 100, image: 100, files: 100)) {
         weak var box: ClipboardFixture?
         controller = ClipboardController(
-            mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: limits,
+            mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: { limits },
             isShared: { box?.shared ?? false }, nameOf: { _ in "PC" })
         box = self
     }
@@ -208,6 +208,9 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {}
+    func layout() async throws(CoreError) -> [LayoutComputer] { [] }
+    func setLayout(_ placements: [Placement]) async throws(CoreError) {}
     private let lock = NSLock()
     private var nextID: UInt64 = 1
     private var copied: [(contents: [ClipboardContent], files: [URL])] = []

@@ -24,7 +24,8 @@ final class ClipboardController {
     private let pasteboard: any PasteboardAccess
     private let staging: ClipboardStaging
     private let converter: any ImageConverting
-    private let limits: ClipboardLimits
+    private let currentLimits: @MainActor () -> ClipboardLimits
+    private let marksFiles: @MainActor () -> Bool
     /// True while a member is connected: copies are read and reported only then.
     private let isShared: @MainActor () -> Bool
     private let nameOf: @MainActor (DeviceID) -> String
@@ -60,14 +61,16 @@ final class ClipboardController {
 
     init(
         mesh: any MeshDriving, pasteboard: any PasteboardAccess, staging: ClipboardStaging,
-        converter: any ImageConverting, limits: ClipboardLimits = .standard,
+        converter: any ImageConverting, limits: @escaping @MainActor () -> ClipboardLimits = { .standard },
+        marksFiles: @escaping @MainActor () -> Bool = { false },
         isShared: @escaping @MainActor () -> Bool, nameOf: @escaping @MainActor (DeviceID) -> String
     ) {
         self.mesh = mesh
         self.pasteboard = pasteboard
         self.staging = staging
         self.converter = converter
-        self.limits = limits
+        self.currentLimits = limits
+        self.marksFiles = marksFiles
         self.isShared = isShared
         self.nameOf = nameOf
         seenChange = pasteboard.changeCount
@@ -106,6 +109,7 @@ final class ClipboardController {
             Log.clipboard.info("A concealed copy stays on this Mac")
             return
         }
+        let limits = currentLimits()
         guard let copy = LocalCopy(pasteboard.read(), limits: limits) else { return }
         incoming = nil  // this copy is newer than the one being fetched
         let previous = reporting
@@ -132,6 +136,7 @@ final class ClipboardController {
     func handle(_ event: MeshEvent) {
         switch event {
         case .clipboardChanged(let device, let clipID, let formats):
+            guard isShared() else { return }  // sharing turned off in Settings
             begin(device: device, clipID: clipID, formats: formats)
         case .contentReceived(let id, let result):
             settle(id, result.map { .content($0) })
@@ -147,7 +152,7 @@ final class ClipboardController {
         early.removeAll()
         var wanted: [AnnouncedFormat] = []
         for format in formats {
-            if format.byteCount > limits.limit(for: format.format) {
+            if format.byteCount > currentLimits().limit(for: format.format) {
                 copy.tooLarge = true
             } else {
                 wanted.append(format)
@@ -176,6 +181,7 @@ final class ClipboardController {
 
     private func request(_ format: ClipboardFormat, of copy: Incoming) {
         let item = TransferItem(kind: .clipboard, objectID: copy.clipID, index: format.code)
+        let limits = currentLimits()
         Task { [weak self, mesh, limits] in
             let id: UInt64
             do throws(CoreError) {
@@ -254,6 +260,9 @@ final class ClipboardController {
     private func write(_ copy: Incoming, tiff: Data?) {
         guard incoming?.clipID == copy.clipID else { return }  // a newer copy replaced it
         incoming = nil
+        if marksFiles() {
+            FileQuarantine.mark(copy.files)
+        }
         let content = RemoteCopy.content(received: copy.received, tiff: tiff, files: copy.files)
         let change = pasteboard.write(content)
         ownChange = change

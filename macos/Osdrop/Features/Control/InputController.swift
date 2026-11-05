@@ -73,10 +73,11 @@ final class InputController {
     }
 
     func start() {
-        mesh.setInputSettings(services.preferences.settings())
-        for (device, permille) in services.preferences.pointerSpeeds() {
+        mesh.setInputSettings(services.preferences.input)
+        for (device, permille) in services.preferences.pointerSpeeds {
             mesh.setPointerSpeed(permille, for: device)
         }
+        capture.setHotkeys(services.preferences.hotkeys)
         tasks.append(
             Task { [weak self, control = mesh.control] in
                 for await event in control {
@@ -139,6 +140,19 @@ final class InputController {
         } else {
             unwatch()
         }
+    }
+
+    /// A setting changed in Settings: it applies at once (a modifier mapping from the next crossing).
+    func apply(_ settings: InputSettings) {
+        mesh.setInputSettings(settings)
+    }
+
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {
+        mesh.setPointerSpeed(permille, for: device)
+    }
+
+    func setHotkeys(_ hotkeys: CaptureHotkeys) {
+        capture.setHotkeys(hotkeys)
     }
 
     func screenLockChanged(_ locked: Bool) {

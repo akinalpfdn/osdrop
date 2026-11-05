@@ -151,7 +151,9 @@ private final class Fixture {
                 if let error = failure(configuration) { throw error }
                 return mesh
             }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
-        let controller = GroupController(services: services, screens: screens)
+        let defaults = UserDefaults(suiteName: "osdrop-tests-\(UUID())") ?? .standard
+        let controller = GroupController(
+            services: services, screens: screens, settings: AppSettings(defaults: defaults))
         controller.start()
         return controller
     }
@@ -187,6 +189,8 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
         case setScreens(Int)
         case revoke(DeviceID)
         case leave
+        case permissions(MemberPermissions, DeviceID)
+        case setLayout(Int)
     }
 
     static let port: UInt16 = 50_000
@@ -244,6 +248,13 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }
     func closeAll(sleeping: Bool) {}
+    func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {
+        lock.withLock { recorded.append(.permissions(permissions, device)) }
+    }
+    func layout() async throws(CoreError) -> [LayoutComputer] { [] }
+    func setLayout(_ placements: [Placement]) async throws(CoreError) {
+        lock.withLock { recorded.append(.setLayout(placements.count)) }
+    }
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64 { 1 }
     func fetchContent(
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64

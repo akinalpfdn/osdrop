@@ -161,15 +161,25 @@ struct TapPolicyTests {
         #expect(TapPolicy.decide(mode: .observe, isInjected: false) == .pass)
     }
 
-    @Test("The release chord needs Control, Option, Command and Escape")
+    @Test("The return chord needs at least its modifiers and its key")
     func releaseChord() {
+        let chord = Hotkey.defaultReturnHome
         let all: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
         let escape = Int64(kVK_Escape)
-        #expect(TapPolicy.isReleaseChord(type: .keyDown, keyCode: escape, flags: all))
-        #expect(TapPolicy.isReleaseChord(type: .keyDown, keyCode: escape, flags: all.union(.maskShift)))
-        #expect(!TapPolicy.isReleaseChord(type: .keyUp, keyCode: escape, flags: all))
-        #expect(!TapPolicy.isReleaseChord(type: .keyDown, keyCode: escape, flags: [.maskControl, .maskCommand]))
-        #expect(!TapPolicy.isReleaseChord(type: .keyDown, keyCode: Int64(kVK_ANSI_A), flags: all))
+        #expect(chord.matches(type: .keyDown, keyCode: escape, flags: all))
+        #expect(chord.matches(type: .keyDown, keyCode: escape, flags: all.union(.maskShift)))
+        #expect(!chord.matches(type: .keyUp, keyCode: escape, flags: all))
+        #expect(!chord.matches(type: .keyDown, keyCode: escape, flags: [.maskControl, .maskCommand]))
+        #expect(!chord.matches(type: .keyDown, keyCode: Int64(kVK_ANSI_A), flags: all))
+    }
+
+    @Test("A recorded chord needs Control, Option or Command, and a key that is not a modifier")
+    func recordsChords() {
+        let recorded = Hotkey(keyCode: UInt16(kVK_ANSI_K), flags: [.control, .shift])
+        #expect(recorded == Hotkey(keyCode: UInt16(kVK_ANSI_K), modifiers: [.control, .shift]))
+        #expect(Hotkey(keyCode: UInt16(kVK_ANSI_K), flags: [.shift]) == nil, "Shift alone would steal typing")
+        #expect(Hotkey(keyCode: UInt16(kVK_Command), flags: [.command]) == nil)
+        #expect(Hotkey.defaultLockInput.displayText.hasPrefix("⌃⌥⌘"))
     }
 }
 

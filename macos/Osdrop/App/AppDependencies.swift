@@ -12,6 +12,7 @@ final class AppDependencies {
     let secureInput: any SecureInputChecking
     let screens: any ScreenDescribing
     let staging: DragStaging
+    let settings: AppSettings
     let group: GroupController
 
     init(
@@ -22,7 +23,8 @@ final class AppDependencies {
         secureInput: any SecureInputChecking = SystemSecureInput(),
         screens: any ScreenDescribing = CGScreenDescriber(),
         staging: DragStaging = DragStaging(),
-        groupServices: GroupServices = .system
+        settings: AppSettings = AppSettings(),
+        groupServices: GroupServices? = nil
     ) {
         self.accessibility = accessibility
         self.cursor = cursor
@@ -32,13 +34,15 @@ final class AppDependencies {
         self.secureInput = secureInput
         self.screens = screens
         self.staging = staging
-        self.group = GroupController(services: groupServices, screens: screens)
+        self.settings = settings
+        self.group = GroupController(
+            services: groupServices ?? .system(settings: settings), screens: screens, settings: settings)
     }
 }
 
 extension GroupServices {
     /// The real Keychain, settings, Bonjour and core mesh.
-    static var system: GroupServices {
+    static func system(settings: AppSettings) -> GroupServices {
         GroupServices(
             keyStore: KeychainKeyStore(), settings: UserDefaultsSettings(), discovery: DNSServiceDiscovery(),
             localNetwork: BonjourLocalNetworkCheck(),
@@ -47,17 +51,17 @@ extension GroupServices {
             clipboard: ClipboardServices(
                 makePasteboard: { GeneralPasteboard() }, staging: ClipboardStaging(),
                 converter: BitmapImageConverter()),
-            input: .system)
+            input: .system(preferences: settings))
     }
 }
 
 extension InputServices {
     /// An event tap and an injector of input control's own, apart from the developer tools'.
-    static var system: InputServices {
+    static func system(preferences: any InputPreferencesStoring) -> InputServices {
         InputServices(
             makeCapture: { EventTapCapture() }, makeInjector: { CGEventInjector() },
             isTrusted: { AXIsProcessTrusted() }, cursorLocation: { CGEventInjector.currentCursorLocation() },
             doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() },
-            capsLock: HIDCapsLock(), preferences: UserDefaultsInputPreferences())
+            capsLock: HIDCapsLock(), preferences: preferences)
     }
 }

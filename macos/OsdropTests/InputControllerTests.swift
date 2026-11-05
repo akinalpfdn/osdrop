@@ -203,10 +203,14 @@ struct InputControllerTests {
     @Test("Stored input settings and pointer speeds reach core at start")
     func appliesSettings() async throws {
         var preferences = FakeInputPreferences()
-        preferences.stored = InputSettings(modifierMapping: .positions, pushMilliseconds: 300, immediate: true)
-        preferences.speeds = [other: 1_500]
+        preferences.input = InputSettings(modifierMapping: .positions, pushMilliseconds: 300, immediate: true)
+        preferences.pointerSpeeds = [other: 1_500]
+        preferences.hotkeys.lockInput = Hotkey(keyCode: 40, modifiers: [.control, .option])
         let controller = start(preferences: preferences)
-        #expect(mesh.calls.prefix(2) == [.settings(preferences.stored), .speed(1_500, other)])
+        #expect(mesh.calls.prefix(2) == [.settings(preferences.input), .speed(1_500, other)])
+        #expect(capture.hotkeys == preferences.hotkeys)
+        controller.apply(InputSettings(pushMilliseconds: 200))
+        #expect(mesh.calls.last == .settings(InputSettings(pushMilliseconds: 200)))
         controller.stop()
     }
 
