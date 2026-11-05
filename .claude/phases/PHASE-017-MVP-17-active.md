@@ -1,5 +1,5 @@
 # Phase 017 (MVP-17) — macOS app UI
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 16. Depends on: Phases 12, 14, 15
 
@@ -21,3 +21,7 @@ A simple, clean, finished Mac interface.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decision (2026-11-05): this phase now, stacked on `feature/phase-12-fidelity`; transfer
+  progress and notifications wait for Phase 14.
+- The window, onboarding, menu, update check, launch at login and diagnostics follow Osplay's
+  macOS app, so the sibling products look and behave alike.
