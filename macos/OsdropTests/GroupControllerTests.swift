@@ -121,6 +121,30 @@ struct GroupControllerTests {
         #expect(PairingCode.display(42_917) == "042 917")
     }
 
+    @Test("A name too long for the wire is cut, and renaming recovers a mesh that failed to start")
+    func renameKeepsTheMeshStartable() async throws {
+        let fixture = GroupFixture()
+        let names = Locked<[String]>([])
+        fixture.failure = { configuration in
+            names.withLock { $0.append(configuration.name) }
+            return nil
+        }
+        let controller = fixture.start()
+        controller.rename(to: String(repeating: "Çalışma ", count: 12))
+        let used = try #require(names.withLock { $0.last })
+        #expect(used.utf8.count <= DeviceName.maximumBytes)
+        #expect(controller.isRunning)
+
+        let failing = GroupFixture()
+        failing.failure = { _ in .invalidString }
+        let stopped = failing.start()
+        #expect(stopped.startFailure == .mesh)
+        failing.failure = { _ in nil }
+        stopped.rename(to: "Desk")
+        #expect(stopped.startFailure == nil)
+        #expect(stopped.isRunning)
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -143,15 +167,20 @@ final class GroupFixture {
     let settings = MemorySettings()
     let screens = FakeScreens()
     /// Makes the mesh fail to start with this error for a configuration, or not (`nil`).
-    var failure: @Sendable (Mesh.Configuration) -> CoreError? = { _ in nil }
+    var failure: @Sendable (Mesh.Configuration) -> CoreError? {
+        get { failureBox.withLock { $0 } }
+        set { failureBox.withLock { $0 = newValue } }
+    }
+    /// Read at every start, so a test can change it between starts.
+    private let failureBox = Locked<@Sendable (Mesh.Configuration) -> CoreError?>({ _ in nil })
 
     func start() -> GroupController {
         let mesh = self.mesh
-        let failure = self.failure
+        let failure = failureBox
         let services = GroupServices(
             keyStore: keyStore, settings: settings, discovery: discovery, localNetwork: FakeLocalNetwork(),
             makeMesh: { configuration throws(CoreError) in
-                if let error = failure(configuration) { throw error }
+                if let error = failure.withLock({ $0 })(configuration) { throw error }
                 return mesh
             }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
         let defaults = UserDefaults(suiteName: "osdrop-tests-\(UUID())") ?? .standard

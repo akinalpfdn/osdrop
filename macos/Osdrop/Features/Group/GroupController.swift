@@ -98,7 +98,8 @@ final class GroupController {
 
     var isRunning: Bool { mesh != nil }
     /// The name other computers see: the one chosen in Settings, or the Mac's own.
-    var deviceName: String { settings.deviceName ?? services.deviceName }
+    /// A stored name is cleaned again, so one saved by an older version cannot stop the mesh.
+    var deviceName: String { settings.deviceName.map(DeviceName.clean) ?? services.deviceName }
 
     private let services: GroupServices
     private let screens: any ScreenDescribing
@@ -291,10 +292,11 @@ final class GroupController {
         return nil
     }
 
-    /// The name other computers see; the mesh starts again with it, so sessions reconnect.
+    /// The name other computers see, cut to what the wire allows (64 bytes, no control
+    /// characters); the mesh starts again with it, so sessions reconnect. Empty: the Mac's name.
     func rename(to name: String?) {
-        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let chosen = trimmed?.isEmpty == false ? trimmed : nil
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let chosen = trimmed.isEmpty ? nil : DeviceName.clean(trimmed)
         guard chosen != settings.deviceName else { return }
         settings.deviceName = chosen
         restart()
@@ -302,6 +304,7 @@ final class GroupController {
 
     private func restart() {
         stop()
+        startFailure = nil  // the start that failed may have been the name's fault
         mesh = nil
         clipboard = nil
         input = nil
