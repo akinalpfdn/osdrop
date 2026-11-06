@@ -28,6 +28,8 @@ final class ClipboardController {
     private let marksFiles: @MainActor () -> Bool
     /// True while a member is connected: copies are read and reported only then.
     private let isShared: @MainActor () -> Bool
+    /// The user's switch in Settings and the menu.
+    private let isEnabled: @MainActor () -> Bool
     private let nameOf: @MainActor (DeviceID) -> String
 
     private var seenChange: Int
@@ -36,6 +38,9 @@ final class ClipboardController {
     /// Copies are reported in the order they were made.
     private var reporting: Task<Void, Never>?
     private var incoming: Incoming?
+    /// This Mac's newest copy as core offers it, to withdraw when sharing is turned off.
+    private var offeredClip: UInt64?
+    private var wasEnabled = true
     /// Results that arrived before their request returned its ID.
     private var early: [UInt64: Result<Fetched, CoreError>] = [:]
 
@@ -63,6 +68,7 @@ final class ClipboardController {
         mesh: any MeshDriving, pasteboard: any PasteboardAccess, staging: ClipboardStaging,
         converter: any ImageConverting, limits: @escaping @MainActor () -> ClipboardLimits = { .standard },
         marksFiles: @escaping @MainActor () -> Bool = { false },
+        isEnabled: @escaping @MainActor () -> Bool = { true },
         isShared: @escaping @MainActor () -> Bool, nameOf: @escaping @MainActor (DeviceID) -> String
     ) {
         self.mesh = mesh
@@ -71,6 +77,7 @@ final class ClipboardController {
         self.converter = converter
         self.currentLimits = limits
         self.marksFiles = marksFiles
+        self.isEnabled = isEnabled
         self.isShared = isShared
         self.nameOf = nameOf
         seenChange = pasteboard.changeCount
@@ -101,6 +108,11 @@ final class ClipboardController {
 
     /// Looks for a new copy on the pasteboard; the polling task calls it.
     func poll() {
+        let enabled = isEnabled()
+        if wasEnabled, !enabled {
+            stopSharing()
+        }
+        wasEnabled = enabled
         let change = pasteboard.changeCount
         guard change != seenChange else { return }
         seenChange = change
@@ -124,11 +136,38 @@ final class ClipboardController {
             }
             guard !contents.isEmpty || !copy.files.isEmpty else { return }
             do throws(CoreError) {
-                _ = try await mesh.clipboardCopied(contents, files: copy.files)
+                let clip = try await mesh.clipboardCopied(contents, files: copy.files)
+                await MainActor.run { [weak self] in self?.offeredClip = clip }
             } catch {
                 Log.clipboard.error("Reporting a copy failed: \(String(describing: error), privacy: .public)")
             }
         }
+    }
+
+    /// Sharing turned off: this Mac's copy can no longer be fetched, and another computer's copy
+    /// being fetched is dropped.
+    private func stopSharing() {
+        if let clip = offeredClip {
+            offeredClip = nil
+            Task { [mesh] in
+                do throws(CoreError) {
+                    try await mesh.withdraw(.clipboard, objectID: clip)
+                } catch {
+                    Log.clipboard.error("Withdrawing the copy failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        if let copy = incoming {
+            incoming = nil
+            let requests = Array(copy.pending.keys)
+            Task { [mesh] in
+                for id in requests {
+                    await mesh.cancelTransfer(id)
+                }
+            }
+            // Its staged files go with the next copy written; the pasteboard may still use others.
+        }
+        notice = nil
     }
 
     // MARK: - Copies on other computers

@@ -35,6 +35,8 @@ protocol MeshDriving: ControlDriving {
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError)
     func layout() async throws(CoreError) -> [LayoutComputer]
     func setLayout(_ placements: [Placement]) async throws(CoreError)
+    func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError)
+    func cancelTransfer(_ id: UInt64) async
     /// Returns at once: core queues the Byes, also while the app is quitting.
     func closeAll(sleeping: Bool)
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64
@@ -93,6 +95,12 @@ actor CoreMesh: MeshDriving {
     func layout() throws(CoreError) -> [LayoutComputer] { try mesh.layout() }
 
     func setLayout(_ placements: [Placement]) throws(CoreError) { try mesh.setLayout(placements) }
+
+    func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) throws(CoreError) {
+        try mesh.withdraw(kind, objectID: objectID)
+    }
+
+    func cancelTransfer(_ id: UInt64) { mesh.cancelTransfer(id) }
 
     nonisolated func closeAll(sleeping: Bool) { mesh.closeAll(sleeping: sleeping) }
 

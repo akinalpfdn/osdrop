@@ -337,6 +337,7 @@ final class GroupController {
                     files: settings.clipboardFilesLimit)
             },
             marksFiles: { [settings] in settings.marksReceivedFiles },
+            isEnabled: { [settings] in settings.sharesClipboard },
             isShared: { [weak self] in
                 guard let self, settings.sharesClipboard else { return false }
                 return members.contains { !$0.isSelf && $0.isConnected }

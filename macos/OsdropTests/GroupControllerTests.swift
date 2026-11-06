@@ -285,6 +285,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
         lock.withLock { recorded.append(.permissions(permissions, device)) }
     }
     func layout() async throws(CoreError) -> [LayoutComputer] { lock.withLock { computers } }
+    func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError) {}
+    func cancelTransfer(_ id: UInt64) async {}
     func setComputers(_ layout: [LayoutComputer]) { lock.withLock { computers = layout } }
     func setLayout(_ placements: [Placement]) async throws(CoreError) {
         lock.withLock { recorded.append(.setLayout(placements)) }
