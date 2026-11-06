@@ -201,8 +201,13 @@ final class InputController {
     }
 
     private func toggleLock() {
-        isLocked.toggle()
-        mesh.lockInput(isLocked)
+        setLocked(!isLocked)
+    }
+
+    /// "Lock input here", from the hotkey or the menu.
+    func setLocked(_ locked: Bool) {
+        isLocked = locked
+        mesh.lockInput(locked)
     }
 
     /// Other computers are refused while this Mac's screen is locked or it cannot inject.

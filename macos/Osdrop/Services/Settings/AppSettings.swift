@@ -155,13 +155,13 @@ final class AppSettings: InputPreferencesStoring {
     }
 
     private enum Key {
-        static let checksForUpdates = "updates.check"
-        static let lastUpdateCheck = "updates.lastCheck"
-        static let onboarding = "onboarding.completed"
-        static let deviceName = "device.name"
-        static let sharesClipboard = "clipboard.share"
-        static let clipboardFilesLimit = "clipboard.filesLimit"
-        static let marksReceivedFiles = "files.markReceived"
+        static let checksForUpdates = "checkForUpdates"
+        static let lastUpdateCheck = "lastUpdateCheck"
+        static let onboarding = "completedOnboarding"
+        static let deviceName = "deviceName"
+        static let sharesClipboard = "shareClipboard"
+        static let clipboardFilesLimit = "clipboardFilesLimit"
+        static let marksReceivedFiles = "markReceivedFiles"
 
         enum Input {
             /// "shortcuts" (the default) or "positions".

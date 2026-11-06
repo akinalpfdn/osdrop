@@ -53,7 +53,7 @@ struct AppSettingsTests {
         let device = try #require(DeviceID(bytes: [UInt8](repeating: 0x42, count: 16)))
         defaults.set(9_000, forKey: "input.pushMilliseconds")
         defaults.set([device.hex: 50, "not a device": 1_000], forKey: "input.pointerSpeeds")
-        defaults.set(123, forKey: "clipboard.filesLimit")
+        defaults.set(123, forKey: "clipboardFilesLimit")
         let settings = AppSettings(defaults: defaults)
         #expect(settings.input.pushMilliseconds == InputSettings.maxPushMilliseconds)
         #expect(settings.pointerSpeeds.isEmpty)

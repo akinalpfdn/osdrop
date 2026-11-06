@@ -27,6 +27,12 @@ enum Tunables {
     }
 
     enum Control {
+        /// This Mac's own pointer speed, in thousandths.
+        static let normalSpeed: UInt32 = 1_000
+        /// The pointer speeds Settings offers, as a share of this Mac's own.
+        static let speedRange = 0.25...4.0
+        /// The push times Settings offers, in seconds.
+        static let pushSecondsRange = 0.2...3.0
         /// How often Osdrop checks whether Accessibility was granted, until it can watch input.
         static let permissionCheckInterval: Duration = .seconds(1)
         /// How often a controlled Mac compares its cursor with where the controller put it.
@@ -49,6 +55,21 @@ enum Tunables {
         /// How long a capture waits for the source app to write promised files. Photos may first
         /// download originals from iCloud.
         static let promiseTimeout: Duration = .seconds(120)
+    }
+
+    enum Logs {
+        /// Copy diagnostics includes this many of the newest log lines.
+        static let diagnosticsLines = 300
+        /// How far back an exported log reaches (the current run only: the store is per process).
+        static let exportWindow: TimeInterval = 24 * 60 * 60
+    }
+
+    enum Updates {
+        static let latestReleaseURL = URL(string: "https://api.github.com/repos/akinalpfdn/osdrop/releases/latest")
+        static let releasesPage = URL(string: "https://github.com/akinalpfdn/osdrop/releases")
+        /// The automatic check runs at most this often.
+        static let interval: TimeInterval = 24 * 60 * 60
+        static let timeout: TimeInterval = 15
     }
 
     enum Files {
