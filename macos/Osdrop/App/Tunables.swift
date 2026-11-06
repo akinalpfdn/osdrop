@@ -40,6 +40,8 @@ enum Tunables {
         /// A cursor further than this (points) from where the controller put it was moved by an
         /// application, and the controller is told.
         static let cursorReportDistance = 1.0
+        /// After Osdrop sets Caps Lock, a Caps Lock event this soon is its echo, not the user's key.
+        static let capsEchoWindow: Duration = .milliseconds(300)
         /// How often Caps Lock is read while the cursor is home.
         static let capsCheckInterval: Duration = .milliseconds(250)
         /// Pointer speeds core takes, in thousandths of this Mac's own.

@@ -248,6 +248,24 @@ struct InputControllerTests {
         controller.stop()
     }
 
+    @Test("Right after Osdrop sets Caps Lock, a Caps Lock event is not taken for the user's key")
+    func ignoresTheCapsLockEcho() async throws {
+        let controller = start()
+        try await waitUntil { controller.isWatching }
+        mesh.send(.controlled(by: other))
+        mesh.send(.inject(.capsLock(true)))
+        try await waitUntil { capsLock.isOn }
+        let caps = CapturedInput(event: .key(.keyboard(ModifierKeys.capsLockUsage), .down), timestamp: 0)
+        capture.send(.input(caps))
+        capture.send(.input(CapturedInput(event: .key(.keyboard(0x04), .down), timestamp: 0)))
+        try await waitUntil { mesh.calls.contains(.input(.key(page: 7, usage: 4, action: 1))) }
+        #expect(!mesh.calls.contains(.input(.key(page: 7, usage: 0x39, action: 1))), "the echo stays home")
+        try await Task.sleep(for: Tunables.Control.capsEchoWindow + .milliseconds(100))
+        capture.send(.input(caps))
+        try await waitUntil { mesh.calls.contains(.input(.key(page: 7, usage: 0x39, action: 1))) }
+        controller.stop()
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<200 where !condition() {
             try await Task.sleep(for: .milliseconds(10))
