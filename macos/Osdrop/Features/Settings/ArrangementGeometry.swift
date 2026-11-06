@@ -57,7 +57,8 @@ struct ArrangementGeometry: Equatable {
     }
 
     /// Where `device` lands when dropped with its origin at `drop`: touching the nearest edge of
-    /// another computer, keeping at least a sliver of that edge in common so the cursor can cross.
+    /// another computer, with at least half of the shorter of the two edges in common, so the
+    /// cursor has room to cross.
     /// Alone in the arrangement, it stays where dropped.
     func snapped(_ device: DeviceID, droppedAt drop: CGPoint) -> CGPoint {
         guard let moving = computers.first(where: { $0.deviceID == device }) else { return drop }
@@ -67,8 +68,12 @@ struct ArrangementGeometry: Equatable {
         var best: (point: CGPoint, distance: CGFloat)?
         for other in computers where other.deviceID != device {
             let target = other.bounds
-            let overlapY = Self.clamp(dropped.minY, target.minY - size.height + 1, target.maxY - 1)
-            let overlapX = Self.clamp(dropped.minX, target.minX - size.width + 1, target.maxX - 1)
+            let sharedHeight = min(size.height, target.height) * Self.sharedEdgeFraction
+            let sharedWidth = min(size.width, target.width) * Self.sharedEdgeFraction
+            let overlapY = Self.clamp(
+                dropped.minY, target.minY - size.height + sharedHeight, target.maxY - sharedHeight)
+            let overlapX = Self.clamp(
+                dropped.minX, target.minX - size.width + sharedWidth, target.maxX - sharedWidth)
             let candidates = [
                 CGPoint(x: target.maxX, y: overlapY),  // to its right
                 CGPoint(x: target.minX - size.width, y: overlapY),  // to its left
@@ -95,6 +100,9 @@ struct ArrangementGeometry: Equatable {
                 y: Int32(clamping: Int64(offset.y.rounded())), isDetached: false)
         }
     }
+
+    /// The share of the shorter edge two touching computers keep in common.
+    static let sharedEdgeFraction: CGFloat = 0.5
 
     private static func clamp(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {
         min(max(value, low), high)

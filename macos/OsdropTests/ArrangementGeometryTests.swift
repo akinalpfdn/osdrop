@@ -38,15 +38,16 @@ struct ArrangementGeometryTests {
         #expect(left == CGPoint(x: Self.units(-1000), y: Self.units(-50)))
     }
 
-    @Test("A computer dropped far away still keeps an edge in common, so the cursor can cross")
+    @Test("A computer dropped far away keeps at least half an edge in common, so the cursor can cross")
     func keepsAnEdgeInCommon() {
         let geometry = ArrangementGeometry(computers: [Self.computer(1, at: 0, 0), Self.computer(2, at: 1500, 0)])
         let snapped = geometry.snapped(Self.id(2), droppedAt: CGPoint(x: Self.units(3000), y: Self.units(5000)))
-        #expect(snapped.x == Self.units(1000) || snapped.y == Self.units(800))
         let bounds = CGRect(origin: snapped, size: CGSize(width: Self.units(1000), height: Self.units(800)))
         let other = CGRect(x: 0, y: 0, width: Self.units(1000), height: Self.units(800))
-        let sharesVertical = bounds.minX == other.maxX && bounds.minY < other.maxY && bounds.maxY > other.minY
-        let sharesHorizontal = bounds.minY == other.maxY && bounds.minX < other.maxX && bounds.maxX > other.minX
+        let sharedHeight = min(bounds.maxY, other.maxY) - max(bounds.minY, other.minY)
+        let sharedWidth = min(bounds.maxX, other.maxX) - max(bounds.minX, other.minX)
+        let sharesVertical = bounds.minX == other.maxX && sharedHeight >= Self.units(400)
+        let sharesHorizontal = bounds.minY == other.maxY && sharedWidth >= Self.units(500)
         #expect(sharesVertical || sharesHorizontal)
     }
 
