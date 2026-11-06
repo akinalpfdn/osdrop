@@ -480,3 +480,30 @@ choices the plan leaves open are logged here.
 **Why:** Core and the tests need the settings now, and the hardware rows can be run with `defaults write`.
 **Trade-offs:** Changes take effect at the next start until the window exists.
 **Revisit if:** Phase 16.
+
+---
+
+## 2026-11-05 — The Mac interface follows Osplay's
+**Chosen:** Settings as tabs of grouped forms, an onboarding window for permissions, a menu bar panel with Settings and Quit as icons, launch at login, a daily update check against GitHub releases, copy diagnostics and log export, reused from Osplay's macOS app and adapted.
+**Alternatives:** A design of its own.
+**Why:** The two apps are siblings with the same users; the same patterns are proven and cost less.
+**Trade-offs:** Osdrop inherits Osplay's limits (no in-app updater, the update check needs GitHub).
+**Revisit if:** Either app gets a design of its own.
+
+---
+
+## 2026-11-05 — The arrangement editor snaps computers together
+**Chosen:** A computer moves as a whole and, when dropped, snaps against the nearest edge of another computer, keeping at least a sliver of that edge in common; core checks the result and the editor goes back to the arrangement in force when it is refused.
+**Alternatives:** Free placement with a warning; moving single monitors.
+**Why:** Core refuses computers that touch no other one, and a computer's own monitors are arranged by its system.
+**Trade-offs:** A gap between computers cannot be drawn on purpose.
+**Revisit if:** Users want walls between computers that sit side by side.
+
+---
+
+## 2026-11-05 — Renaming this computer restarts the mesh
+**Chosen:** The name others see is a setting; changing it starts core's mesh again, so every session reconnects with the new name in Hello.
+**Alternatives:** A core command that sends the new name to connected members.
+**Why:** The name travels only in Hello; a restart reuses the existing reconnect path and needs no protocol change.
+**Trade-offs:** Control, transfers and clipboard fetches in progress end when the name changes.
+**Revisit if:** Renaming becomes frequent.
