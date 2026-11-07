@@ -20,6 +20,9 @@ A file dragged to an edge crosses with the cursor and lands where it is released
 (append as you go; full entries go to DECISIONS.md)
 - User decision (2026-11-07): core and Mac now, stacked on `feature/phase-16-mac-ui`; the PC
   directions wait for Phase 4 (Windows drag bridge), Mac ↔ Mac testing for the second Mac.
+- User decision (2026-11-07): in this PR also drags from apps that give promised files (Photos,
+  Mail attachments), received at the edge at the push and carried as files (no slide back), and
+  transfer progress and cancel on both sides in the menu, with notifications.
 
 ## Plan (core and Mac)
 1. Protocol: a forwarded DragOffer names the source computer (new `source` Id), so a target
@@ -38,13 +41,11 @@ A file dragged to an edge crosses with the cursor and lands where it is released
 3. C API and CoreBridge for the above.
 4. Mac source: drag pasteboard read at drag start (file URLs), reported to core; at the result,
    an injected button release over the edge panel ends the source app's drag (accept or refuse).
-   Promise drags (Photos) are received at the edge first and cannot slide back. (Not done yet:
-   needs a core callback asking for the files at the push; waits for the user's decision.)
+   Promise drags (Photos) are received at the edge first and cannot slide back (in progress).
 5. Mac target: `PromiseDragStarter` with a reader that receives each item from the source through
    the transfer engine; an injected press at the entry point starts the drag.
 6. Transfers in the menu: progress and cancel, notifications when done or failed (Phase 16 rest).
-   (Not done yet: the source side needs sender progress from core; waits for the user's
-   decision.)
+   Both sides: core reports sending progress per transfer stream (in progress).
 
 ## Status (2026-11-07)
 - Done: steps 1–5 and 7 for file drags (core tests: drag_test.cpp, capi; Mac: DragController,
