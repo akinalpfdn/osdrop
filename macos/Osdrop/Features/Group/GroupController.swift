@@ -349,7 +349,7 @@ final class GroupController {
             },
             nameOf: { [weak self] device in
                 self?.members.first { $0.deviceID == device }?.name ?? String(localized: "clipboard.otherComputer")
-            })
+            }, notifier: services.notifier)
         self.clipboard = clipboard
         clipboard.start()
     }
@@ -447,7 +447,10 @@ final class GroupController {
         case .transferFinished:
             clipboard?.handle(event)
             transfers?.handle(event)
-        case .transferProgress, .sendProgress:
+        case .transferProgress:
+            clipboard?.handle(event)
+            transfers?.handle(event)
+        case .sendProgress:
             transfers?.handle(event)
         case .offerReady:
             break  // core measures the drags it offers itself

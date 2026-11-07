@@ -35,6 +35,74 @@
         }
       }
     },
+    "clipboard.fetching %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copying files from %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dosyalar kopyalanıyor (gönderen: %@)"
+          }
+        }
+      }
+    },
+    "clipboard.fetching.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İptal et"
+          }
+        }
+      }
+    },
+    "clipboard.fetching.hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste once this is done; until then a paste gives what was copied before."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu bitince yapıştırın; o zamana kadar yapıştırma önceki kopyayı verir."
+          }
+        }
+      }
+    },
+    "clipboard.notice.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not on the clipboard"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Panoya alınmadı"
+          }
+        }
+      }
+    },
     "clipboard.otherComputer" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -48,6 +116,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "diğer bilgisayar"
+          }
+        }
+      }
+    },
+    "clipboard.ready %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The files copied on %@ can be pasted now."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopyalanan dosyalar yapıştırılabilir (gönderen: %@)."
+          }
+        }
+      }
+    },
+    "clipboard.ready.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready to paste"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yapıştırmaya hazır"
           }
         }
       }

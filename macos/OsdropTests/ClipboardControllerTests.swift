@@ -125,6 +125,44 @@ struct ClipboardControllerTests {
         #expect(fixture.pasteboard.written[0].fileURLs == [file])
     }
 
+    @Test("Copied files show their progress until they can be pasted, then a notification tells it")
+    func showsFetchProgress() async throws {
+        let fixture = ClipboardFixture()
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 9, formats: [AnnouncedFormat(format: .files, byteCount: 50)]))
+        #expect(fixture.controller.fetching == ClipboardFetch(name: "PC", bytesDone: 0, bytesTotal: 50))
+        try await waitUntil { fixture.mesh.receives.count == 1 }
+        let receive = fixture.mesh.receives[0]
+        fixture.controller.handle(
+            .transferProgress(
+                TransferProgress(id: receive.id, bytesDone: 20, bytesTotal: 50, filesDone: 0, filesTotal: 1)))
+        #expect(fixture.controller.fetching?.fraction == 0.4)
+        #expect(fixture.notifier.notifications.isEmpty)
+        let file = receive.folder.appending(path: "report.pdf")
+        fixture.controller.handle(
+            .transferFinished(id: receive.id, .success(ReceivedItem(items: [file], skippedLinks: 0))))
+        try await waitUntil { fixture.pasteboard.written.count == 1 }
+        #expect(fixture.controller.fetching == nil)
+        #expect(fixture.notifier.notifications.count == 1)
+    }
+
+    @Test("Cancelling copied files on their way keeps the pasteboard as it was, without a notice")
+    func cancelsTheFetch() async throws {
+        let fixture = ClipboardFixture()
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 9, formats: [AnnouncedFormat(format: .files, byteCount: 50)]))
+        try await waitUntil { fixture.mesh.receives.count == 1 }
+        let receive = fixture.mesh.receives[0]
+        fixture.controller.cancelFetch()
+        #expect(fixture.controller.fetching == nil)
+        try await waitUntil { fixture.mesh.cancellations == [receive.id] }
+        fixture.controller.handle(.transferFinished(id: receive.id, .failure(.cancelled)))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.pasteboard.written.isEmpty)
+        #expect(fixture.controller.notice == nil)
+        #expect(fixture.notifier.notifications.isEmpty)
+    }
+
     @Test("A copy too large or out of reach leaves a notice")
     func notices() async throws {
         let fixture = ClipboardFixture()
@@ -132,6 +170,7 @@ struct ClipboardControllerTests {
             .clipboardChanged(Self.pc, clipID: 10, formats: [AnnouncedFormat(format: .files, byteCount: 10_000)]))
         #expect(fixture.controller.notice == .tooLarge(name: "PC"))
         #expect(fixture.mesh.receives.isEmpty)
+        #expect(fixture.notifier.notifications.count == 1, "shown as a notification too")
 
         fixture.controller.handle(
             .clipboardChanged(Self.pc, clipID: 11, formats: [AnnouncedFormat(format: .text, byteCount: 3)]))
@@ -178,6 +217,7 @@ private func makeDeviceID(_ byte: UInt8) -> DeviceID {
 private final class ClipboardFixture {
     let pasteboard = FakePasteboard()
     let mesh = ClipboardMesh()
+    let notifier = FakeNotifier()
     let staging = ClipboardStaging(
         root: FileManager.default.temporaryDirectory.appending(path: "osdrop-clipboard-tests-\(UUID())"))
     var shared = true
@@ -188,7 +228,8 @@ private final class ClipboardFixture {
         weak var box: ClipboardFixture?
         controller = ClipboardController(
             mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: { limits },
-            isEnabled: { box?.enabled ?? false }, isShared: { box?.shared ?? false }, nameOf: { _ in "PC" })
+            isEnabled: { box?.enabled ?? false }, isShared: { box?.shared ?? false }, nameOf: { _ in "PC" },
+            notifier: notifier)
         box = self
     }
 
