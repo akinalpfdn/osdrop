@@ -182,7 +182,7 @@ final class GroupFixture {
             makeMesh: { configuration throws(CoreError) in
                 if let error = failure.withLock({ $0 })(configuration) { throw error }
                 return mesh
-            }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
+            }, deviceName: "Test Mac", clipboard: .fake(), input: .fake(), notifier: FakeNotifier())
         let defaults = UserDefaults(suiteName: "osdrop-tests-\(UUID())") ?? .standard
         let controller = GroupController(
             services: services, screens: screens, settings: AppSettings(defaults: defaults))
@@ -241,6 +241,11 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func dragStarted(_ files: [DraggedFile]) -> UInt32? { nil }
+    func dragPromised() {}
+    func dragStopped() {}
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) {}
+    let transferWatch: any TransferFollowing = NoTransfers()
     private let continuation: AsyncStream<MeshEvent>.Continuation
     private let lock = NSLock()
     private var group: GroupID?

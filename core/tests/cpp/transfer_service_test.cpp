@@ -251,6 +251,48 @@ TEST_F(TransferService, CancellingFromEitherSideLeavesNothingBehind) {
     EXPECT_TRUE(listing(destination.path()).empty());
 }
 
+TEST_F(TransferService, TheSenderReportsItsProgressUntilEveryByteWentOut) {
+    form();
+    network.bandwidth_bytes_per_ms = 20'000; // 20 MB/s
+    write_file(source / "Project/a.bin", pattern(3'000'000));
+    write_file(source / "Project/b.txt", "hello");
+    offer({source / "Project"});
+    ASSERT_TRUE(receive().has_value());
+    run_until_finished();
+    ASSERT_FALSE(outcome().error);
+    const auto& sends = sender().transfer_observer.sends;
+    ASSERT_GE(sends.size(), 2U) << "progress along the way";
+    for (std::size_t i = 0; i + 1 < sends.size(); ++i) {
+        EXPECT_EQ(sends[i].state, transfer::SendState::Sending);
+        EXPECT_LE(sends[i].bytes_sent, sends[i + 1].bytes_sent);
+    }
+    EXPECT_EQ(sends.back(), (transfer::SendProgress{.device = receiver().mesh.device_id(),
+                                                    .item = kItem,
+                                                    .bytes_sent = 3'000'005,
+                                                    .bytes_total = 3'000'005,
+                                                    .state = transfer::SendState::Done}));
+}
+
+TEST_F(TransferService, AWithdrawnItemStopsItsSending) {
+    form();
+    network.bandwidth_bytes_per_ms = 20'000;
+    write_file(source / "big.bin", pattern(20'000'000));
+    offer({source / "big.bin"});
+    ASSERT_TRUE(receive().has_value());
+    while (sender().transfer_observer.sends.empty()) {
+        network.step();
+    }
+    sender().transfers->withdraw(protocol::ObjectKind::Drag, kItem.object_id);
+    sender().mesh.flush(network.now);
+    run_until_finished();
+    const auto& sends = sender().transfer_observer.sends;
+    EXPECT_EQ(sends.back().state, transfer::SendState::Stopped);
+    EXPECT_EQ(sends.back().bytes_total, 20'000'000U);
+    EXPECT_LT(sends.back().bytes_sent, 20'000'000U);
+    EXPECT_EQ(
+        std::ranges::count(sends, transfer::SendState::Stopped, &transfer::SendProgress::state), 1);
+}
+
 TEST_F(TransferService, NothingIsWrittenWithoutRoomForIt) {
     network.transfer_tunables.space_margin = std::uint64_t{1} << 62U; // more than any disk
     form();

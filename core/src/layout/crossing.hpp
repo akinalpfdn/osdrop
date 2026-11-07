@@ -28,6 +28,8 @@ struct CursorUpdate {
     Point position;       ///< native, on that computer
     bool crossed = false; ///< it has just arrived there
     double push = 0;      ///< progress of a push against an edge with a neighbour, 0 to 1
+    /// The neighbour behind an edge the cursor pushes against while crossings are locked.
+    std::optional<DeviceId> walled;
     bool operator==(const CursorUpdate&) const = default;
 };
 

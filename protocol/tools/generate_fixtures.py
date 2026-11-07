@@ -203,17 +203,20 @@ PDF = offered_item(1, 482_113, "com.adobe.pdf", "Report.pdf")
 FOLDER = offered_item(2, 3_221_225_472, "public.folder", "Photos 2026")
 
 
-def drag_offer(probe_id: int, drag_id: int, items: list[bytes], count: int | None = None) -> bytes:
-    return control(0x31, u32(probe_id) + u32(drag_id) + u16(len(items) if count is None else count)
+def drag_offer(probe_id: int, drag_id: int, items: list[bytes], count: int | None = None,
+               source: bytes | None = None) -> bytes:
+    if source is None:
+        source = ZERO_ID if drag_id == 0 else MAC_ID
+    return control(0x31, u32(probe_id) + u32(drag_id) + source + u16(len(items) if count is None else count)
                    + b"".join(items))
 
 
 def max_size_drag_offer() -> bytes:
-    """A DragOffer of exactly 65536 bytes: 234 items with 255-byte names and one with a 212-byte name."""
+    """A DragOffer of exactly 65536 bytes: 234 items with 255-byte names and one with a 196-byte name."""
     def item(index: int, name_length: int) -> bytes:
         name = f"{index:04d}" + "n" * (name_length - 4)
         return offered_item(1, index, "public.data", name)
-    items = [item(i, 255) for i in range(234)] + [item(234, 212)]
+    items = [item(i, 255) for i in range(234)] + [item(234, 196)]
     return drag_offer(1, 2, items)
 
 
@@ -316,8 +319,8 @@ def control_fixtures() -> list[Fixture]:
         Fixture("control/drag_offer_two.bin", "control", v, 0x31, "a file and a folder",
                 drag_offer(5, 9, [PDF, FOLDER])),
         Fixture("control/drag_offer_forwarded.bin", "control", v, 0x31,
-                "forwarded to the target, emoji name in NFC", drag_offer(0, 9, [
-                    offered_item(1, 0, "public.png", "Ekran Görüntüsü 🎉.png")])),
+                "forwarded to the target, emoji name in NFC, started on another computer", drag_offer(0, 9, [
+                    offered_item(1, 0, "public.png", "Ekran Görüntüsü 🎉.png")], source=PC_ID)),
         Fixture("control/drag_offer_nfd_name.bin", "control", v, 0x31,
                 "decomposed (NFD) name: decoders do not check the form",
                 drag_offer(5, 9, [offered_item(1, 12, "public.plain-text", nfd)])),
@@ -545,6 +548,10 @@ def control_fixtures() -> list[Fixture]:
                 "forwarded offer without a drag", drag_offer(0, 0, [])),
         Fixture("malformed/drag_offer_no_items.bin", "control", e, VALUE_OUT_OF_RANGE, "a drag with no items",
                 drag_offer(5, 9, [])),
+        Fixture("malformed/drag_offer_no_source.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "a drag without its source", drag_offer(5, 9, [PDF], source=ZERO_ID)),
+        Fixture("malformed/drag_offer_none_with_source.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "no drag but a source", drag_offer(5, 0, [], source=MAC_ID)),
         Fixture("malformed/drag_offer_1025_items.bin", "control", e, VALUE_OUT_OF_RANGE, "item_count 1025",
                 drag_offer(5, 9, [PDF], count=1025)),
         Fixture("malformed/drag_offer_item_count_mismatch.bin", "control", e, TRUNCATED,

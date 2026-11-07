@@ -180,9 +180,9 @@ Check validate(const DragProbe& m) {
 Check validate(const DragOffer& m) {
     if (m.drag_id == 0) {
         // "No drag here" answers a probe and carries nothing.
-        return range(m.probe_id != 0 && m.items.empty());
+        return range(m.probe_id != 0 && m.items.empty() && is_zero(m.source));
     }
-    if (!in_range(m.items.size(), 1, kMaxDragItems)) {
+    if (is_zero(m.source) || !in_range(m.items.size(), 1, kMaxDragItems)) {
         return fail(Error::ValueOutOfRange);
     }
     for (const OfferedItem& item : m.items) {
@@ -465,7 +465,7 @@ Decoded read_drag_offer(BodyReader& b) {
     DragOffer m;
     Reader& r = b.raw();
     std::uint16_t count = 0;
-    if (!r.u32(m.probe_id) || !r.u32(m.drag_id) || !r.u16(count)) {
+    if (!r.u32(m.probe_id) || !r.u32(m.drag_id) || !read_array(r, m.source) || !r.u16(count)) {
         return decode_failure(Error::Truncated);
     }
     if (count > kMaxDragItems) {
@@ -711,6 +711,7 @@ void write_body(Writer& w, const ControlMessage& message) {
                    [&](const DragOffer& m) {
                        w.u32(m.probe_id);
                        w.u32(m.drag_id);
+                       w.bytes(m.source);
                        w.u16(static_cast<std::uint16_t>(m.items.size()));
                        for (const OfferedItem& item : m.items) {
                            write_enum(w, item.kind);

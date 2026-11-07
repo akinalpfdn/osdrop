@@ -22,6 +22,7 @@ add_executable(osdrop_core_tests
     capi_protocol_test.cpp
     clipboard_test.cpp
     control_test.cpp
+    drag_test.cpp
     crypto_primitives_test.cpp
     group_test.cpp
     input_crypto_test.cpp

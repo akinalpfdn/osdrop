@@ -225,6 +225,11 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func dragStarted(_ files: [DraggedFile]) -> UInt32? { nil }
+    func dragPromised() {}
+    func dragStopped() {}
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) {}
+    let transferWatch: any TransferFollowing = NoTransfers()
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {}
     func layout() async throws(CoreError) -> [LayoutComputer] { [] }
     func setLayout(_ placements: [Placement]) async throws(CoreError) {}

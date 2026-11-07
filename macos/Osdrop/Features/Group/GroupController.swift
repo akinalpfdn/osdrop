@@ -13,6 +13,7 @@ struct GroupServices: Sendable {
     let deviceName: String
     let clipboard: ClipboardServices
     let input: InputServices
+    let notifier: any TransferNotifying
 }
 
 /// What the shared clipboard needs, started with the mesh.
@@ -92,6 +93,8 @@ final class GroupController {
     /// A member removed this computer from its group.
     private(set) var wasRemoved = false
     private(set) var clipboard: ClipboardController?
+    /// Transfers of dragged files, for the menu.
+    private(set) var transfers: TransfersController?
     private(set) var input: InputController?
     /// Every member's monitors and placement, for the arrangement editor.
     private(set) var arrangement: [LayoutComputer] = []
@@ -139,6 +142,7 @@ final class GroupController {
         guard let mesh = makeMesh(configuration) else { return }
         self.mesh = mesh
         startClipboard(mesh)
+        startTransfers(mesh)
         startInput(mesh)
         deviceID = mesh.deviceID
         listenPort = mesh.listenPort
@@ -307,6 +311,7 @@ final class GroupController {
         startFailure = nil  // the start that failed may have been the name's fault
         mesh = nil
         clipboard = nil
+        transfers = nil
         input = nil
         members = []
         arrangement = []
@@ -349,10 +354,31 @@ final class GroupController {
         clipboard.start()
     }
 
+    // MARK: - Transfers
+
+    private func startTransfers(_ mesh: any MeshDriving) {
+        transfers = TransfersController(
+            nameOf: { [weak self] device in self?.name(of: device) ?? String(localized: "clipboard.otherComputer") },
+            notifier: services.notifier,
+            cancelReceiving: { id in Task { await mesh.cancelTransfer(id) } },
+            withdrawDrag: { dragID in
+                Task {
+                    do throws(CoreError) {
+                        try await mesh.withdraw(.drag, objectID: UInt64(dragID))
+                    } catch {
+                        Log.drag.error("Withdrawing a drag failed: \(String(describing: error), privacy: .public)")
+                    }
+                }
+            })
+    }
+
     // MARK: - Input control
 
     private func startInput(_ mesh: any MeshDriving) {
-        let input = InputController(mesh: mesh, services: services.input) { [weak self] device in
+        let input = InputController(
+            mesh: mesh, services: services.input,
+            makeDrags: { [services, transfers] injector in services.input.makeDrags(mesh, injector, transfers) }
+        ) { [weak self] device in
             self?.name(of: device) ?? String(localized: "clipboard.otherComputer")
         }
         self.input = input
@@ -416,10 +442,15 @@ final class GroupController {
             statistics[device] = stats
         case .log(let level, let message):
             log(level, message)
-        case .clipboardChanged, .contentReceived, .transferFinished:
+        case .clipboardChanged, .contentReceived:
             clipboard?.handle(event)
-        case .offerReady, .transferProgress:
-            break  // drag and drop (Phase 14)
+        case .transferFinished:
+            clipboard?.handle(event)
+            transfers?.handle(event)
+        case .transferProgress, .sendProgress:
+            transfers?.handle(event)
+        case .offerReady:
+            break  // core measures the drags it offers itself
         }
     }
 

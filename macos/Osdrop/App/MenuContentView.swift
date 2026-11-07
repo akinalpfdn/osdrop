@@ -28,6 +28,10 @@ struct MenuContentView: View {
                 InputStatus(input: input, group: group)
                 QuickToggles(input: input, settings: settings)
             }
+            if let transfers = group.transfers, !transfers.rows.isEmpty {
+                Divider()
+                TransfersSection(transfers: transfers)
+            }
 
             Divider()
             GroupMenuSection(controller: group)

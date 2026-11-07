@@ -10,6 +10,7 @@
 #include "transfer/manifest.hpp"
 #include "transfer/streams.hpp"
 #include "transfer/types.hpp"
+#include "util/time.hpp"
 
 #include <cstdint>
 #include <deque>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace osdrop::transfer {
@@ -87,6 +89,22 @@ private:
         std::uint64_t sent = 0; ///< content bytes sent for the front job
     };
 
+    /// An item's files going to one device.
+    struct Sending {
+        StreamKey stream; ///< the stream it went on last
+        std::uint64_t sent = 0;
+        TimePoint reported;
+    };
+    using SendingKey = std::pair<mesh::DeviceId, protocol::ObjectRef>;
+    struct SendingOrder {
+        bool operator()(const SendingKey& a, const SendingKey& b) const {
+            if (a.first != b.first) {
+                return a.first < b.first;
+            }
+            return ObjectOrder{}(a.second, b.second);
+        }
+    };
+
     void scan(const protocol::ObjectRef& item, Offer& offer);
     void scanned(const protocol::ObjectRef& item, std::uint64_t generation,
                  std::shared_ptr<const SourceTree> tree, std::optional<Error> error);
@@ -97,7 +115,12 @@ private:
     /// A single content from memory, as much as the stream's queue takes.
     bool serve_memory(const StreamKey& key, Serving& serving, const Job& job, const Offer& offer);
     void read_next(const StreamKey& key, Serving& serving, std::uint32_t request_id);
-    void read_done(const StreamKey& key, std::uint32_t request_id, Batch batch);
+    void read_done(const StreamKey& key, std::uint32_t request_id, Batch batch, TimePoint now);
+    /// Counts content sent for `item` and reports it, at most once per progress interval.
+    void count_sent(const StreamKey& key, const protocol::ObjectRef& item, std::uint64_t bytes,
+                    TimePoint now);
+    /// Reports and forgets the sendings `matches` selects, which stopped before their end.
+    void stop_sending(const std::function<bool(const SendingKey&, const Sending&)>& matches);
     void finish_job(const StreamKey& key, Serving& serving, std::optional<Error> error);
     /// Removes the jobs `matches` selects, each answered with `error` (none: dropped silently).
     void drop_jobs(const std::function<bool(const StreamKey&, const Job&)>& matches,
@@ -110,6 +133,7 @@ private:
     TransferObserver& observer_;
     std::map<protocol::ObjectRef, Offer, ObjectOrder> offers_;
     std::map<StreamKey, Serving> serving_;
+    std::map<SendingKey, Sending, SendingOrder> sending_;
     std::uint64_t next_generation_ = 1;
 };
 

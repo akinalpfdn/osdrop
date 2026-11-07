@@ -13,9 +13,14 @@ enum DragOutcome: Sendable, Equatable {
 /// real mouse-down, so Osdrop places a small window of its own under the point, injects a button
 /// press there, and begins the drag session from that event; injected movement then carries it.
 @MainActor
-final class PromiseDragStarter {
+final class PromiseDragStarter: DragStarting {
     /// Called on the main actor when each promised item has been written, or failed.
     var onItemWritten: ((DragItem, Result<URL, Error>) -> Void)?
+    /// The drag session runs: the press arrived.
+    private(set) var hasBegun = false
+
+    /// A drag is prepared or running.
+    var isActive: Bool { pending != nil || hasBegun }
 
     private let staging: DragStaging
     private let origin: DragOriginPanel
@@ -77,11 +82,13 @@ final class PromiseDragStarter {
         session.draggingFormation = .stack
         session.animatesToStartingPositionsOnCancelOrFail = false
         self.pending = nil
+        hasBegun = true
     }
 
     private func finish(_ outcome: DragOutcome) {
         origin.hide()
         pending = nil
+        hasBegun = false
         // After a drop, the target may still read its staged copies (Mail keeps attachments by
         // path until the message is sent); they go when Osdrop starts next. A cancelled drag
         // leaves no reader, so its copies go now.

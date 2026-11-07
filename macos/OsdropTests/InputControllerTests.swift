@@ -266,6 +266,30 @@ struct InputControllerTests {
         controller.stop()
     }
 
+    @Test("Core's drag events go to drag and drop, which runs while a member is connected")
+    func forwardsDrags() async throws {
+        let drags = FakeDrags()
+        let controller = InputController(
+            mesh: mesh, services: .fake(capture: capture, injector: injector, cursor: cursor, capsLock: capsLock),
+            makeDrags: { _ in drags }
+        ) { _ in "Other Mac" }
+        controller.start()
+        controller.setActive(true)
+        #expect(drags.calls == [.start])
+        mesh.send(.dragArrived(source: other, dragID: 7, at: CoordPoint(x: 160, y: 320), items: []))
+        mesh.send(.dragWithdrawn(dragID: 7))
+        mesh.send(.dragEnded(dragID: 3, .dropped))
+        mesh.send(.dragWanted)
+        try await waitUntil { drags.calls.count == 5 }
+        #expect(
+            drags.calls == [
+                .start, .arrived(other, 7, CGPoint(x: 10, y: 20), []), .withdrawn(7), .ended(3, .dropped), .wanted,
+            ])
+        controller.setActive(false)
+        #expect(drags.calls.last == .stop)
+        controller.stop()
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<200 where !condition() {
             try await Task.sleep(for: .milliseconds(10))

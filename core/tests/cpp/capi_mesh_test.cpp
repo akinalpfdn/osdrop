@@ -89,6 +89,15 @@ struct Events {
     std::vector<Ended> ended;
     std::vector<std::optional<DeviceId>> controlled;
     std::vector<osdrop_input> injected;
+    struct Arrival {
+        DeviceId source{};
+        std::uint32_t drag_id = 0;
+        std::int32_t x = 0;
+        std::vector<std::pair<std::string, std::uint64_t>> items; ///< name, bytes
+    };
+    std::vector<Arrival> arrivals;
+    std::vector<std::uint32_t> withdrawn;
+    std::vector<std::pair<std::uint32_t, osdrop_drag_outcome>> drag_ends;
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex);
@@ -214,6 +223,26 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
     callbacks.inject = [](void* context, const osdrop_input* input) {
         auto* e = static_cast<Events*>(context);
         e->update([&] { e->injected.push_back(*input); });
+    };
+    callbacks.drag_arrived = [](void* context, const uint8_t* source, uint32_t drag_id, int32_t x,
+                                int32_t /*y*/, const osdrop_drag_item* items, size_t count) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            Events::Arrival arrival{.source = {}, .drag_id = drag_id, .x = x, .items = {}};
+            std::memcpy(arrival.source.data(), source, arrival.source.size());
+            for (const osdrop_drag_item& item : std::span(items, count)) {
+                arrival.items.emplace_back(item.name, item.byte_count);
+            }
+            e->arrivals.push_back(std::move(arrival));
+        });
+    };
+    callbacks.drag_withdrawn = [](void* context, uint32_t drag_id) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->withdrawn.push_back(drag_id); });
+    };
+    callbacks.drag_ended = [](void* context, uint32_t drag_id, osdrop_drag_outcome outcome) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->drag_ends.emplace_back(drag_id, outcome); });
     };
     callbacks.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* e = static_cast<Events*>(context);
@@ -836,10 +865,8 @@ osdrop_input key(uint16_t usage, uint8_t action) {
     return input;
 }
 
-TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
-    CMesh mac(31, "Mac");
-    CMesh pc(32, "PC");
-    connect_pair(mac, pc);
+/// One monitor of 1000 x 800 points each, the PC to the right of the Mac.
+void place_in_a_row(CMesh& mac, CMesh& pc) {
     const osdrop_monitor screen = monitor(1, points(0, 0, 1000, 800), points(0, 0, 1000, 800), 1);
     ASSERT_EQ(osdrop_mesh_set_screens(mac.mesh, &screen, 1), OSDROP_OK);
     ASSERT_EQ(osdrop_mesh_set_screens(pc.mesh, &screen, 1), OSDROP_OK);
@@ -857,6 +884,21 @@ TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
         const auto seen = mac.layout();
         return std::ranges::any_of(seen, [](const auto& c) { return c.placement.x == 16'000; });
     }));
+}
+
+osdrop_input left_button(uint8_t action) {
+    osdrop_input input{};
+    input.kind = OSDROP_INPUT_BUTTON;
+    input.action = action;
+    input.click_count = 1;
+    return input;
+}
+
+TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
+    CMesh mac(31, "Mac");
+    CMesh pc(32, "PC");
+    connect_pair(mac, pc);
+    place_in_a_row(mac, pc);
 
     // Shift held on the Mac, then a push against its right edge for over a second.
     const osdrop_input shift = key(0xE1, 1);
@@ -909,6 +951,96 @@ TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
         }
     }
     EXPECT_TRUE(held.empty()) << "nothing stays pressed on the PC";
+}
+
+TEST(CapiMesh, AFileDraggedOnTheMacIsDroppedOnThePC) {
+    const osdrop::test::TempFolder source;
+    const osdrop::test::TempFolder destination;
+    osdrop::test::write_file(source / "Report.pdf", "quarterly");
+    CMesh mac(35, "Mac");
+    CMesh pc(36, "PC");
+    connect_pair(mac, pc);
+    place_in_a_row(mac, pc);
+    const osdrop_input_settings immediate{
+        .modifier_mapping = 1, .immediate = 1, .crossing_modifiers = 0, .push_ms = 0};
+    ASSERT_EQ(osdrop_mesh_set_input_settings(mac.mesh, &immediate), OSDROP_OK);
+
+    const std::string path = osdrop::transfer::utf8_of(source / "Report.pdf");
+    const osdrop_dragged_item item{.path = path.c_str(), .content_type = "com.adobe.pdf"};
+    std::uint32_t drag = 0;
+    ASSERT_EQ(osdrop_mesh_drag_started(mac.mesh, &item, 1, &drag), OSDROP_OK);
+    const osdrop_input press = left_button(1);
+    ASSERT_EQ(osdrop_mesh_input(mac.mesh, &press, 0), OSDROP_OK);
+    const auto arrived = [&] {
+        return pc.events.read([&] { return !pc.events.arrivals.empty(); });
+    };
+    for (int i = 0; i < 100 && !arrived(); ++i) {
+        const osdrop_input push = pointer(999, 400, 4, 0);
+        ASSERT_EQ(osdrop_mesh_input(mac.mesh, &push, 0), OSDROP_OK);
+        std::this_thread::sleep_for(milliseconds(20));
+    }
+    ASSERT_TRUE(arrived());
+    const Events::Arrival arrival = pc.events.read([&] { return pc.events.arrivals.front(); });
+    EXPECT_EQ(arrival.source, mac.device_id);
+    EXPECT_EQ(arrival.drag_id, drag);
+    EXPECT_EQ(arrival.x, 0);
+    EXPECT_EQ(arrival.items,
+              (std::vector<std::pair<std::string, std::uint64_t>>{{"Report.pdf", 9}}));
+
+    const osdrop_input release = left_button(2);
+    ASSERT_EQ(osdrop_mesh_input(mac.mesh, &release, 0), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] {
+        return std::ranges::any_of(pc.events.injected, [](const osdrop_input& input) {
+            return input.kind == OSDROP_INPUT_BUTTON && input.action == 2;
+        });
+    }));
+    const osdrop_object_ref ref{
+        .kind = OSDROP_OBJECT_DRAG, .object_id = arrival.drag_id, .item_index = 0};
+    const std::string folder = osdrop::transfer::utf8_of(destination.path());
+    std::uint64_t transfer = 0;
+    ASSERT_EQ(osdrop_mesh_receive(pc.mesh, arrival.source.data(), &ref, folder.c_str(), UINT64_MAX,
+                                  &transfer),
+              OSDROP_OK);
+    ASSERT_EQ(osdrop_mesh_drop_finished(pc.mesh, arrival.drag_id, OSDROP_DRAG_DROPPED), OSDROP_OK);
+    ASSERT_TRUE(mac.events.wait_for([&] { return !mac.events.drag_ends.empty(); }));
+    EXPECT_EQ(mac.events.read([&] { return mac.events.drag_ends.front(); }),
+              std::pair(arrival.drag_id, OSDROP_DRAG_DROPPED));
+    ASSERT_EQ(osdrop_mesh_drag_stopped(mac.mesh), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return !pc.events.finished.empty(); }));
+    EXPECT_EQ(pc.events.read([&] { return pc.events.finished.front().result; }), OSDROP_OK);
+    EXPECT_EQ(osdrop::test::read_file(destination / "Report.pdf"),
+              osdrop::test::read_file(source / "Report.pdf"));
+}
+
+TEST(CapiMesh, DragCommandsCheckTheirArguments) {
+    CMesh mac(37, "Mac");
+    std::uint32_t drag = 1;
+    const osdrop_dragged_item relative{.path = "Report.pdf", .content_type = "public.data"};
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &relative, 1, &drag),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const osdrop_dragged_item no_type{.path = "/Report.pdf", .content_type = nullptr};
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &no_type, 1, &drag),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 1, &drag), OSDROP_ERROR_INVALID_ARGUMENT);
+    const osdrop_dragged_item absolute{.path = "/Report.pdf", .content_type = "public.data"};
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &absolute, 1, nullptr),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const std::vector<osdrop_dragged_item> many(1'025,
+                                                {.path = "/a", .content_type = "public.data"});
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, many.data(), many.size(), &drag),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 0, &drag), OSDROP_OK)
+        << "nothing can travel";
+    EXPECT_EQ(drag, 0U);
+    EXPECT_EQ(osdrop_mesh_drag_promised(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_promised(mac.mesh), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_drag_stopped(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_stopped(mac.mesh), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_drop_finished(mac.mesh, 0, OSDROP_DRAG_DROPPED),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_mesh_drop_finished(mac.mesh, 1, static_cast<osdrop_drag_outcome>(4)),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_mesh_drop_finished(mac.mesh, 1, OSDROP_DRAG_CANCELLED), OSDROP_OK);
 }
 
 TEST(CapiMesh, InputCommandsCheckTheirArguments) {

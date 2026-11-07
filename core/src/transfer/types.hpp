@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -70,12 +71,31 @@ struct ContentOutcome {
     std::vector<std::uint8_t> content; ///< the whole content; empty after an error
 };
 
+/// Where sending an item to one device stands.
+enum class SendState : std::uint8_t {
+    Sending = 1,
+    Done = 2,    ///< every byte of its files went out
+    Stopped = 3, ///< the device stopped asking, or the item was withdrawn
+};
+
+/// Sending an offered item to one device, as its files' content goes out.
+struct SendProgress {
+    mesh::DeviceId device{};
+    protocol::ObjectRef item;
+    std::uint64_t bytes_sent = 0;
+    std::uint64_t bytes_total = 0;
+    SendState state = SendState::Sending;
+    bool operator==(const SendProgress&) const = default;
+};
+
 struct OfferReady {
     protocol::ObjectRef item;
     std::optional<Error> error;
     std::uint64_t total_bytes = 0;
     std::size_t entry_count = 0;
     std::size_t skipped = 0; ///< entries that cannot travel
+    std::string name;        ///< the first root as it travels (NFC); empty after an error
+    bool folder = false;     ///< the first root is a folder
 };
 
 class TransferObserver {
@@ -88,6 +108,8 @@ public:
     virtual void on_transfer_finished(const TransferOutcome& outcome) = 0;
     /// The end of a fetch_content().
     virtual void on_content_received(const ContentOutcome& outcome) = 0;
+    /// About once per progress interval while a device fetches an item's files, and at the end.
+    virtual void on_send_progress(const SendProgress& progress) = 0;
 };
 
 /// Where file work runs. Both run their work in the order posted.

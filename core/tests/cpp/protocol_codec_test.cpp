@@ -129,7 +129,7 @@ std::vector<ControlMessage> boundary_messages() {
         protocol::CursorReport{.control_id = 1, .x = -kEdge, .y = -kEdge},
         protocol::LocalTakeover{.control_id = 0xFFFF'FFFF},
         protocol::DragProbe{.probe_id = 0xFFFF'FFFF, .x = kEdge, .y = kEdge},
-        protocol::DragOffer{.probe_id = 0, .drag_id = 1, .items = items},
+        protocol::DragOffer{.probe_id = 0, .drag_id = 1, .source = id(3), .items = items},
         protocol::DragResult{.drag_id = 0xFFFF'FFFF, .outcome = protocol::DragOutcome::Failed},
         protocol::ClipboardAnnounce{
             .clip_id = std::numeric_limits<std::uint64_t>::max(),
@@ -209,9 +209,17 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(encode_error(protocol::DragOffer{.probe_id = 0, .drag_id = 0, .items = {}}),
               Error::ValueOutOfRange);
     EXPECT_EQ(
-        encode_error(protocol::DragOffer{
-            .probe_id = 1, .drag_id = 1, .items = {{.content_type = "public.data", .name = ".."}}}),
+        encode_error(protocol::DragOffer{.probe_id = 1,
+                                         .drag_id = 1,
+                                         .source = id(3),
+                                         .items = {{.content_type = "public.data", .name = ".."}}}),
         Error::InvalidString);
+    EXPECT_EQ(
+        encode_error(protocol::DragOffer{.probe_id = 1,
+                                         .drag_id = 1,
+                                         .source = {},
+                                         .items = {{.content_type = "public.data", .name = "a"}}}),
+        Error::ValueOutOfRange); // a drag without its source
     EXPECT_EQ(encode_error(protocol::ClipboardAnnounce{
                   .clip_id = 1,
                   .formats = {{.format = protocol::ClipboardFormat::Html},
@@ -224,6 +232,7 @@ TEST(ControlCodec, EncoderReportsTooLargeForAnOfferThatDoesNotFit) {
     const protocol::DragOffer offer{
         .probe_id = 1,
         .drag_id = 1,
+        .source = id(3),
         .items = std::vector<protocol::OfferedItem>(
             protocol::kMaxDragItems,
             {.content_type = "public.data", .name = std::string(protocol::kMaxNameBytes, 'n')})};

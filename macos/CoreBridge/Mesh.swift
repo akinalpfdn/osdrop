@@ -38,6 +38,8 @@ public final class Mesh: Sendable {
     public let events: AsyncStream<MeshEvent>
     /// Input control, apart from `events` so injection never waits behind other events.
     public let control: AsyncStream<ControlEvent>
+    /// Transfers by their ID, followed without the main thread.
+    public let transfers: TransferWatch
     public let deviceID: DeviceID
     public let listenPort: UInt16
 
@@ -50,7 +52,8 @@ public final class Mesh: Sendable {
     public init(_ configuration: Configuration) throws(CoreError) {
         let (events, continuation) = AsyncStream.makeStream(of: MeshEvent.self)
         let (control, controlContinuation) = AsyncStream.makeStream(of: ControlEvent.self)
-        let box = MeshCallbackBox(continuation: continuation, control: controlContinuation)
+        let transfers = TransferWatch()
+        let box = MeshCallbackBox(continuation: continuation, control: controlContinuation, transfers: transfers)
         var created: OpaquePointer?
         let groupState = configuration.groupState ?? []
         let layoutState = configuration.layoutState ?? []
@@ -90,6 +93,7 @@ public final class Mesh: Sendable {
         _ = osdrop_mesh_listen_port(created, &port)
         self.events = events
         self.control = control
+        self.transfers = transfers
         self.box = box
         self.handle = MeshHandle(created)
         self.deviceID = configuration.identity.id
@@ -139,14 +143,10 @@ public final class Mesh: Sendable {
 
     /// The group's members, this computer included.
     public func members() throws(CoreError) -> [GroupMember] {
-        var count = 0
-        let counted = handle.withPointer { osdrop_mesh_members($0, nil, 0, &count) }
-        if counted != OSDROP_ERROR_BUFFER_TOO_SMALL {
-            try check(counted)
+        try Self.readList(of: osdrop_member()) { buffer, capacity, count in
+            handle.withPointer { osdrop_mesh_members($0, buffer, capacity, count) }
         }
-        var members = [osdrop_member](repeating: osdrop_member(), count: count)
-        try check(handle.withPointer { osdrop_mesh_members($0, &members, members.count, &count) })
-        return members.prefix(count).map(GroupMember.init)
+        .map(GroupMember.init)
     }
 
     /// Removes a member everywhere; it is told it was removed.
@@ -179,14 +179,36 @@ public final class Mesh: Sendable {
 
     /// The members whose screens are known, this computer included, with their places.
     public func layout() throws(CoreError) -> [LayoutComputer] {
-        var count = 0
-        let counted = handle.withPointer { osdrop_mesh_layout($0, nil, 0, &count) }
-        if counted != OSDROP_ERROR_BUFFER_TOO_SMALL {
-            try check(counted)
+        try Self.readList(of: osdrop_layout_computer()) { buffer, capacity, count in
+            handle.withPointer { osdrop_mesh_layout($0, buffer, capacity, count) }
         }
-        var computers = [osdrop_layout_computer](repeating: osdrop_layout_computer(), count: count)
-        try check(handle.withPointer { osdrop_mesh_layout($0, &computers, computers.count, &count) })
-        return computers.prefix(count).map(LayoutComputer.init)
+        .map(LayoutComputer.init)
+    }
+
+    /// Times a list is read again when it grew between asking for its size and filling it.
+    static let listAttempts = 8
+
+    /// Reads a list core fills in: `read` writes the size it needs to its last argument and returns
+    /// BUFFER_TOO_SMALL when the capacity is short. Another member's state can arrive between
+    /// asking for the size and filling the list, so a list that grew is read again.
+    static func readList<Raw>(
+        of empty: Raw, _ read: (UnsafeMutablePointer<Raw>?, Int, UnsafeMutablePointer<Int>) -> osdrop_result?
+    ) throws(CoreError) -> [Raw] {
+        var count = 0
+        for _ in 0..<listAttempts {
+            var items = [Raw](repeating: empty, count: count)
+            let capacity = items.count
+            let result = items.withUnsafeMutableBufferPointer { buffer in
+                withUnsafeMutablePointer(to: &count) { read(buffer.baseAddress, capacity, $0) }
+            }
+            guard let result else { throw .invalidState }
+            if result == OSDROP_ERROR_BUFFER_TOO_SMALL {
+                continue  // `count` is the size it needs now
+            }
+            if let error = CoreError(result: result) { throw error }
+            return Array(items.prefix(count))
+        }
+        throw .bufferTooSmall
     }
 
     /// A new arrangement, shared with every member; `.invalidLayout` when monitors overlap or a
@@ -256,6 +278,42 @@ public final class Mesh: Sendable {
     public func input(_ input: ControlInput, ageMicroseconds age: UInt64) throws(CoreError) {
         var raw = input.raw
         try check(handle.withPointer { osdrop_mesh_input($0, &raw, age) })
+    }
+
+    // MARK: Drags
+
+    /// A drag began on this Mac with these files and folders, or the files of a wanted drag of
+    /// promised files arrived: they go wherever the cursor carries the drag. An empty list when it
+    /// carries nothing that can travel. The drag's ID, 0 without files.
+    @discardableResult
+    public func dragStarted(_ files: [DraggedFile]) throws(CoreError) -> UInt32 {
+        var dragID: UInt32 = 0
+        try check(
+            withCStrings(files.map { $0.url.path(percentEncoded: false) }) { paths in
+                withCStrings(files.map(\.contentType)) { types in
+                    let items = zip(paths, types).map { osdrop_dragged_item(path: $0, content_type: $1) }
+                    return items.withUnsafeBufferPointer { buffer in
+                        handle.withPointer { osdrop_mesh_drag_started($0, buffer.baseAddress, buffer.count, &dragID) }
+                    }
+                }
+            })
+        return dragID
+    }
+
+    /// A drag began on this Mac with promised files, which exist only once it is dropped (Photos):
+    /// `.dragWanted` asks for them when another computer wants the drag.
+    public func dragPromised() throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drag_promised($0) })
+    }
+
+    /// This Mac's drag ended, however it ended.
+    public func dragStopped() throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drag_stopped($0) })
+    }
+
+    /// The drag started for `.dragArrived` ended.
+    public func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drop_finished($0, dragID, outcome.raw) })
     }
 
     /// Brings the cursor home: the user's hotkey, or `inputLost` when the capture ended by itself.
@@ -358,10 +416,15 @@ private final class MeshHandle: @unchecked Sendable {
 private final class MeshCallbackBox: Sendable {
     let continuation: AsyncStream<MeshEvent>.Continuation
     let control: AsyncStream<ControlEvent>.Continuation
+    let transfers: TransferWatch
 
-    init(continuation: AsyncStream<MeshEvent>.Continuation, control: AsyncStream<ControlEvent>.Continuation) {
+    init(
+        continuation: AsyncStream<MeshEvent>.Continuation, control: AsyncStream<ControlEvent>.Continuation,
+        transfers: TransferWatch
+    ) {
         self.continuation = continuation
         self.control = control
+        self.transfers = transfers
     }
 
     var callbacks: osdrop_mesh_callbacks {
@@ -424,8 +487,10 @@ private final class MeshCallbackBox: Sendable {
             MeshCallbackBox.from(context)?.continuation.yield(.offerReady(TransferItem(item), outcome))
         }
         callbacks.transfer_progress = { context, progress in
-            guard let progress = progress?.pointee else { return }
-            MeshCallbackBox.from(context)?.continuation.yield(.transferProgress(TransferProgress(progress)))
+            guard let progress = progress?.pointee, let box = MeshCallbackBox.from(context) else { return }
+            let update = TransferProgress(progress)
+            box.transfers.progressed(update)
+            box.continuation.yield(.transferProgress(update))
         }
         callbacks.transfer_finished = { context, id, result, items, count, skippedLinks in
             let outcome: Result<ReceivedItem, CoreError>
@@ -436,7 +501,9 @@ private final class MeshCallbackBox: Sendable {
                 outcome = .success(
                     ReceivedItem(items: paths.map { URL(filePath: $0) }, skippedLinks: skippedLinks))
             }
-            MeshCallbackBox.from(context)?.continuation.yield(.transferFinished(id: id, outcome))
+            guard let box = MeshCallbackBox.from(context) else { return }
+            box.transfers.finished(id, outcome)
+            box.continuation.yield(.transferFinished(id: id, outcome))
         }
         callbacks.clipboard_changed = { context, device, clipID, formats, count in
             guard let device else { return }
@@ -480,6 +547,34 @@ private final class MeshCallbackBox: Sendable {
             MeshCallbackBox.from(context)?.control.yield(
                 .inputLatency(
                     deviceID(controller), samples: samples, medianMicroseconds: median, p99Microseconds: p99))
+        }
+        callbacks.drag_arrived = { context, source, dragID, x, y, items, count in
+            guard let source else { return }
+            let arriving = (0..<count).compactMap { index -> ArrivingItem? in
+                guard let item = items?[index], let name = item.name, let type = item.content_type else { return nil }
+                return ArrivingItem(
+                    name: String(cString: name), isFolder: item.is_folder == 1, byteCount: item.byte_count,
+                    contentType: String(cString: type))
+            }
+            MeshCallbackBox.from(context)?.control.yield(
+                .dragArrived(source: deviceID(source), dragID: dragID, at: CoordPoint(x: x, y: y), items: arriving))
+        }
+        callbacks.drag_withdrawn = { context, dragID in
+            MeshCallbackBox.from(context)?.control.yield(.dragWithdrawn(dragID: dragID))
+        }
+        callbacks.drag_ended = { context, dragID, outcome in
+            MeshCallbackBox.from(context)?.control.yield(.dragEnded(dragID: dragID, DropOutcome(outcome)))
+        }
+        callbacks.drag_wanted = { context in
+            MeshCallbackBox.from(context)?.control.yield(.dragWanted)
+        }
+        callbacks.send_progress = { context, device, item, sent, total, state in
+            guard let device, let item = item?.pointee else { return }
+            MeshCallbackBox.from(context)?.continuation.yield(
+                .sendProgress(
+                    SendProgress(
+                        device: deviceID(device), item: TransferItem(item), bytesSent: sent, bytesTotal: total,
+                        state: SendState(state))))
         }
         return callbacks
     }
