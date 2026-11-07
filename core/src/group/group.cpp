@@ -383,7 +383,13 @@ bool Group::admits(const DeviceId& device, const protocol::ControlMessage& messa
             [&](const protocol::ButtonEvent& /*m*/) { return permissions.control; },
             [&](const protocol::ScrollEvent& /*m*/) { return permissions.control; },
             [&](const protocol::ReleaseAll& /*m*/) { return permissions.control; },
-            [&](const protocol::DragOffer& m) { return m.probe_id != 0 || permissions.files; },
+            [&](const protocol::DragOffer& m) {
+                // A forwarded offer brings files from its source, which may be a third member.
+                const bool source_sends = m.source == self_ ||
+                                          (state_.roster.is_member(m.source) &&
+                                           state_.permissions_for(m.source).files);
+                return m.probe_id != 0 || (permissions.files && source_sends);
+            },
             [&](const protocol::ClipboardAnnounce& /*m*/) { return permissions.clipboard; },
             [&](const auto& /*other*/) { return true; },
         },

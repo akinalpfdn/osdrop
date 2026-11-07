@@ -116,7 +116,7 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x28 | LocalTakeover | endpoint → controller: the endpoint's own user took over |
 | 0x30 | DragProbe | controller → computer under the cursor: is a drag in progress there? |
 | 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
-| 0x32 | DragResult | drop target → source and controller |
+| 0x32 | DragResult | drop target → source and controller; controller → source when no target ends it |
 | 0x40 | ClipboardAnnounce | the sender's clipboard changed |
 
 ### 0x01 Hello
@@ -414,12 +414,39 @@ content movement as it is, whatever their own scroll direction setting.
 
 ### Drag messages
 
-A drag starts on its **source** computer and may cross to a **target**. The controller asks the
-computer under the cursor whether a drag is in progress when the cursor reaches a crossing edge
-with a button held (DragProbe); the answer describes the items. The controller passes the offer to
-the target in Enter (`drag_id`) and forwards the DragOffer. When the drop ends, the target reports
-the outcome to the source (and to the controller when it is another computer). Contents travel on
-transfer streams.
+A drag of files and folders starts on its **source** computer, with the left button (0) held,
+and the **controller** carries it to a **target**. Contents travel on transfer streams: object kind
+1, `object_id` = drag_id, `item_index` = the item's place in the DragOffer.
+
+- **Probe.** While a button is held every edge is a wall. When the cursor pushes against an edge
+  that has a neighbour, with only the left button held, the controller asks the computer under the
+  cursor whether a drag is in progress there: DragProbe, or nothing when that is itself. A computer
+  answers with a DragOffer carrying the probe's ID: drag_id 0 when it has no drag, or when the
+  prober does not control it now. The answer may wait until the items are measured. The controller
+  probes again while the push goes on, one probe at a time.
+- **Crossing.** With a drag, the edges stop being walls toward computers that take drags
+  (Capabilities bit 2) and toward the source; the push goes on and the cursor crosses. The
+  controller sends the target the DragOffer (probe_id 0, the same drag_id, source and items), then
+  Enter with the drag_id. An Enter whose drag_id has no forwarded DragOffer from the same
+  controller before it is refused (Refuse 3).
+- **Parking.** The source keeps the left button held when the entry of a controller it offered the
+  drag to ends: the drag waits at the edge for its outcome.
+- **Target.** If the target is the source, its parked drag goes on. Otherwise it starts a drag of
+  the items at the entry point, pressing the left button there, and fetches the items from the
+  source when the drop asks for them. The release of the left button drops the drag; the target
+  sends DragResult to the source and to the controller, those that are not itself. When the
+  controller's entry ends (Leave), the target ends its drag without a drop and sends nothing: the
+  controller carries the drag on. When the target ends the control itself (its own mouse or
+  keyboard, a lock screen, a permission), it sends DragResult 2.
+- **Home.** When the cursor comes back to the controller, a drag the controller started goes on.
+  A drag from another computer makes the controller its target when the cursor came back through
+  an edge; otherwise (the hotkey, a refusal, a lost computer) the controller sends DragResult 2 to
+  the source.
+- **End.** The controller stops carrying the drag when the left button goes up or a DragResult
+  for it arrives. The source ends its parked drag at the DragResult: as a copy for 1, sliding back
+  for 2 and 3. It slides it back on its own when it loses the controller or its own mouse or
+  keyboard is used. After a drop it keeps the items available for the transfers; a drag that
+  ended any other way is withdrawn.
 
 #### 0x30 DragProbe
 
@@ -435,6 +462,7 @@ transfer streams.
 |-------|------|--------|
 | probe_id | u32 | the DragProbe answered, or 0 when forwarded to a target (drag_id is then not 0) |
 | drag_id | u32 | 0 when no drag is in progress, otherwise unique per source |
+| source | device_id | the computer the drag started on; zero when drag_id is 0, otherwise not zero |
 | item_count | u16 | 0 when drag_id is 0, otherwise 1–1024; the message must still fit in 65536 bytes |
 | items | item × item_count | |
 
@@ -453,7 +481,9 @@ item:
 | Field | Type | Values |
 |-------|------|--------|
 | drag_id | u32 | not 0 |
-| outcome | u8 | 1 dropped (the source ends its drag as a copy), 2 cancelled (the source's drag slides back), 3 failed |
+| outcome | u8 | 1 dropped (the source ends its drag as a copy), 2 cancelled (the source's drag slides back), 3 failed (the target could not start the drag) |
+
+Sent by the target, and by the controller when the drag ends without one (see above).
 
 ### 0x40 ClipboardAnnounce
 
@@ -813,7 +843,7 @@ bit 3), and the receiving side refuses requests that ignore that:
 | Denied | Refused |
 |--------|---------|
 | control | Enter gets Refuse 3 (not permitted); KeyEvent, ButtonEvent, ScrollEvent, ReleaseAll and PointerMotion are dropped |
-| files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped |
+| files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped, also when its source is a member that may not send files |
 | clipboard | ClipboardAnnounce is dropped; a ManifestRequest or ContentRequest for the clipboard gets TransferError NOT_PERMITTED |
 
 ## Arrangement

@@ -330,6 +330,7 @@ struct DragOffer {
     static constexpr ControlType kType = ControlType::DragOffer;
     std::uint32_t probe_id = 0;
     std::uint32_t drag_id = 0; ///< 0: no drag in progress, and no items
+    Id source{};               ///< the computer the drag started on; zero without a drag
     std::vector<OfferedItem> items;
     bool operator==(const DragOffer&) const = default;
 };

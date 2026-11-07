@@ -202,6 +202,7 @@ TEST(Mesh, NothingReadableTravelsAfterTheHandshake) {
 
     const protocol::DragOffer offer{.probe_id = 1,
                                     .drag_id = 2,
+                                    .source = protocol::Id{1},
                                     .items = {{.kind = protocol::ItemKind::File,
                                                .byte_count = 10,
                                                .content_type = "public.data",

@@ -43,7 +43,7 @@ control/local_takeover.bin	control	valid	40	LocalTakeover
 control/drag_probe.bin	control	valid	48	DragProbe
 control/drag_offer_none.bin	control	valid	49	no drag in progress
 control/drag_offer_two.bin	control	valid	49	a file and a folder
-control/drag_offer_forwarded.bin	control	valid	49	forwarded to the target, emoji name in NFC
+control/drag_offer_forwarded.bin	control	valid	49	forwarded to the target, emoji name in NFC, started on another computer
 control/drag_offer_nfd_name.bin	control	valid	49	decomposed (NFD) name: decoders do not check the form
 control/drag_offer_max_size.bin	control	valid	49	DragOffer of exactly 65536 bytes
 control/drag_result_dropped.bin	control	valid	50	DragResult dropped
@@ -155,6 +155,8 @@ malformed/drag_probe_id_0.bin	control	error	8	probe_id 0
 malformed/drag_offer_none_with_items.bin	control	error	8	no drag but one item
 malformed/drag_offer_forwarded_none.bin	control	error	8	forwarded offer without a drag
 malformed/drag_offer_no_items.bin	control	error	8	a drag with no items
+malformed/drag_offer_no_source.bin	control	error	8	a drag without its source
+malformed/drag_offer_none_with_source.bin	control	error	8	no drag but a source
 malformed/drag_offer_1025_items.bin	control	error	8	item_count 1025
 malformed/drag_offer_item_count_mismatch.bin	control	error	3	item_count 2, one item
 malformed/drag_offer_kind_3.bin	control	error	8	item kind 3
