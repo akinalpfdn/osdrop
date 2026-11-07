@@ -138,3 +138,15 @@ final class FakeTransfers: TransferDriving, TransferFollowing, @unchecked Sendab
         DispatchQueue.global().async { finished(outcome) }
     }
 }
+
+/// Records the notifications that would show.
+final class FakeNotifier: TransferNotifying, @unchecked Sendable {
+    private let lock = NSLock()
+    private var shown: [String] = []
+
+    var notifications: [String] { lock.withLock { shown } }
+
+    func notify(title: String, body: String) {
+        lock.withLock { shown.append("\(title): \(body)") }
+    }
+}

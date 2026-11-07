@@ -183,6 +183,8 @@ public enum MeshEvent: Sendable, Equatable {
     case clipboardChanged(DeviceID, clipID: UInt64, formats: [AnnouncedFormat])
     /// The end of a `fetchContent`.
     case contentReceived(id: UInt64, Result<Data, CoreError>)
+    /// A member fetches an item this Mac offered: about every 100 ms, and once at the end.
+    case sendProgress(SendProgress)
 }
 
 /// A position in 1/16 point of a computer's native desktop (docs/PROTOCOL.md "Conventions").
@@ -562,12 +564,54 @@ public struct OfferSummary: Sendable, Equatable {
     public let skipped: UInt64
 }
 
+/// Where sending an offered item to one member stands.
+public enum SendState: Sendable, Equatable {
+    case sending
+    /// Every byte of its files went out.
+    case done
+    /// The member stopped asking, or the item was withdrawn.
+    case stopped
+
+    init(_ raw: UInt8) {
+        switch raw {
+        case 2: self = .done
+        case 3: self = .stopped
+        default: self = .sending
+        }
+    }
+}
+
+/// A member fetching an item this Mac offered.
+public struct SendProgress: Sendable, Equatable {
+    public let device: DeviceID
+    public let item: TransferItem
+    public let bytesSent: UInt64
+    public let bytesTotal: UInt64
+    public let state: SendState
+
+    public init(device: DeviceID, item: TransferItem, bytesSent: UInt64, bytesTotal: UInt64, state: SendState) {
+        self.device = device
+        self.item = item
+        self.bytesSent = bytesSent
+        self.bytesTotal = bytesTotal
+        self.state = state
+    }
+}
+
 public struct TransferProgress: Sendable, Equatable {
     public let id: UInt64
     public let bytesDone: UInt64
     public let bytesTotal: UInt64
     public let filesDone: UInt64
     public let filesTotal: UInt64
+
+    public init(id: UInt64, bytesDone: UInt64, bytesTotal: UInt64, filesDone: UInt64, filesTotal: UInt64) {
+        self.id = id
+        self.bytesDone = bytesDone
+        self.bytesTotal = bytesTotal
+        self.filesDone = filesDone
+        self.filesTotal = filesTotal
+    }
 
     init(_ raw: osdrop_transfer_progress) {
         id = raw.transfer_id

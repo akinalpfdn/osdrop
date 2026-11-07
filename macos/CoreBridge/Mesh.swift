@@ -550,6 +550,14 @@ private final class MeshCallbackBox: Sendable {
         callbacks.drag_wanted = { context in
             MeshCallbackBox.from(context)?.control.yield(.dragWanted)
         }
+        callbacks.send_progress = { context, device, item, sent, total, state in
+            guard let device, let item = item?.pointee else { return }
+            MeshCallbackBox.from(context)?.continuation.yield(
+                .sendProgress(
+                    SendProgress(
+                        device: deviceID(device), item: TransferItem(item), bytesSent: sent, bytesTotal: total,
+                        state: SendState(state))))
+        }
         return callbacks
     }
 

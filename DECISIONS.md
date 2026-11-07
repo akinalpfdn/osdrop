@@ -552,3 +552,12 @@ choices the plan leaves open are logged here.
 **Why:** Photos and Mail are common sources, and their files cannot be read before a drop; receiving only at the push keeps drags that stay on the Mac untouched.
 **Trade-offs:** The cursor waits at the edge while the files are received (Photos may download originals from iCloud first); a cancelled drop leaves the original where it was but the drag is already over.
 **Revisit if:** macOS offers promised content without a drop.
+
+---
+
+## 2026-11-07 — Transfers in the menu, both directions
+**Chosen:** User decision: the menu lists transfers in both directions with progress and a cancel button, and a notification tells when one ends or fails. Core's sender reports each member's fetch of an item (`SendProgress`: sending, done, stopped); cancelling a send withdraws the whole drag. Notifications go through Notification Center, which asks the user once, at the first transfer that ends.
+**Alternatives:** Finder's own progress on the receiving side only; cancelling a send for one member.
+**Why:** DEVPLAN asks for progress and cancel on both sides; the sender is the only place that sees what goes out, and a drag usually goes to one member, so withdrawing it is the cancel the user means.
+**Trade-offs:** A send cannot tell a member that stopped asking from one that failed: both show as not finished. Cancelling a send also stops other members fetching the same drag.
+**Revisit if:** Drags are commonly dropped on several computers at once.

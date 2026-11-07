@@ -195,7 +195,7 @@ extension InputServices {
         InputServices(
             makeCapture: { capture }, makeInjector: { injector }, isTrusted: { trusted },
             cursorLocation: { cursor.location }, doubleClickInterval: { 0.5 }, keyboardLayout: { .ansi },
-            capsLock: capsLock, preferences: preferences, makeDrags: { _, _ in FakeDrags() })
+            capsLock: capsLock, preferences: preferences, makeDrags: { _, _, _ in FakeDrags() })
     }
 }
 

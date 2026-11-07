@@ -264,6 +264,8 @@ these tests take over input on every computer they cross.
 | D7 | Other drop targets | Release on the desktop, in Mail's message window, a browser upload field, Messages | The file arrives in each, through promises or a staged copy |
 | D8 | Lost network | Unplug the source's network during the 10 GB copy | The copy ends with an error on the receiving side and no partial file; the cursor comes back if it was on the lost computer |
 | D9 | Local input | While a drag waits on B, move A's own mouse when A is controlled by another computer | A's drag slides back; B's drop fetches nothing |
+| D10 | Photos and Mail | Drag a photo from Photos and an attachment from Mail onto B | The cursor waits at the edge while the files come out of the app, then crosses; the files land on B |
+| D11 | Progress and cancel | Drag the 10 GB file onto B; watch both menus; cancel on B, then again and cancel on A | Both menus show the transfer moving; either cancel ends it on both sides with no partial file; a notification on each side tells it did not finish; a finished one notifies too |
 
 ### Mac interface (Phase 16)
 

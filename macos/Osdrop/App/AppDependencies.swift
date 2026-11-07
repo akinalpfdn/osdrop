@@ -51,7 +51,7 @@ extension GroupServices {
             clipboard: ClipboardServices(
                 makePasteboard: { GeneralPasteboard() }, staging: ClipboardStaging(),
                 converter: BitmapImageConverter()),
-            input: .system(preferences: settings))
+            input: .system(preferences: settings), notifier: UserNotificationNotifier())
     }
 }
 
@@ -63,12 +63,12 @@ extension InputServices {
             isTrusted: { AXIsProcessTrusted() }, cursorLocation: { CGEventInjector.currentCursorLocation() },
             doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() },
             capsLock: HIDCapsLock(), preferences: preferences,
-            makeDrags: { mesh, injector in
+            makeDrags: { mesh, injector, transfers in
                 let staging = DragStaging()
                 return DragController(
                     mesh: mesh, injector: injector, staging: staging, watcher: PasteboardDragWatcher(),
                     starter: PromiseDragStarter(staging: staging), edge: EdgeReleasePanel(staging: staging),
-                    cursorLocation: { CGEventInjector.currentCursorLocation() })
+                    cursorLocation: { CGEventInjector.currentCursorLocation() }, transfers: transfers)
             })
     }
 }

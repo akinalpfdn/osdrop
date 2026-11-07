@@ -70,6 +70,15 @@ enum Tunables {
         static let keptStagings = 16
     }
 
+    enum Transfers {
+        /// Ended transfers the menu still shows, newest first.
+        static let endedRows = 5
+        /// This Mac's drags whose item names are kept for the transfers that fetch them.
+        static let rememberedDrags = 32
+        /// Ends of transfers kept until the transfer is registered.
+        static let earlyEnds = 64
+    }
+
     enum Logs {
         /// Copy diagnostics includes this many of the newest log lines.
         static let diagnosticsLines = 300

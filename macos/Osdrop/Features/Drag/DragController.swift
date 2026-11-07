@@ -59,6 +59,7 @@ final class DragController: DragCoordinating {
     private let edge: any EdgeReleasing
     private let cursorLocation: @MainActor () -> CGPoint
     private let timing: DragTiming
+    private let transfers: (any DragTransfersTracking)?
     /// The drag that came here and is shown, until it ends.
     private var arriving: UInt32?
     /// Drags that never began: reported as failed.
@@ -76,7 +77,7 @@ final class DragController: DragCoordinating {
         mesh: any ControlDriving & TransferDriving, injector: any InputInjecting, staging: DragStaging,
         watcher: any DragWatching,
         starter: any DragStarting, edge: any EdgeReleasing, cursorLocation: @escaping @MainActor () -> CGPoint,
-        timing: DragTiming = DragTiming()
+        timing: DragTiming = DragTiming(), transfers: (any DragTransfersTracking)? = nil
     ) {
         self.mesh = mesh
         self.injector = injector
@@ -86,6 +87,7 @@ final class DragController: DragCoordinating {
         self.edge = edge
         self.cursorLocation = cursorLocation
         self.timing = timing
+        self.transfers = transfers
     }
 
     func start() {
@@ -117,7 +119,13 @@ final class DragController: DragCoordinating {
         if files.isEmpty, watcher.carriesPromises() {
             mesh.dragPromised()
         } else {
-            mesh.dragStarted(files)
+            offer(files)
+        }
+    }
+
+    private func offer(_ files: [DraggedFile]) {
+        if let dragID = mesh.dragStarted(files) {
+            transfers?.offered(dragID: dragID, names: files.map(\.url.lastPathComponent))
         }
     }
 
@@ -152,7 +160,7 @@ final class DragController: DragCoordinating {
             if let folder = drag.stagingFolder {
                 keep(folder)
             }
-            mesh.dragStarted(
+            offer(
                 drag.items.compactMap { item in
                     drag.sources[item.id].map { DraggedFile(url: $0, contentType: item.contentType) }
                 })
@@ -195,7 +203,15 @@ final class DragController: DragCoordinating {
         }
         let indices = Dictionary(uniqueKeysWithValues: dragItems.enumerated().map { ($1.id, UInt32($0)) })
         let reader = NetworkContentReader(
-            fetcher: MeshDragFetcher(mesh: mesh, source: source, dragID: dragID), indices: indices)
+            fetcher: MeshDragFetcher(mesh: mesh, source: source, dragID: dragID), indices: indices,
+            started: { [transfers] item, transfer in
+                // In order with the start's other work on the main thread.
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        transfers?.receiving(transfer, name: item.name, from: source, bytes: item.byteCount)
+                    }
+                }
+            })
         Log.drag.info("A drag of \(items.count, privacy: .public) items arrived")
         arriving = dragID
         starter.prepare(dragItems, reader: reader, at: point) { [weak self] outcome in

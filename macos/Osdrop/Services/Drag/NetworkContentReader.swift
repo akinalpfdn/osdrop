@@ -4,8 +4,11 @@ import Foundation
 /// Fetches one item of a drag that came from another computer.
 protocol DragItemFetching: Sendable {
     /// Receives item `index` into `folder`, which is empty, and returns the files and folders it
-    /// created there. Waits until the transfer ends; cancelling `progress` cancels it.
-    func fetch(_ index: UInt32, into folder: URL, progress: Progress) throws -> [URL]
+    /// created there. Waits until the transfer ends; cancelling `progress` cancels it. `started`
+    /// gets the transfer's ID once it runs.
+    func fetch(
+        _ index: UInt32, into folder: URL, progress: Progress, started: @escaping @Sendable (UInt64) -> Void
+    ) throws -> [URL]
 }
 
 /// Content for the file promises of a drag that came from another computer: each item is fetched
@@ -14,6 +17,8 @@ struct NetworkContentReader: PromisedContentReading {
     let fetcher: any DragItemFetching
     /// The item's place in the drag, by the ID of its `DragItem`.
     let indices: [UUID: UInt32]
+    /// A transfer for the item started.
+    var started: @Sendable (DragItem, UInt64) -> Void = { _, _ in }
 
     func write(_ item: DragItem, to destination: URL, progress: Progress) throws {
         guard let index = indices[item.id] else {
@@ -24,7 +29,7 @@ struct NetworkContentReader: PromisedContentReading {
             .appendingPathComponent(".osdrop-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }  // empty after a move or a failed transfer
-        let received = try fetcher.fetch(index, into: folder, progress: progress)
+        let received = try fetcher.fetch(index, into: folder, progress: progress) { started(item, $0) }
         guard received.count == 1, let first = received.first else {
             throw CocoaError(.fileReadCorruptFile)
         }
@@ -40,7 +45,9 @@ struct MeshDragFetcher: DragItemFetching {
     let source: DeviceID
     let dragID: UInt32
 
-    func fetch(_ index: UInt32, into folder: URL, progress: Progress) throws -> [URL] {
+    func fetch(
+        _ index: UInt32, into folder: URL, progress: Progress, started: @escaping @Sendable (UInt64) -> Void
+    ) throws -> [URL] {
         let outcome = Locked<Result<[URL], CoreError>?>(nil)
         let done = DispatchSemaphore(value: 0)
         let finish: @Sendable (Result<[URL], CoreError>) -> Void = { result in
@@ -57,6 +64,7 @@ struct MeshDragFetcher: DragItemFetching {
                 finish(.failure(error))
                 return
             }
+            started(id)
             tracked.onCancel { Task { await mesh.cancelTransfer(id) } }
             mesh.transferWatch.watch(
                 id, progress: { tracked.set(done: $0.bytesDone) },

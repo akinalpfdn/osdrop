@@ -29,9 +29,11 @@ struct InputServices: Sendable {
     let keyboardLayout: @MainActor @Sendable () -> KeyboardPhysicalLayout
     let capsLock: any CapsLockControlling
     let preferences: any InputPreferencesStoring
-    /// Drag and drop across computers, with the input controller's injector.
+    /// Drag and drop across computers, with the input controller's injector and the transfers
+    /// list.
     let makeDrags:
-        @MainActor @Sendable (any ControlDriving & TransferDriving, any InputInjecting) -> any DragCoordinating
+        @MainActor @Sendable (any ControlDriving & TransferDriving, any InputInjecting, (any DragTransfersTracking)?)
+            -> any DragCoordinating
 }
 
 /// Cursor and keyboard across computers on this Mac (DEVPLAN Phase 11). Core decides crossings,

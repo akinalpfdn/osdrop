@@ -105,5 +105,8 @@ enum Theme {
         static let clipboard = "doc.on.clipboard"
         static let advanced = "wrench.and.screwdriver"
         static let quit = "power"
+        static let sending = "arrow.up.circle"
+        static let receiving = "arrow.down.circle"
+        static let cancel = "xmark.circle.fill"
     }
 }

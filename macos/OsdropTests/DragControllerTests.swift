@@ -153,8 +153,11 @@ struct NetworkContentReaderTests {
     private struct Fetcher: DragItemFetching {
         let fetch: @Sendable (UInt32, URL) throws -> [URL]
 
-        func fetch(_ index: UInt32, into folder: URL, progress: Progress) throws -> [URL] {
-            try fetch(index, folder)
+        func fetch(
+            _ index: UInt32, into folder: URL, progress: Progress, started: @escaping @Sendable (UInt64) -> Void
+        ) throws -> [URL] {
+            started(9)
+            return try fetch(index, folder)
         }
     }
 
@@ -201,7 +204,7 @@ struct NetworkContentReaderTests {
         let file = URL(filePath: "/tmp/Report.pdf")
         let transfers = FakeTransfers(outcome: .success(ReceivedItem(items: [file], skippedLinks: 0)))
         let fetcher = MeshDragFetcher(mesh: transfers, source: dragDeviceID(1), dragID: 5)
-        #expect(try fetcher.fetch(1, into: URL(filePath: "/tmp"), progress: Progress()) == [file])
+        #expect(try fetcher.fetch(1, into: URL(filePath: "/tmp"), progress: Progress()) { _ in } == [file])
         #expect(transfers.received == [TransferItem(kind: .drag, objectID: 5, index: 1)])
     }
 
@@ -212,7 +215,7 @@ struct NetworkContentReaderTests {
         let progress = Progress(totalUnitCount: 10)
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { progress.cancel() }
         #expect(throws: CoreError.cancelled) {
-            try fetcher.fetch(0, into: URL(filePath: "/tmp"), progress: progress)
+            try fetcher.fetch(0, into: URL(filePath: "/tmp"), progress: progress) { _ in }
         }
         #expect(transfers.cancelled == [1])
     }

@@ -252,6 +252,11 @@ rules are in PROTOCOL.md, "Drag messages".
   thread so a staged copy asked for on the main thread cannot wait for it. A drag that moves on is
   cancelled with Escape. This Mac's own drag that waited at the edge ends over a small drop target
   at the cursor that takes it as a copy or refuses it.
+- **Progress** — the receiving side follows each transfer by its ID; the sending side gets
+  `SendProgress` from core's sender for every member fetching an item, until every byte went out or
+  the member stopped. The menu lists both directions with their progress and a cancel button
+  (cancelling a send withdraws the drag); a notification tells when a transfer ends or fails.
+  Finder also shows the receiving copy's progress on the file.
 
 ## Group on the platforms
 

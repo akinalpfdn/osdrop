@@ -182,7 +182,7 @@ final class GroupFixture {
             makeMesh: { configuration throws(CoreError) in
                 if let error = failure.withLock({ $0 })(configuration) { throw error }
                 return mesh
-            }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
+            }, deviceName: "Test Mac", clipboard: .fake(), input: .fake(), notifier: FakeNotifier())
         let defaults = UserDefaults(suiteName: "osdrop-tests-\(UUID())") ?? .standard
         let controller = GroupController(
             services: services, screens: screens, settings: AppSettings(defaults: defaults))

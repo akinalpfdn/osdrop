@@ -1,6 +1,6 @@
 # Phase 017 (MVP-17) — macOS app UI
 Status: BACKLOG — done (PR #16, draft, CI green; UI tried on one Mac 2026-11-07); TESTING U3, U4
-need two computers, transfer progress and notifications come with Phase 14
+need two computers; transfer progress and notifications came with Phase 14 (PR #17)
 
 DEVPLAN reference: Phase 16. Depends on: Phases 12, 14, 15
 
