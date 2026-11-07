@@ -36,6 +36,28 @@ struct ClipData {
     bool operator==(const ClipData&) const = default;
 };
 
+/// What makes two copies on this PC the same: each content's format, size and hash, and each
+/// file's path, size and modification time. Copying the same thing again is not offered again.
+struct CopySignature {
+    struct Content {
+        osdrop_clipboard_format format = OSDROP_CLIPBOARD_TEXT;
+        std::size_t size = 0;
+        std::size_t hash = 0;
+        bool operator==(const Content&) const = default;
+    };
+    struct File {
+        std::string path;
+        std::uintmax_t size = 0;
+        std::int64_t modified = 0; ///< file clock ticks; 0 when unknown
+        bool operator==(const File&) const = default;
+    };
+    std::vector<Content> contents;
+    std::vector<File> files;
+    bool operator==(const CopySignature&) const = default;
+
+    [[nodiscard]] static CopySignature of(const ClipData& data);
+};
+
 /// The largest copy of each kind moved through the clipboard.
 struct ClipboardLimits {
     std::uint64_t text = std::uint64_t{16} * 1024 * 1024;
@@ -172,6 +194,8 @@ private:
     // On the clipboard thread only:
     std::map<ClipDevice, std::string> connected_;
     std::optional<Incoming> incoming_;
+    /// What this PC last offered, while no other computer's copy came after it.
+    std::optional<CopySignature> last_offered_;
 };
 
 } // namespace osdrop::win

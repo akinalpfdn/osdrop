@@ -147,6 +147,23 @@ TEST_F(ClipboardSyncTest, CopiesAreReportedOnlyWhileAMemberIsConnectedAndWithinL
     EXPECT_EQ(mesh.copies.size(), 1U);
 }
 
+TEST_F(ClipboardSyncTest, TheSameCopyAgainIsNotOfferedAgainUnlessAnotherCameBetween) {
+    connect();
+    const ClipData copy{.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("hi")}},
+                        .files = {"C:/Users/me/report.pdf"}};
+    sync.copied(copy);
+    sync.copied(copy);
+    EXPECT_EQ(mesh.copies.size(), 1U) << "the others have it already";
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("ho")}}, .files = {}});
+    EXPECT_EQ(mesh.copies.size(), 2U);
+
+    announce(30, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 2}});
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("ho")}}, .files = {}});
+    EXPECT_EQ(mesh.copies.size(), 3U) << "another computer's copy came between";
+}
+
 TEST_F(ClipboardSyncTest, AnotherComputersCopyIsWrittenOnceEverythingArrived) {
     connect();
     announce(7, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 5},

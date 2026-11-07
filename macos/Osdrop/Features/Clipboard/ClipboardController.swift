@@ -56,6 +56,9 @@ final class ClipboardController {
     private var incoming: Incoming?
     /// This Mac's newest copy as core offers it, to withdraw when sharing is turned off.
     private var offeredClip: UInt64?
+    /// What this Mac last offered, while no other computer's copy came after it: the same copy
+    /// again is not offered again, so the others fetch nothing again.
+    private var lastOffered: CopySignature?
     private var wasEnabled = true
     /// Results that arrived before their request returned its ID.
     private var early: [UInt64: Result<Fetched, CoreError>] = [:]
@@ -154,6 +157,12 @@ final class ClipboardController {
         }
         let limits = currentLimits()
         guard let copy = LocalCopy(pasteboard.read(), limits: limits) else { return }
+        let signature = CopySignature(copy)
+        guard signature != lastOffered else {
+            Log.clipboard.info("The same copy again: the others have it already")
+            return
+        }
+        lastOffered = signature
         incoming = nil  // this copy is newer than the one being fetched
         fetching = nil
         let previous = reporting
@@ -172,6 +181,7 @@ final class ClipboardController {
                 await MainActor.run { [weak self] in self?.offeredClip = clip }
             } catch {
                 Log.clipboard.error("Reporting a copy failed: \(String(describing: error), privacy: .public)")
+                await MainActor.run { [weak self] in self?.lastOffered = nil }
             }
         }
     }
@@ -179,6 +189,7 @@ final class ClipboardController {
     /// Sharing turned off: this Mac's copy can no longer be fetched, and another computer's copy
     /// being fetched is dropped.
     private func stopSharing() {
+        lastOffered = nil
         if let clip = offeredClip {
             offeredClip = nil
             Task { [mesh] in
@@ -209,6 +220,7 @@ final class ClipboardController {
         switch event {
         case .clipboardChanged(let device, let clipID, let formats):
             guard isShared() else { return }  // sharing turned off in Settings
+            lastOffered = nil  // a copy here, even the same one, is newer than this
             begin(device: device, clipID: clipID, formats: formats)
         case .contentReceived(let id, let result):
             settle(id, result.map { .content($0) })

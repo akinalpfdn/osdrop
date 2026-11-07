@@ -27,6 +27,24 @@ struct ClipboardControllerTests {
         #expect(fixture.mesh.copies.count == 1)
     }
 
+    @Test("The same copy again is not offered again, unless another computer's copy came between")
+    func sameCopyOnce() async throws {
+        let fixture = ClipboardFixture()
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.copies.count == 1 }
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.mesh.copies.count == 1, "the others have it already")
+
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 20, formats: [AnnouncedFormat(format: .text, byteCount: 3)]))
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.copies.count == 2 }
+    }
+
     @Test("Turning sharing off withdraws this Mac's copy")
     func withdrawsWhenTurnedOff() async throws {
         let fixture = ClipboardFixture()

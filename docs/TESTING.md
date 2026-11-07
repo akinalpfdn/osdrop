@@ -204,6 +204,7 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and a notification says the copy is too large |
 | CL7 | Source gone | Copy on one computer, quit Osdrop there at once, paste on another | The paste is immediate (the old clipboard) and a notice says the copy could not be fetched |
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
+| CL9 | The same copy again | Copy a file, wait until the other computer says it can be pasted, then copy the same file again | Nothing is fetched again: no progress window, no notification |
 
 ### Cursor and keyboard (Phase 11)
 

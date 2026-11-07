@@ -1,6 +1,9 @@
 #include <osdrop/win/clipboard_sync.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace osdrop::win {
@@ -14,6 +17,30 @@ std::uint64_t ClipboardLimits::limit(osdrop_clipboard_format format) const {
     default:
         return text;
     }
+}
+
+CopySignature CopySignature::of(const ClipData& data) {
+    CopySignature signature;
+    for (const ClipContent& content : data.contents) {
+        const std::string_view bytes(reinterpret_cast<const char*>(content.bytes.data()), // NOLINT
+                                     content.bytes.size());
+        signature.contents.push_back({.format = content.format,
+                                      .size = content.bytes.size(),
+                                      .hash = std::hash<std::string_view>{}(bytes)});
+    }
+    for (const std::string& file : data.files) {
+        const std::filesystem::path path(std::u8string(file.begin(), file.end()));
+        std::error_code error;
+        const bool regular = std::filesystem::is_regular_file(path, error);
+        const std::uintmax_t size = regular ? std::filesystem::file_size(path, error) : 0;
+        const auto modified = std::filesystem::last_write_time(path, error);
+        signature.files.push_back(
+            {.path = file,
+             .size = error ? 0 : size,
+             .modified =
+                 error ? 0 : static_cast<std::int64_t>(modified.time_since_epoch().count())});
+    }
+    return signature;
 }
 
 osdrop_result CoreClipboardMesh::copied(const ClipData& data) {
@@ -64,10 +91,17 @@ void ClipboardSync::copied(ClipData data) {
     std::erase_if(data.contents, [&](const ClipContent& content) {
         return content.bytes.size() > limits_.limit(content.format);
     });
-    drop_incoming(); // this copy is newer than the one being fetched
-    if (!data.contents.empty() || !data.files.empty()) {
-        static_cast<void>(mesh_->copied(data));
+    CopySignature signature = CopySignature::of(data);
+    if (signature == last_offered_) {
+        return; // the same copy again: the others have it already
     }
+    drop_incoming(); // this copy is newer than the one being fetched
+    if (data.contents.empty() && data.files.empty()) {
+        last_offered_.reset();
+        return;
+    }
+    last_offered_ =
+        mesh_->copied(data) == OSDROP_OK ? std::optional(std::move(signature)) : std::nullopt;
 }
 
 void ClipboardSync::cancel_fetch() {
@@ -100,8 +134,10 @@ void ClipboardSync::peer_disconnected(const ClipDevice& device) {
 
 void ClipboardSync::clipboard_changed(const ClipDevice& device, std::uint64_t clip_id,
                                       std::vector<osdrop_announced_format> formats) {
-    host_.post(
-        [this, device, clip_id, formats = std::move(formats)] { begin(device, clip_id, formats); });
+    host_.post([this, device, clip_id, formats = std::move(formats)] {
+        last_offered_.reset(); // a copy here, even the same one, is newer than this
+        begin(device, clip_id, formats);
+    });
 }
 
 void ClipboardSync::content_received(std::uint64_t id, osdrop_result result,

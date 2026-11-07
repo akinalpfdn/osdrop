@@ -570,3 +570,12 @@ choices the plan leaves open are logged here.
 **Why:** The fetch-first design (2026-11-04) left the user pasting the old content with no sign that files were coming. Clearing the old clipboard would break CL7 (a copy whose source is gone keeps the previous clipboard).
 **Trade-offs:** A paste during the fetch still gives the old content; the window only tells the user to wait.
 **Revisit if:** Phase 4 brings virtual files on the PC: Explorer could then paste while the files arrive.
+
+---
+
+## 2026-11-07 — The same copy again is not offered again
+**Chosen:** User decision: a computer does not announce a copy that is the same as the one it last announced (the same contents, and the same files by path, size and modification time) while no other computer's copy came in between; the others already have it, so nothing is fetched again.
+**Alternatives:** A cache on the receiving side that reuses files whose list (names, sizes, times) did not change.
+**Why:** Copying a file twice is common, and a large file was fetched again in full. Skipping the announcement needs no protocol or engine change.
+**Trade-offs:** A file changed without its size or modification time changing is not sent again. When something else was copied in between, the file is fetched again.
+**Revisit if:** Repeated fetches still show up in use; the receiving cache would cover them.
