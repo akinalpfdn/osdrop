@@ -26,6 +26,9 @@ final class PairingWindowPresenter: NSObject, NSWindowDelegate {
         update()
     }
 
+    /// The panel is shown without activating Osdrop and stays in front while another app is
+    /// active: the menu that started the pairing closes, and Osdrop goes to the background, at
+    /// once (a panel hides when its app is not active unless told otherwise).
     private func update() {
         guard controller.pairing != nil else {
             panel?.orderOut(nil)
@@ -35,21 +38,28 @@ final class PairingWindowPresenter: NSObject, NSWindowDelegate {
         self.panel = panel
         if !panel.isVisible {
             panel.center()
-            NSApp.activate()
-            panel.makeKeyAndOrderFront(nil)
         }
+        panel.orderFrontRegardless()
     }
 
     private func makePanel() -> NSPanel {
         let hosting = NSHostingController(rootView: PairingView(controller: controller))
         hosting.sizingOptions = .preferredContentSize
-        let panel = NSPanel(contentViewController: hosting)
-        panel.styleMask = [.titled, .closable]
+        // A nonactivating panel must be one from the start.
+        let panel = NSPanel(
+            contentRect: .zero, styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.contentViewController = hosting
         panel.title = String(localized: "pairing.title")
         panel.level = .floating
+        panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         return panel
+    }
+
+    /// The pairing window while it is shown, for the tests.
+    var window: NSPanel? {
+        panel?.isVisible == true ? panel : nil
     }
 
     func windowWillClose(_ notification: Notification) {

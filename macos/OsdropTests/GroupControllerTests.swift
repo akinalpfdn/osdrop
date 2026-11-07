@@ -64,6 +64,20 @@ struct GroupControllerTests {
         try await waitUntil { controller.pairing == nil }
     }
 
+    @Test("The pairing window stays in front while Osdrop is in the background, until the pairing ends")
+    func pairingWindowStaysInFront() async throws {
+        let controller = fixture.start()
+        let presenter = PairingWindowPresenter(controller: controller)
+        fixture.mesh.send(.pairingCode(connection: 9, code: 7, peer: GroupFixture.peer(GroupFixture.pc, name: "PC")))
+        try await waitUntil { presenter.window != nil }
+        let window = try #require(presenter.window)
+        #expect(!window.hidesOnDeactivate, "the menu closes and Osdrop goes to the background at once")
+        #expect(window.styleMask.contains(.nonactivatingPanel))
+        #expect(window.frame.width > 0 && window.frame.height > 0)
+        controller.dismissPairing()
+        try await waitUntil { presenter.window == nil }
+    }
+
     @Test("A computer that asks to pair gets an answer; a refused pairing says why")
     func incomingAndRefusedPairings() async throws {
         let controller = fixture.start()
