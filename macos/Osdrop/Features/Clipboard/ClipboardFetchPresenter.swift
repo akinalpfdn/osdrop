@@ -6,12 +6,13 @@ import SwiftUI
 /// front of every app, until they can be pasted (DEVPLAN Phase 15: a paste before then still gets
 /// what the pasteboard had).
 @MainActor
-final class ClipboardFetchPresenter {
+final class ClipboardFetchPresenter: NSObject, NSWindowDelegate {
     private let group: GroupController
     private var panel: NSPanel?
 
     init(group: GroupController) {
         self.group = group
+        super.init()
         observe()
     }
 
@@ -38,14 +39,40 @@ final class ClipboardFetchPresenter {
         }
         let panel = self.panel ?? makePanel(clipboard)
         self.panel = panel
-        if !panel.isVisible, let screen = NSScreen.main?.visibleFrame {
-            let size = panel.frame.size
-            panel.setFrameOrigin(
-                NSPoint(
-                    x: screen.maxX - size.width - Theme.Spacing.large,
-                    y: screen.maxY - size.height - Theme.Spacing.large))
+        if !panel.isVisible {
+            screen = Self.screenUnderCursor()
+            place(panel)
         }
         panel.orderFrontRegardless()
+    }
+
+    /// The screen the window shows on: where the user is looking, the one under the cursor.
+    private var screen: NSRect?
+
+    private static func screenUnderCursor() -> NSRect? {
+        let cursor = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(cursor, $0.frame, false) } ?? NSScreen.main
+        return screen?.visibleFrame
+    }
+
+    /// The window's top right corner in the screen's top right corner, inside it, whatever its size.
+    static func origin(of size: NSSize, in screen: NSRect, margin: CGFloat) -> NSPoint {
+        NSPoint(
+            x: max(screen.minX, screen.maxX - size.width - margin),
+            y: max(screen.minY, screen.maxY - size.height - margin))
+    }
+
+    private func place(_ panel: NSPanel) {
+        guard let screen else { return }
+        panel.setFrameOrigin(Self.origin(of: panel.frame.size, in: screen, margin: Theme.Spacing.large))
+    }
+
+    /// SwiftUI sizes the window once its content is laid out; AppKit keeps the bottom left corner,
+    /// so the window is placed again to keep it in the corner.
+    func windowDidResize(_ notification: Notification) {
+        if let panel {
+            place(panel)
+        }
     }
 
     /// Like the pairing window: shown without activating Osdrop, kept in front while other apps
@@ -61,6 +88,7 @@ final class ClipboardFetchPresenter {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.delegate = self
         return panel
     }
 }

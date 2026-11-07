@@ -1,3 +1,4 @@
+import AppKit
 import CoreBridge
 import Foundation
 import Testing
@@ -144,6 +145,15 @@ struct ClipboardControllerTests {
         try await waitUntil { fixture.pasteboard.written.count == 1 }
         #expect(fixture.controller.fetching == nil)
         #expect(fixture.notifier.notifications.count == 1)
+    }
+
+    @Test("The window of copied files on their way sits inside the screen's top right corner")
+    func placesTheFetchWindow() {
+        let screen = NSRect(x: 1440, y: -200, width: 1920, height: 1055)
+        let origin = ClipboardFetchPresenter.origin(of: NSSize(width: 300, height: 180), in: screen, margin: 20)
+        #expect(origin == NSPoint(x: 3040, y: 655))
+        let tall = ClipboardFetchPresenter.origin(of: NSSize(width: 300, height: 2000), in: screen, margin: 20)
+        #expect(tall.y == screen.minY, "a window taller than the screen starts at its bottom")
     }
 
     @Test("Cancelling copied files on their way keeps the pasteboard as it was, without a notice")
