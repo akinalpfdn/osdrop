@@ -8,9 +8,6 @@
 namespace osdrop::win {
 namespace {
 
-constexpr std::uint32_t kAllFeatures = OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_DRAG_SOURCE |
-                                       OSDROP_FEATURE_DRAG_TARGET | OSDROP_FEATURE_CLIPBOARD |
-                                       OSDROP_FEATURE_FILES;
 constexpr std::uint8_t kTransferStreams = 4;
 
 template <std::size_t Size>
@@ -157,7 +154,7 @@ osdrop_result GroupEngine::create_mesh(const std::vector<std::uint8_t>& secret,
                                     .group_state_size = group ? group->size() : 0,
                                     .layout_state = layout ? layout->data() : nullptr,
                                     .layout_state_size = layout ? layout->size() : 0,
-                                    .features = kAllFeatures,
+                                    .features = config_.features,
                                     .max_transfer_streams = kTransferStreams,
                                     .listen_port = port};
     const osdrop_mesh_callbacks mesh_callbacks = callbacks();
@@ -209,14 +206,14 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     result.pairing_failed = [](void* context, std::uint64_t connection, osdrop_result reason) {
         static_cast<GroupEngine*>(context)->events_.pairing_failed(connection, reason);
     };
-    result.peer_connected = [](void* context, const osdrop_peer* peer, std::uint32_t /*features*/) {
+    result.peer_connected = [](void* context, const osdrop_peer* peer, std::uint32_t features) {
         auto* engine = static_cast<GroupEngine*>(context);
         if (engine->clipboard_) {
             engine->clipboard_->peer_connected(
                 bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(peer->device_id)),
                 std::string(std::data(peer->name)));
         }
-        engine->events_.peer_connected(*peer);
+        engine->events_.peer_connected(*peer, features);
         engine->events_.group_changed();
         engine->events_.nearby_changed();
     };

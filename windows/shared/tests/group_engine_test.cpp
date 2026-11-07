@@ -133,8 +133,11 @@ public:
         change([&] { codes_.emplace_back(connection, code); });
     }
     void pairing_failed(std::uint64_t /*connection*/, osdrop_result /*reason*/) override {}
-    void peer_connected(const osdrop_peer& /*peer*/) override {
-        change([&] { ++connected_; });
+    void peer_connected(const osdrop_peer& /*peer*/, std::uint32_t features) override {
+        change([&] {
+            ++connected_;
+            features_ = features;
+        });
     }
     void peer_disconnected(const DeviceIdBytes& /*device*/, osdrop_result /*reason*/) override {}
     void peer_responsive(const DeviceIdBytes& /*device*/, bool /*responsive*/) override {}
@@ -156,6 +159,10 @@ public:
         return connected_;
     }
     int connected_unlocked() const { return connected_; }
+    std::uint32_t features() {
+        const std::scoped_lock lock(mutex_);
+        return features_;
+    }
     std::size_t codes_unlocked() const { return codes_.size(); }
 
 private:
@@ -173,6 +180,7 @@ private:
     int group_changes_ = 0;
     int nearby_changes_ = 0;
     int connected_ = 0;
+    std::uint32_t features_ = 0;
     std::vector<osdrop_result> left_;
     std::vector<std::pair<std::uint64_t, std::uint32_t>> codes_;
 };
@@ -319,6 +327,8 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->confirm_pairing(connection.value(), true), OSDROP_OK);
     EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
     ASSERT_TRUE(pc->events.wait_for([&] { return pc->events.connected_unlocked() == 1; }));
+    EXPECT_EQ(pc->events.features(), OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
+        << "no control or drags before the input process and the drag bridge exist";
     ASSERT_TRUE(wait_until([&] {
         return pc->engine->info().has_group && laptop.engine->info().has_group &&
                pc->engine->members().value().size() == 2;

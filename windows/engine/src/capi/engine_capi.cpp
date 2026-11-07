@@ -100,7 +100,7 @@ public:
         event.reason = reason;
         send(event);
     }
-    void peer_connected(const osdrop_peer& peer) override {
+    void peer_connected(const osdrop_peer& peer, std::uint32_t /*features*/) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_PEER_CONNECTED);
         std::ranges::copy(peer.device_id, std::begin(event.device_id));
         copy_name(std::data(peer.name), event.name);
