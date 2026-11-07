@@ -13,6 +13,8 @@ protocol DragCoordinating: AnyObject {
     func withdrawn(_ dragID: UInt32)
     /// This Mac's drag waits at the edge: release it there.
     func ended(_ dragID: UInt32, _ outcome: DropOutcome)
+    /// This Mac's drag of promised files is wanted elsewhere: take its files at the edge.
+    func wanted()
 }
 
 /// Starts drags with an origin under a point and reports how they ended (`PromiseDragStarter`).
@@ -51,6 +53,7 @@ final class DragController: DragCoordinating {
 
     private let mesh: any ControlDriving & TransferDriving
     private let injector: any InputInjecting
+    private let staging: DragStaging
     private let watcher: any DragWatching
     private let starter: any DragStarting
     private let edge: any EdgeReleasing
@@ -61,14 +64,23 @@ final class DragController: DragCoordinating {
     /// Drags that never began: reported as failed.
     private var unstarted: Set<UInt32> = []
     private var release: Task<Void, Never>?
+    /// The files of this Mac's drag of promised files being taken at the edge, by attempt.
+    private var taking: UInt64?
+    private var takingDropped = false
+    private var attempts: UInt64 = 0
+    /// Folders of promised files that were carried away, oldest first: kept while other
+    /// computers may still fetch them.
+    private var staged: [URL] = []
 
     init(
-        mesh: any ControlDriving & TransferDriving, injector: any InputInjecting, watcher: any DragWatching,
+        mesh: any ControlDriving & TransferDriving, injector: any InputInjecting, staging: DragStaging,
+        watcher: any DragWatching,
         starter: any DragStarting, edge: any EdgeReleasing, cursorLocation: @escaping @MainActor () -> CGPoint,
         timing: DragTiming = DragTiming()
     ) {
         self.mesh = mesh
         self.injector = injector
+        self.staging = staging
         self.watcher = watcher
         self.starter = starter
         self.edge = edge
@@ -95,11 +107,65 @@ final class DragController: DragCoordinating {
     // MARK: - Drags on this Mac
 
     private func localDragChanged(_ dragging: Bool) {
-        guard arriving == nil, !starter.isActive else { return }  // Osdrop's own drag
-        if dragging {
-            mesh.dragStarted(watcher.draggedFiles())
-        } else {
+        // Osdrop's own drag, or the drag Osdrop ends at the edge for its files.
+        guard arriving == nil, !starter.isActive, taking == nil else { return }
+        guard dragging else {
             mesh.dragStopped()
+            return
+        }
+        let files = watcher.draggedFiles()
+        if files.isEmpty, watcher.carriesPromises() {
+            mesh.dragPromised()
+        } else {
+            mesh.dragStarted(files)
+        }
+    }
+
+    func wanted() {
+        let point = cursorLocation()
+        attempts += 1
+        let attempt = attempts
+        taking = attempt
+        takingDropped = false
+        Log.drag.info("Taking the files of this Mac's drag at the edge")
+        edge.capture(
+            at: point, dropped: { [weak self] in self?.takingDropped = true },
+            completion: { [weak self] result in self?.took(attempt, result) })
+        release?.cancel()
+        release = Task { [weak self, timing] in
+            try? await Task.sleep(for: timing.releaseSettle)
+            guard let self, !Task.isCancelled else { return }
+            injector.releaseDrag(at: point)
+            try? await Task.sleep(for: timing.releaseHold)
+            if taking == attempt, !takingDropped {
+                took(attempt, .failure(CocoaError(.userCancelled)))  // the drop did not reach it
+            }
+        }
+    }
+
+    private func took(_ attempt: UInt64, _ result: Result<CapturedDrag, Error>) {
+        guard taking == attempt else { return }  // a later attempt replaced it
+        taking = nil
+        edge.hide()
+        switch result {
+        case .success(let drag):
+            if let folder = drag.stagingFolder {
+                keep(folder)
+            }
+            mesh.dragStarted(
+                drag.items.compactMap { item in
+                    drag.sources[item.id].map { DraggedFile(url: $0, contentType: item.contentType) }
+                })
+        case .failure(let error):
+            Log.drag.error("Taking a drag's files failed: \(error.localizedDescription, privacy: .public)")
+            mesh.dragStarted([])
+        }
+    }
+
+    private func keep(_ folder: URL) {
+        staged.append(folder)
+        while staged.count > Tunables.Drag.keptStagings {
+            staging.remove(staged.removeFirst())
         }
     }
 

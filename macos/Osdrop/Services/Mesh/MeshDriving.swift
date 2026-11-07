@@ -14,8 +14,12 @@ protocol ControlDriving: Sendable {
     func setInputSettings(_ settings: InputSettings)
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID)
     func setCapsLock(_ on: Bool)
-    /// A drag began on this Mac with these files and folders (none: nothing can travel).
-    func dragStarted(_ files: [DraggedFile])
+    /// A drag began on this Mac with these files and folders (none: nothing can travel), or the
+    /// files of a wanted drag of promised files arrived. Its drag ID; nil without one.
+    @discardableResult
+    func dragStarted(_ files: [DraggedFile]) -> UInt32?
+    /// A drag of promised files began on this Mac.
+    func dragPromised()
     func dragStopped()
     /// A drag that came from another computer ended here.
     func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome)
@@ -159,8 +163,18 @@ actor CoreMesh: MeshDriving {
         report { () throws(CoreError) in try mesh.setCapsLock(on) }
     }
 
-    nonisolated func dragStarted(_ files: [DraggedFile]) {
-        report { () throws(CoreError) in try mesh.dragStarted(files) }
+    nonisolated func dragStarted(_ files: [DraggedFile]) -> UInt32? {
+        do throws(CoreError) {
+            let dragID = try mesh.dragStarted(files)
+            return dragID == 0 ? nil : dragID
+        } catch {
+            Log.input.error("Reporting a drag failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    nonisolated func dragPromised() {
+        report { () throws(CoreError) in try mesh.dragPromised() }
     }
 
     nonisolated func dragStopped() {

@@ -11,10 +11,12 @@ protocol DragWatching: AnyObject {
     func stop()
     /// The files and folders of the drag in progress.
     func draggedFiles() -> [DraggedFile]
+    /// The drag in progress carries promised files (Photos, Mail attachments), which exist only
+    /// once it is dropped.
+    func carriesPromises() -> Bool
 }
 
-/// Watches the drag pasteboard (`DragActivityMonitor`) and reads its file URLs. Promised files
-/// (Photos) have no file yet and are not offered.
+/// Watches the drag pasteboard (`DragActivityMonitor`) and reads its file URLs and promises.
 @MainActor
 final class PasteboardDragWatcher: DragWatching {
     private let monitor = DragActivityMonitor()
@@ -41,5 +43,9 @@ final class PasteboardDragWatcher: DragWatching {
             let type = values?.contentType ?? (values?.isDirectory == true ? .folder : .data)
             return DraggedFile(url: url, contentType: type.identifier)
         }
+    }
+
+    func carriesPromises() -> Bool {
+        !(NSPasteboard(name: .drag).readObjects(forClasses: [NSFilePromiseReceiver.self]) ?? []).isEmpty
     }
 }

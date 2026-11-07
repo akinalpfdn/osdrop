@@ -66,7 +66,7 @@ extension InputServices {
             makeDrags: { mesh, injector in
                 let staging = DragStaging()
                 return DragController(
-                    mesh: mesh, injector: injector, watcher: PasteboardDragWatcher(),
+                    mesh: mesh, injector: injector, staging: staging, watcher: PasteboardDragWatcher(),
                     starter: PromiseDragStarter(staging: staging), edge: EdgeReleasePanel(staging: staging),
                     cursorLocation: { CGEventInjector.currentCursorLocation() })
             })

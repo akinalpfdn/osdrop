@@ -422,8 +422,10 @@ and the **controller** carries it to a **target**. Contents travel on transfer s
   that has a neighbour, with only the left button held, the controller asks the computer under the
   cursor whether a drag is in progress there: DragProbe, or nothing when that is itself. A computer
   answers with a DragOffer carrying the probe's ID: drag_id 0 when it has no drag, or when the
-  prober does not control it now. The answer may wait until the items are measured. The controller
-  probes again while the push goes on, one probe at a time.
+  prober does not control it now. The answer may wait until the items are measured, and for a
+  drag of files that exist only once it is dropped (promised files, as from Photos) until the
+  source has taken them at the edge; that drag then ends on the source and never slides back. The
+  controller probes again while the push goes on, one probe at a time.
 - **Crossing.** With a drag, the edges stop being walls toward computers that take drags
   (Capabilities bit 2) and toward the source; the push goes on and the cursor crosses. The
   controller sends the target the DragOffer (probe_id 0, the same drag_id, source and items), then

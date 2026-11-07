@@ -377,6 +377,57 @@ TEST_F(DragControl, ALostControllerSlidesAParkedDragBack) {
     EXPECT_EQ(node(2).control_observer.withdrawn, std::vector<std::uint32_t>{drag});
 }
 
+TEST_F(DragControl, PromisedFilesAreTakenAtTheEdgeWhenTheDragIsWanted) {
+    command(0, [](control::Control& c) { c.drag_promised(); });
+    press();
+    cross_from_0();
+    cross_from_0();
+    EXPECT_EQ(node(0).control_observer.wanted, 1) << "asked once for the files";
+    EXPECT_TRUE(node(0).control_observer.began.empty()) << "a wall until they come";
+    start_drag(0); // the platform took them at the edge
+    cross_from_0();
+    cross_from_0();
+    ASSERT_EQ(arrivals(1).size(), 1U);
+    const std::uint32_t drag = arrivals(1).back().drag_id;
+    release();
+    finish(1, drag, DragOutcome::Dropped);
+    EXPECT_TRUE(ends(0).empty()) << "the drag on the source has already ended";
+    const TempFolder received;
+    EXPECT_EQ(fetch(1, 0, drag, 0, received), std::nullopt);
+}
+
+TEST_F(DragControl, PromisedFilesOfAControlledComputerAnswerItsProbe) {
+    cross_from_0();
+    press();
+    command(1, [](control::Control& c) { c.drag_promised(); });
+    push_right();
+    EXPECT_EQ(node(1).control_observer.wanted, 1);
+    EXPECT_FALSE(node(0).control->carrying());
+    start_drag(1);
+    EXPECT_TRUE(node(0).control->carrying()) << "the waiting probe is answered";
+    push_right();
+    ASSERT_EQ(arrivals(2).size(), 1U);
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).buttons.empty())
+        << "nothing waits on the source: its button is released";
+    const std::uint32_t drag = arrivals(2).back().drag_id;
+    release();
+    finish(2, drag, DragOutcome::Cancelled);
+    EXPECT_TRUE(ends(1).empty());
+    const TempFolder nothing;
+    EXPECT_NE(fetch(2, 1, drag, 0, nothing), std::nullopt) << "withdrawn after a cancellation";
+}
+
+TEST_F(DragControl, PromisedFilesThatDoNotComeLeaveAWall) {
+    cross_from_0();
+    press();
+    command(1, [](control::Control& c) { c.drag_promised(); });
+    push_right();
+    command(1, [](control::Control& c) { ASSERT_TRUE(c.drag_started({}).has_value()); });
+    EXPECT_FALSE(node(0).control->carrying());
+    push_right();
+    EXPECT_TRUE(arrivals(2).empty());
+}
+
 TEST_F(DragControl, ADragOfMoreItemsThanAnOfferHoldsIsRefused) {
     const std::vector<control::DraggedItem> items(
         protocol::kMaxDragItems + 1, {.path = files / "Report.pdf", .content_type = "public.data"});

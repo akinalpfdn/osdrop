@@ -264,18 +264,28 @@ public final class Mesh: Sendable {
 
     // MARK: Drags
 
-    /// A drag began on this Mac with these files and folders: they go wherever the cursor carries
-    /// the drag. An empty list when it carries nothing that can travel.
-    public func dragStarted(_ files: [DraggedFile]) throws(CoreError) {
+    /// A drag began on this Mac with these files and folders, or the files of a wanted drag of
+    /// promised files arrived: they go wherever the cursor carries the drag. An empty list when it
+    /// carries nothing that can travel. The drag's ID, 0 without files.
+    @discardableResult
+    public func dragStarted(_ files: [DraggedFile]) throws(CoreError) -> UInt32 {
+        var dragID: UInt32 = 0
         try check(
             withCStrings(files.map { $0.url.path(percentEncoded: false) }) { paths in
                 withCStrings(files.map(\.contentType)) { types in
                     let items = zip(paths, types).map { osdrop_dragged_item(path: $0, content_type: $1) }
                     return items.withUnsafeBufferPointer { buffer in
-                        handle.withPointer { osdrop_mesh_drag_started($0, buffer.baseAddress, buffer.count) }
+                        handle.withPointer { osdrop_mesh_drag_started($0, buffer.baseAddress, buffer.count, &dragID) }
                     }
                 }
             })
+        return dragID
+    }
+
+    /// A drag began on this Mac with promised files, which exist only once it is dropped (Photos):
+    /// `.dragWanted` asks for them when another computer wants the drag.
+    public func dragPromised() throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drag_promised($0) })
     }
 
     /// This Mac's drag ended, however it ended.
@@ -536,6 +546,9 @@ private final class MeshCallbackBox: Sendable {
         }
         callbacks.drag_ended = { context, dragID, outcome in
             MeshCallbackBox.from(context)?.control.yield(.dragEnded(dragID: dragID, DropOutcome(outcome)))
+        }
+        callbacks.drag_wanted = { context in
+            MeshCallbackBox.from(context)?.control.yield(.dragWanted)
         }
         return callbacks
     }

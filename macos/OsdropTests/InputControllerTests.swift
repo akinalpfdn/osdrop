@@ -279,9 +279,12 @@ struct InputControllerTests {
         mesh.send(.dragArrived(source: other, dragID: 7, at: CoordPoint(x: 160, y: 320), items: []))
         mesh.send(.dragWithdrawn(dragID: 7))
         mesh.send(.dragEnded(dragID: 3, .dropped))
-        try await waitUntil { drags.calls.count == 4 }
+        mesh.send(.dragWanted)
+        try await waitUntil { drags.calls.count == 5 }
         #expect(
-            drags.calls == [.start, .arrived(other, 7, CGPoint(x: 10, y: 20), []), .withdrawn(7), .ended(3, .dropped)])
+            drags.calls == [
+                .start, .arrived(other, 7, CGPoint(x: 10, y: 20), []), .withdrawn(7), .ended(3, .dropped), .wanted,
+            ])
         controller.setActive(false)
         #expect(drags.calls.last == .stop)
         controller.stop()

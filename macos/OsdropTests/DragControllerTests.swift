@@ -19,10 +19,13 @@ struct DragControllerTests {
     private let source = dragDeviceID(0x42)
     private let report = ArrivingItem(name: "Report.pdf", isFolder: false, byteCount: 9, contentType: "com.adobe.pdf")
     private let point = CGPoint(x: 10, y: 20)
+    private let stagingRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+        "osdrop-tests-\(UUID().uuidString)")
 
     private func start() -> DragController {
         let controller = DragController(
-            mesh: mesh, injector: injector, watcher: watcher, starter: starter, edge: edge,
+            mesh: mesh, injector: injector, staging: DragStaging(root: stagingRoot), watcher: watcher,
+            starter: starter, edge: edge,
             cursorLocation: { [cursor] in cursor.location },
             timing: DragTiming(
                 pressDelay: .milliseconds(1), beginTimeout: .milliseconds(30), releaseSettle: .milliseconds(1),
@@ -95,6 +98,35 @@ struct DragControllerTests {
         try await waitUntil { edge.calls.last == .hide }
         controller.ended(4, .cancelled)
         #expect(edge.calls.last == .show(CGPoint(x: 5, y: 6), accepting: false))
+        controller.stop()
+    }
+
+    @Test("A drag of promised files is reported as such, and its files are taken at the edge when wanted")
+    func takesPromisedFiles() async throws {
+        let controller = start()
+        watcher.promises = true
+        watcher.onChange?(true)
+        #expect(mesh.calls == [.dragPromised])
+        cursor.location = CGPoint(x: 5, y: 6)
+        controller.wanted()
+        #expect(edge.calls == [.capture(CGPoint(x: 5, y: 6))])
+        try await waitUntil { injector.calls == [.releaseDrag(CGPoint(x: 5, y: 6))] }
+        watcher.onChange?(false)
+        #expect(mesh.calls == [.dragPromised], "the end of the drag Osdrop dropped is not reported")
+        let item = DragItem(
+            id: UUID(), name: "IMG_1.heic", isDirectory: false, byteCount: 4, contentType: "public.heic")
+        let url = URL(filePath: "/tmp/staged/IMG_1.heic")
+        edge.capture(.success(CapturedDrag(items: [item], sources: [item.id: url], stagingFolder: nil)))
+        #expect(mesh.calls.last == .dragStarted([DraggedFile(url: url, contentType: "public.heic")]))
+        #expect(edge.calls.last == .hide)
+        controller.stop()
+    }
+
+    @Test("Promised files whose drop does not reach the edge are given up")
+    func givesUpUntakenFiles() async throws {
+        let controller = start()
+        controller.wanted()
+        try await waitUntil { mesh.calls == [.dragStarted([])] }
         controller.stop()
     }
 

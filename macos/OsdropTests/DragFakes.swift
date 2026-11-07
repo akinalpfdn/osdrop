@@ -9,11 +9,13 @@ import Foundation
 final class FakeWatcher: DragWatching {
     var onChange: ((Bool) -> Void)?
     var files: [DraggedFile] = []
+    var promises = false
     private(set) var isRunning = false
 
     func start() { isRunning = true }
     func stop() { isRunning = false }
     func draggedFiles() -> [DraggedFile] { files }
+    func carriesPromises() -> Bool { promises }
 }
 
 /// A drag starter whose drag begins and ends when a test says.
@@ -52,13 +54,31 @@ final class FakeStarter: DragStarting {
 final class FakeEdge: EdgeReleasing {
     enum Call: Equatable {
         case show(CGPoint, accepting: Bool)
+        case capture(CGPoint)
         case hide
     }
 
     private(set) var calls: [Call] = []
+    private var dropped: (() -> Void)?
+    private var completion: ((Result<CapturedDrag, Error>) -> Void)?
 
     func show(at point: CGPoint, accepting: Bool) { calls.append(.show(point, accepting: accepting)) }
+
+    func capture(
+        at point: CGPoint, dropped: @escaping () -> Void, completion: @escaping (Result<CapturedDrag, Error>) -> Void
+    ) {
+        calls.append(.capture(point))
+        self.dropped = dropped
+        self.completion = completion
+    }
+
     func hide() { calls.append(.hide) }
+
+    /// The drag is dropped on the capture and its files become readable.
+    func capture(_ result: Result<CapturedDrag, Error>) {
+        dropped?()
+        completion?(result)
+    }
 }
 
 extension FakeControlMesh: TransferDriving {

@@ -243,7 +243,9 @@ rules are in PROTOCOL.md, "Drag messages".
   16 newer drags have been dropped.
 - **macOS** (`Features/Drag`, `Services/Drag`). `DragController` gets core's drag events from the
   input controller, in order with the input around them. Drags on this Mac are noticed on the drag
-  pasteboard and reported with their file URLs (promised files have no file yet and do not travel).
+  pasteboard and reported with their file URLs. A drag of promised files (Photos, Mail
+  attachments) is reported as such; when another computer wants it, the Mac drops it on a target
+  at the cursor, receives the files into staging and reports them, and the drag goes on as files.
   A drag that arrives starts from Phase 2's `PromiseDragStarter`; its promises are fulfilled by
   `NetworkContentReader`, which receives each item beside the drop's destination and moves it
   there whole, waiting through CoreBridge's `TransferWatch`, which follows transfers on core's

@@ -65,6 +65,9 @@ enum Tunables {
         /// before the release, and stays this long after.
         static let releaseSettle: Duration = .milliseconds(50)
         static let releaseHold: Duration = .seconds(1)
+        /// Promised files taken at the edge stay staged for this many later drags: core keeps
+        /// offering dropped drags until 16 newer ones were dropped.
+        static let keptStagings = 16
     }
 
     enum Logs {

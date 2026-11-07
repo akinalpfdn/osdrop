@@ -43,11 +43,16 @@ void Control::probe(const DeviceId& walled, Point position, TimePoint now) {
     }
     const DeviceId under = engine_.device();
     if (under == self_) {
-        if (outgoing_ && outgoing_->scanning == 0 && !outgoing_->broken && !outgoing_->outcome) {
+        if (!outgoing_ || outgoing_->broken || outgoing_->outcome) {
+            return;
+        }
+        if (outgoing_->promised) {
+            want(*outgoing_);
+        } else if (outgoing_->scanning == 0) {
             outgoing_->offered_to = self_;
             carry(Carried{.offer = outgoing_offer(*outgoing_, 0)});
         }
-        return; // or still measured: the next movement asks again
+        return; // or still measured or received: the next movement asks again
     }
     const auto peer = peers_.find(under);
     if (peer == peers_.end() || !peer->second.drag_source) {
@@ -111,18 +116,29 @@ void Control::carry_home(protocol::DragOffer offer, Point cursor, CaptureEnd rea
 
 // --- As the source -------------------------------------------------------------------------------
 
-Status<Error> Control::drag_started(std::vector<DraggedItem> items) {
+Expected<std::uint32_t, Error> Control::drag_started(std::vector<DraggedItem> items) {
+    using Result = Expected<std::uint32_t, Error>;
     if (transfers_ == nullptr) {
-        return Status<Error>::failure(Error::InvalidState);
+        return Result::failure(Error::InvalidState);
     }
     if (items.size() > protocol::kMaxDragItems ||
         !std::ranges::all_of(items,
                              [](const DraggedItem& item) { return item.path.is_absolute(); })) {
-        return Status<Error>::failure(Error::InvalidArgument);
+        return Result::failure(Error::InvalidArgument);
+    }
+    // The files of a wanted drag of promised files: its probes wait for them.
+    const bool detached = outgoing_ && outgoing_->promised && outgoing_->wanted;
+    std::vector<std::pair<DeviceId, std::uint32_t>> probes;
+    if (detached) {
+        probes = std::exchange(outgoing_->probes, {});
     }
     withdraw_outgoing(); // a new drag replaces the one before
     if (items.empty()) {
-        return Status<Error>::ok();
+        for (const auto& [device, probe_id] : probes) {
+            send(device, protocol::DragOffer{
+                             .probe_id = probe_id, .drag_id = 0, .source = {}, .items = {}});
+        }
+        return std::uint32_t{0};
     }
     last_drag_id_ = last_drag_id_ == UINT32_MAX ? 1 : last_drag_id_ + 1;
     std::set<DeviceId> audience;
@@ -137,7 +153,11 @@ Status<Error> Control::drag_started(std::vector<DraggedItem> items) {
                          .offered_to = std::nullopt,
                          .parked = false,
                          .stopped = false,
-                         .outcome = std::nullopt};
+                         .outcome = std::nullopt,
+                         .promised = false,
+                         .wanted = false,
+                         .detached = detached};
+    outgoing_->probes = std::move(probes);
     for (std::uint32_t index = 0; index < items.size(); ++index) {
         outgoing_->items[index].content_type = std::move(items[index].content_type);
         const protocol::ObjectRef item{
@@ -146,10 +166,40 @@ Status<Error> Control::drag_started(std::vector<DraggedItem> items) {
             outgoing_->broken = true; // its paths are absolute, so this does not happen
         }
     }
-    return Status<Error>::ok();
+    return last_drag_id_;
+}
+
+void Control::drag_promised() {
+    withdraw_outgoing();
+    last_drag_id_ = last_drag_id_ == UINT32_MAX ? 1 : last_drag_id_ + 1;
+    outgoing_ = Outgoing{.drag_id = last_drag_id_,
+                         .items = {},
+                         .scanning = 0,
+                         .broken = false,
+                         .probes = {},
+                         .offered_to = std::nullopt,
+                         .parked = false,
+                         .stopped = false,
+                         .outcome = std::nullopt,
+                         .promised = true,
+                         .wanted = false,
+                         .detached = false};
+}
+
+void Control::want(Outgoing& outgoing) {
+    if (!outgoing.wanted) {
+        outgoing.wanted = true;
+        observer_.on_drag_wanted();
+    }
 }
 
 void Control::drag_stopped() {
+    if (outgoing_ && outgoing_->promised && outgoing_->wanted) {
+        return; // ended at the edge for its files, which come with drag_started()
+    }
+    if (outgoing_ && outgoing_->detached && outgoing_->offered_to) {
+        return; // carried away: its outcome decides
+    }
     if (outgoing_ && outgoing_->parked) {
         outgoing_->stopped = true; // the platform may not see the button held: its outcome decides
         return;
@@ -201,8 +251,11 @@ void Control::receive_probe(const DeviceId& device, const protocol::DragProbe& p
                          .probe_id = probe.probe_id, .drag_id = 0, .source = {}, .items = {}});
         return;
     }
-    if (outgoing_->scanning > 0) {
+    if (outgoing_->promised || outgoing_->scanning > 0) {
         outgoing_->probes.emplace_back(device, probe.probe_id); // answered once measured
+        if (outgoing_->promised) {
+            want(*outgoing_);
+        }
         return;
     }
     outgoing_->offered_to = device;
@@ -223,9 +276,16 @@ void Control::receive_result(const DeviceId& device, const protocol::DragResult&
     if (carried_ && carried_->offer.drag_id == result.drag_id) {
         carry(std::nullopt); // dropped or cancelled where the cursor is
     }
+    if (device == self_ || !outgoing_ || outgoing_->drag_id != result.drag_id) {
+        return;
+    }
+    if (outgoing_->detached) {
+        outgoing_->outcome = result.outcome;
+        withdraw_outgoing(); // kept for the transfers after a drop
+        return;
+    }
     // Only a drag that is away has an outcome: one that came back goes on here.
-    if (device == self_ || !outgoing_ || outgoing_->drag_id != result.drag_id ||
-        !outgoing_->parked) {
+    if (!outgoing_->parked) {
         return;
     }
     outgoing_->outcome = result.outcome;

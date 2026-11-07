@@ -229,6 +229,7 @@ public:
     std::vector<control::DragArrival> arrivals;
     std::vector<std::uint32_t> withdrawn;
     std::vector<std::pair<std::uint32_t, protocol::DragOutcome>> drag_ends;
+    int wanted = 0;
 
     void on_capture_began(const DeviceId& device,
                           std::span<const control::HeldKey> release_here) override {
@@ -252,6 +253,7 @@ public:
     void on_drag_ended(std::uint32_t drag_id, protocol::DragOutcome outcome) override {
         drag_ends.emplace_back(drag_id, outcome);
     }
+    void on_drag_wanted() override { ++wanted; }
 };
 
 class RecordingLayoutObserver final : public layout::LayoutObserver {

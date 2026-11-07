@@ -454,6 +454,10 @@ typedef struct osdrop_mesh_callbacks {
     /* This computer's drag `drag_id` waits at the edge where it left: end it by releasing the left
      * button there, as a copy for DROPPED, sliding back otherwise. */
     void (*drag_ended)(void* context, uint32_t drag_id, osdrop_drag_outcome outcome);
+    /* This computer's drag of promised files is wanted on another computer: take its files at
+     * the edge (the drag ends there) and report them with osdrop_mesh_drag_started, or no items
+     * when they do not come. */
+    void (*drag_wanted)(void* context);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -683,12 +687,16 @@ osdrop_result osdrop_mesh_set_pointer_speed(osdrop_mesh* mesh, const uint8_t* de
 osdrop_result osdrop_mesh_set_caps_lock(osdrop_mesh* mesh, uint8_t on);
 
 /*
- * A drag began on this computer with these files and folders: they go wherever the cursor carries
- * the drag (docs/PROTOCOL.md, "Drag messages"). `count` 0 when the drag carries nothing that can
- * travel. INVALID_ARGUMENT for more than 1024 items or a relative path.
+ * A drag began on this computer with these files and folders, or the files of a wanted drag of
+ * promised files arrived: they go wherever the cursor carries the drag (docs/PROTOCOL.md, "Drag
+ * messages"). `count` 0 when the drag carries nothing that can travel. Writes the drag's ID, 0
+ * without items. INVALID_ARGUMENT for more than 1024 items or a relative path.
  */
 osdrop_result osdrop_mesh_drag_started(osdrop_mesh* mesh, const osdrop_dragged_item* items,
-                                       size_t count);
+                                       size_t count, uint32_t* out_drag_id);
+/* A drag began on this computer with promised files, which exist only once the drag is dropped
+ * (Photos): drag_wanted asks for them when another computer wants the drag. */
+osdrop_result osdrop_mesh_drag_promised(osdrop_mesh* mesh);
 /* This computer's drag ended, however it ended. */
 osdrop_result osdrop_mesh_drag_stopped(osdrop_mesh* mesh);
 /* The drag started for drag_arrived ended. */

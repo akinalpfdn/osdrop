@@ -91,6 +91,7 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
         case speed(UInt32, DeviceID)
         case capsLock(Bool)
         case dragStarted([DraggedFile])
+        case dragPromised
         case dragStopped
         case dropFinished(UInt32, DropOutcome)
     }
@@ -116,7 +117,11 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) { record(.settings(settings)) }
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) { record(.speed(permille, device)) }
     func setCapsLock(_ on: Bool) { record(.capsLock(on)) }
-    func dragStarted(_ files: [DraggedFile]) { record(.dragStarted(files)) }
+    func dragStarted(_ files: [DraggedFile]) -> UInt32? {
+        record(.dragStarted(files))
+        return files.isEmpty ? nil : 1
+    }
+    func dragPromised() { record(.dragPromised) }
     func dragStopped() { record(.dragStopped) }
     func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) { record(.dropFinished(dragID, outcome)) }
 
@@ -132,6 +137,7 @@ final class FakeDrags: DragCoordinating {
         case arrived(DeviceID, UInt32, CGPoint, [ArrivingItem])
         case withdrawn(UInt32)
         case ended(UInt32, DropOutcome)
+        case wanted
     }
 
     private(set) var calls: [Call] = []
@@ -143,6 +149,7 @@ final class FakeDrags: DragCoordinating {
     }
     func withdrawn(_ dragID: UInt32) { calls.append(.withdrawn(dragID)) }
     func ended(_ dragID: UInt32, _ outcome: DropOutcome) { calls.append(.ended(dragID, outcome)) }
+    func wanted() { calls.append(.wanted) }
 }
 
 /// Caps Lock in memory; tests flip it as the user would.

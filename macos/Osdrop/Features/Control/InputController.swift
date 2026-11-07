@@ -310,6 +310,8 @@ final class InputController {
             drags?.withdrawn(dragID)
         case .dragEnded(let dragID, let outcome):
             drags?.ended(dragID, outcome)
+        case .dragWanted:
+            drags?.wanted()
         }
     }
 

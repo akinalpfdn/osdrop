@@ -967,7 +967,8 @@ TEST(CapiMesh, AFileDraggedOnTheMacIsDroppedOnThePC) {
 
     const std::string path = osdrop::transfer::utf8_of(source / "Report.pdf");
     const osdrop_dragged_item item{.path = path.c_str(), .content_type = "com.adobe.pdf"};
-    ASSERT_EQ(osdrop_mesh_drag_started(mac.mesh, &item, 1), OSDROP_OK);
+    std::uint32_t drag = 0;
+    ASSERT_EQ(osdrop_mesh_drag_started(mac.mesh, &item, 1, &drag), OSDROP_OK);
     const osdrop_input press = left_button(1);
     ASSERT_EQ(osdrop_mesh_input(mac.mesh, &press, 0), OSDROP_OK);
     const auto arrived = [&] {
@@ -981,6 +982,7 @@ TEST(CapiMesh, AFileDraggedOnTheMacIsDroppedOnThePC) {
     ASSERT_TRUE(arrived());
     const Events::Arrival arrival = pc.events.read([&] { return pc.events.arrivals.front(); });
     EXPECT_EQ(arrival.source, mac.device_id);
+    EXPECT_EQ(arrival.drag_id, drag);
     EXPECT_EQ(arrival.x, 0);
     EXPECT_EQ(arrival.items,
               (std::vector<std::pair<std::string, std::uint64_t>>{{"Report.pdf", 9}}));
@@ -1012,16 +1014,26 @@ TEST(CapiMesh, AFileDraggedOnTheMacIsDroppedOnThePC) {
 
 TEST(CapiMesh, DragCommandsCheckTheirArguments) {
     CMesh mac(37, "Mac");
+    std::uint32_t drag = 1;
     const osdrop_dragged_item relative{.path = "Report.pdf", .content_type = "public.data"};
-    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &relative, 1), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &relative, 1, &drag),
+              OSDROP_ERROR_INVALID_ARGUMENT);
     const osdrop_dragged_item no_type{.path = "/Report.pdf", .content_type = nullptr};
-    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &no_type, 1), OSDROP_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 1), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &no_type, 1, &drag),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 1, &drag), OSDROP_ERROR_INVALID_ARGUMENT);
+    const osdrop_dragged_item absolute{.path = "/Report.pdf", .content_type = "public.data"};
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, &absolute, 1, nullptr),
+              OSDROP_ERROR_INVALID_ARGUMENT);
     const std::vector<osdrop_dragged_item> many(1'025,
                                                 {.path = "/a", .content_type = "public.data"});
-    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, many.data(), many.size()),
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, many.data(), many.size(), &drag),
               OSDROP_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 0), OSDROP_OK) << "nothing can travel";
+    EXPECT_EQ(osdrop_mesh_drag_started(mac.mesh, nullptr, 0, &drag), OSDROP_OK)
+        << "nothing can travel";
+    EXPECT_EQ(drag, 0U);
+    EXPECT_EQ(osdrop_mesh_drag_promised(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_drag_promised(mac.mesh), OSDROP_OK);
     EXPECT_EQ(osdrop_mesh_drag_stopped(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_drag_stopped(mac.mesh), OSDROP_OK);
     EXPECT_EQ(osdrop_mesh_drop_finished(mac.mesh, 0, OSDROP_DRAG_DROPPED),

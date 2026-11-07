@@ -543,3 +543,12 @@ choices the plan leaves open are logged here.
 **Why:** The target fetches as long as the drop target asks for the files, and the source cannot tell when that ends; a count bounds what the sender keeps without cutting a slow copy short.
 **Trade-offs:** A 17th drop during a still running copy of the first one cuts that copy.
 **Revisit if:** The protocol gains a message for a finished fetch.
+
+---
+
+## 2026-11-07 — Promised files are taken at the edge when the drag is wanted
+**Chosen:** User decision: a drag of files that exist only once it is dropped (Photos, Mail attachments) is reported to core as promised; when a push at an edge wants it, the source drops it on a target of Osdrop's own at the cursor, receives the files into staging and offers them, and the drag goes on as files. Such a drag cannot slide back on the source.
+**Alternatives:** Not supporting such drags (drop on the desktop first); receiving every promised drag at its start.
+**Why:** Photos and Mail are common sources, and their files cannot be read before a drop; receiving only at the push keeps drags that stay on the Mac untouched.
+**Trade-offs:** The cursor waits at the edge while the files are received (Photos may download originals from iCloud first); a cancelled drop leaves the original where it was but the drag is already over.
+**Revisit if:** macOS offers promised content without a drop.

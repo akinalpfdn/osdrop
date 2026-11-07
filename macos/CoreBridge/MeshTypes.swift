@@ -398,6 +398,10 @@ public enum ControlEvent: Sendable, Equatable {
     /// This Mac's drag `dragID` waits at the edge where it left: release the left button there,
     /// as a copy when it was dropped, sliding back otherwise.
     case dragEnded(dragID: UInt32, DropOutcome)
+    /// This Mac's drag of promised files is wanted on another computer: take its files at the
+    /// edge (the drag ends there) and report them with `dragStarted`, or none when they do not
+    /// come.
+    case dragWanted
 }
 
 /// A file or folder of a drag that came to this Mac (docs/PROTOCOL.md "0x31 DragOffer").

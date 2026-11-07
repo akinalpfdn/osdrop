@@ -163,6 +163,10 @@ public:
     /// Source: end this computer's drag, which waits at the edge where it left, by releasing the
     /// left button there: as a copy when it was dropped, sliding back otherwise.
     virtual void on_drag_ended(std::uint32_t drag_id, protocol::DragOutcome outcome) = 0;
+    /// Source: this computer's drag of promised files is wanted on another computer. Take its
+    /// files at the edge (ending the drag there) and report them with drag_started(), or an
+    /// empty list when they do not come.
+    virtual void on_drag_wanted() = 0;
 };
 
 /// How modifiers travel between a Mac and a PC; between computers of one platform they never
@@ -237,9 +241,13 @@ public:
     void set_unavailable(std::optional<protocol::RefuseReason> reason);
     /// Endpoint: where this computer's cursor really is; reported when something else moved it.
     void cursor_moved(Point position);
-    /// Source: a drag began on this computer with these items; nothing that can travel: an
-    /// empty list. INVALID_ARGUMENT for more than kMaxDragItems items or a relative path.
-    [[nodiscard]] Status<Error> drag_started(std::vector<DraggedItem> items);
+    /// Source: a drag began on this computer with these items, or the files of a wanted drag of
+    /// promised files arrived; nothing that can travel: an empty list. Its drag ID, 0 without
+    /// items. INVALID_ARGUMENT for more than kMaxDragItems items or a relative path.
+    [[nodiscard]] Expected<std::uint32_t, Error> drag_started(std::vector<DraggedItem> items);
+    /// Source: a drag began on this computer with promised files, which exist only once the drag
+    /// is dropped (Photos); they are asked for when the drag is wanted (on_drag_wanted).
+    void drag_promised();
     /// Source: this computer's drag ended, however it ended. A drag waiting at the edge for its
     /// outcome goes on: the platform may not see its button held.
     void drag_stopped();
@@ -322,6 +330,10 @@ private:
         bool parked = false;                          ///< waits at the edge for its outcome
         bool stopped = false;                         ///< the platform reported its end meanwhile
         std::optional<protocol::DragOutcome> outcome; ///< from the computer it went to
+        bool promised = false;                        ///< its files come when it is wanted
+        bool wanted = false;                          ///< the platform was asked for them
+        /// Its files were taken at the edge: the drag on this computer has ended, nothing parks.
+        bool detached = false;
     };
     /// The drag the held left button carries, while this computer is the controller.
     struct Carried {
@@ -363,6 +375,8 @@ private:
     // Drags, as the source.
     void receive_probe(const DeviceId& device, const protocol::DragProbe& probe);
     void answer_probes();
+    /// Asks the platform for the files of a promised drag, once.
+    void want(Outgoing& outgoing);
     [[nodiscard]] protocol::DragOffer outgoing_offer(const Outgoing& outgoing,
                                                      std::uint32_t probe_id) const;
     void receive_result(const DeviceId& device, const protocol::DragResult& result);

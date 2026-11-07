@@ -101,6 +101,9 @@ void Control::input(const Input& input, TimePoint captured) {
                 if (m.button == kDragButton && m.action == protocol::ButtonAction::Up) {
                     probe_.reset();
                     carry(std::nullopt); // dropped, wherever the cursor is
+                    if (!away_ && outgoing_ && outgoing_->detached) {
+                        withdraw_outgoing(); // its files were taken, but it stayed here
+                    }
                 }
                 update_lock(); // no crossing with a button held, unless it carries a drag
                 if (away_) {
@@ -227,7 +230,7 @@ void Control::cross(const DeviceId& device, Point position) {
             end_incoming(false); // the drag shown here moves on with the cursor
         }
         if (carried_ && outgoing_ && outgoing_->drag_id == carried_->offer.drag_id &&
-            carried_->offer.source == self_) {
+            carried_->offer.source == self_ && !outgoing_->detached) {
             outgoing_->parked = true; // this computer's own drag waits at the edge
         }
         observer_.on_capture_began(device, physical_.keys());
@@ -388,6 +391,10 @@ void Control::inject_button(Controlled& controlled, const protocol::ButtonEvent&
     if (controlled.held.button(event.button, event.action)) {
         observer_.on_inject(event);
     }
+    if (event.button == kDragButton && event.action == protocol::ButtonAction::Up && outgoing_ &&
+        outgoing_->detached) {
+        withdraw_outgoing(); // its files were taken, but it stayed here
+    }
 }
 
 void Control::receive_motion(Controlled& controlled, const protocol::PointerMotion& motion) {
@@ -429,7 +436,7 @@ void Control::release(bool left) {
         end_incoming(!left);
     }
     if (left && outgoing_ && outgoing_->offered_to == controlled.controller &&
-        controlled.held.button(kDragButton, protocol::ButtonAction::Up)) {
+        !outgoing_->detached && controlled.held.button(kDragButton, protocol::ButtonAction::Up)) {
         outgoing_->parked = true; // the left button stays down: the drag waits for its outcome
     }
     release_held(controlled);

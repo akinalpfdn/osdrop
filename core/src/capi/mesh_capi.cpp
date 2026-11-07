@@ -499,6 +499,11 @@ public:
                                   static_cast<osdrop_drag_outcome>(outcome));
         }
     }
+    void on_drag_wanted() override {
+        if (callbacks_.drag_wanted != nullptr) {
+            callbacks_.drag_wanted(callbacks_.context);
+        }
+    }
 
 private:
     osdrop_mesh_callbacks callbacks_;
@@ -1230,8 +1235,9 @@ osdrop_result osdrop_mesh_cursor_moved(osdrop_mesh* mesh, int32_t x, int32_t y) 
 }
 
 osdrop_result osdrop_mesh_drag_started(osdrop_mesh* mesh, const osdrop_dragged_item* items,
-                                       size_t count) {
-    if (mesh == nullptr || (items == nullptr && count != 0) || count > protocol::kMaxDragItems) {
+                                       size_t count, uint32_t* out_drag_id) {
+    if (mesh == nullptr || out_drag_id == nullptr || (items == nullptr && count != 0) ||
+        count > protocol::kMaxDragItems) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     std::vector<control::DraggedItem> dragged;
@@ -1243,13 +1249,29 @@ osdrop_result osdrop_mesh_drag_started(osdrop_mesh* mesh, const osdrop_dragged_i
         dragged.push_back(
             {.path = transfer::path_from_utf8(item.path), .content_type = item.content_type});
     }
-    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    auto result = osdrop::Expected<std::uint32_t, Error>::failure(Error::Internal);
     control::Control& input_layer = *mesh->control;
     static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
         result = input_layer.drag_started(std::move(dragged));
         node_mesh.flush(now);
     }));
-    return to_result(result);
+    if (!result) {
+        return to_result(result.error());
+    }
+    *out_drag_id = result.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_drag_promised(osdrop_mesh* mesh) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.drag_promised();
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
 }
 
 osdrop_result osdrop_mesh_drag_stopped(osdrop_mesh* mesh) {
