@@ -352,7 +352,10 @@ final class GroupController {
     // MARK: - Input control
 
     private func startInput(_ mesh: any MeshDriving) {
-        let input = InputController(mesh: mesh, services: services.input) { [weak self] device in
+        let input = InputController(
+            mesh: mesh, services: services.input,
+            makeDrags: { [services] injector in services.input.makeDrags(mesh, injector) }
+        ) { [weak self] device in
             self?.name(of: device) ?? String(localized: "clipboard.otherComputer")
         }
         self.input = input

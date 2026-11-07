@@ -38,9 +38,18 @@ A file dragged to an edge crosses with the cursor and lands where it is released
 3. C API and CoreBridge for the above.
 4. Mac source: drag pasteboard read at drag start (file URLs), reported to core; at the result,
    an injected button release over the edge panel ends the source app's drag (accept or refuse).
-   Promise drags (Photos) are received at the edge first and cannot slide back.
+   Promise drags (Photos) are received at the edge first and cannot slide back. (Not done yet:
+   needs a core callback asking for the files at the push; waits for the user's decision.)
 5. Mac target: `PromiseDragStarter` with a reader that receives each item from the source through
    the transfer engine; an injected press at the entry point starts the drag.
 6. Transfers in the menu: progress and cancel, notifications when done or failed (Phase 16 rest).
+   (Not done yet: the source side needs sender progress from core; waits for the user's
+   decision.)
+
+## Status (2026-11-07)
+- Done: steps 1–5 and 7 for file drags (core tests: drag_test.cpp, capi; Mac: DragController,
+  NetworkContentReader, InputController forwarding). Finder shows a received copy's progress and
+  can cancel it.
+- Hardware: TESTING D1–D9, all need a second computer.
 7. Tests over the simulated network (probe, offer, cross, result, chain, remote source, cancel,
    lost peer) and Mac fakes; docs.

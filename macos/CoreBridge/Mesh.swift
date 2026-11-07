@@ -38,6 +38,8 @@ public final class Mesh: Sendable {
     public let events: AsyncStream<MeshEvent>
     /// Input control, apart from `events` so injection never waits behind other events.
     public let control: AsyncStream<ControlEvent>
+    /// Transfers by their ID, followed without the main thread.
+    public let transfers: TransferWatch
     public let deviceID: DeviceID
     public let listenPort: UInt16
 
@@ -50,7 +52,8 @@ public final class Mesh: Sendable {
     public init(_ configuration: Configuration) throws(CoreError) {
         let (events, continuation) = AsyncStream.makeStream(of: MeshEvent.self)
         let (control, controlContinuation) = AsyncStream.makeStream(of: ControlEvent.self)
-        let box = MeshCallbackBox(continuation: continuation, control: controlContinuation)
+        let transfers = TransferWatch()
+        let box = MeshCallbackBox(continuation: continuation, control: controlContinuation, transfers: transfers)
         var created: OpaquePointer?
         let groupState = configuration.groupState ?? []
         let layoutState = configuration.layoutState ?? []
@@ -90,6 +93,7 @@ public final class Mesh: Sendable {
         _ = osdrop_mesh_listen_port(created, &port)
         self.events = events
         self.control = control
+        self.transfers = transfers
         self.box = box
         self.handle = MeshHandle(created)
         self.deviceID = configuration.identity.id
@@ -258,6 +262,32 @@ public final class Mesh: Sendable {
         try check(handle.withPointer { osdrop_mesh_input($0, &raw, age) })
     }
 
+    // MARK: Drags
+
+    /// A drag began on this Mac with these files and folders: they go wherever the cursor carries
+    /// the drag. An empty list when it carries nothing that can travel.
+    public func dragStarted(_ files: [DraggedFile]) throws(CoreError) {
+        try check(
+            withCStrings(files.map { $0.url.path(percentEncoded: false) }) { paths in
+                withCStrings(files.map(\.contentType)) { types in
+                    let items = zip(paths, types).map { osdrop_dragged_item(path: $0, content_type: $1) }
+                    return items.withUnsafeBufferPointer { buffer in
+                        handle.withPointer { osdrop_mesh_drag_started($0, buffer.baseAddress, buffer.count) }
+                    }
+                }
+            })
+    }
+
+    /// This Mac's drag ended, however it ended.
+    public func dragStopped() throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drag_stopped($0) })
+    }
+
+    /// The drag started for `.dragArrived` ended.
+    public func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_drop_finished($0, dragID, outcome.raw) })
+    }
+
     /// Brings the cursor home: the user's hotkey, or `inputLost` when the capture ended by itself.
     public func returnHome(inputLost: Bool) throws(CoreError) {
         try check(handle.withPointer { osdrop_mesh_return_home($0, inputLost ? 1 : 0) })
@@ -358,10 +388,15 @@ private final class MeshHandle: @unchecked Sendable {
 private final class MeshCallbackBox: Sendable {
     let continuation: AsyncStream<MeshEvent>.Continuation
     let control: AsyncStream<ControlEvent>.Continuation
+    let transfers: TransferWatch
 
-    init(continuation: AsyncStream<MeshEvent>.Continuation, control: AsyncStream<ControlEvent>.Continuation) {
+    init(
+        continuation: AsyncStream<MeshEvent>.Continuation, control: AsyncStream<ControlEvent>.Continuation,
+        transfers: TransferWatch
+    ) {
         self.continuation = continuation
         self.control = control
+        self.transfers = transfers
     }
 
     var callbacks: osdrop_mesh_callbacks {
@@ -424,8 +459,10 @@ private final class MeshCallbackBox: Sendable {
             MeshCallbackBox.from(context)?.continuation.yield(.offerReady(TransferItem(item), outcome))
         }
         callbacks.transfer_progress = { context, progress in
-            guard let progress = progress?.pointee else { return }
-            MeshCallbackBox.from(context)?.continuation.yield(.transferProgress(TransferProgress(progress)))
+            guard let progress = progress?.pointee, let box = MeshCallbackBox.from(context) else { return }
+            let update = TransferProgress(progress)
+            box.transfers.progressed(update)
+            box.continuation.yield(.transferProgress(update))
         }
         callbacks.transfer_finished = { context, id, result, items, count, skippedLinks in
             let outcome: Result<ReceivedItem, CoreError>
@@ -436,7 +473,9 @@ private final class MeshCallbackBox: Sendable {
                 outcome = .success(
                     ReceivedItem(items: paths.map { URL(filePath: $0) }, skippedLinks: skippedLinks))
             }
-            MeshCallbackBox.from(context)?.continuation.yield(.transferFinished(id: id, outcome))
+            guard let box = MeshCallbackBox.from(context) else { return }
+            box.transfers.finished(id, outcome)
+            box.continuation.yield(.transferFinished(id: id, outcome))
         }
         callbacks.clipboard_changed = { context, device, clipID, formats, count in
             guard let device else { return }
@@ -480,6 +519,23 @@ private final class MeshCallbackBox: Sendable {
             MeshCallbackBox.from(context)?.control.yield(
                 .inputLatency(
                     deviceID(controller), samples: samples, medianMicroseconds: median, p99Microseconds: p99))
+        }
+        callbacks.drag_arrived = { context, source, dragID, x, y, items, count in
+            guard let source else { return }
+            let arriving = (0..<count).compactMap { index -> ArrivingItem? in
+                guard let item = items?[index], let name = item.name, let type = item.content_type else { return nil }
+                return ArrivingItem(
+                    name: String(cString: name), isFolder: item.is_folder == 1, byteCount: item.byte_count,
+                    contentType: String(cString: type))
+            }
+            MeshCallbackBox.from(context)?.control.yield(
+                .dragArrived(source: deviceID(source), dragID: dragID, at: CoordPoint(x: x, y: y), items: arriving))
+        }
+        callbacks.drag_withdrawn = { context, dragID in
+            MeshCallbackBox.from(context)?.control.yield(.dragWithdrawn(dragID: dragID))
+        }
+        callbacks.drag_ended = { context, dragID, outcome in
+            MeshCallbackBox.from(context)?.control.yield(.dragEnded(dragID: dragID, DropOutcome(outcome)))
         }
         return callbacks
     }

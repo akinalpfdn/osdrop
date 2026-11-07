@@ -247,6 +247,24 @@ session clock offset (the offset of the fastest of the last eight pings). The ca
 the event tap received the event, so the time inside the controller's input system is not
 included. The developer view shows the median and the 99th percentile of the last 1000 datagrams.
 
+### Drag and drop (Phase 14)
+
+Run with three computers in a row (A | B | C), members of one group, files allowed. The rows marked
+PC need the PC; Mac ↔ Mac needs the second Mac. Before each run, say whose mouse will be used:
+these tests take over input on every computer they cross.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| D1 | Every direction | Drag a file from Finder (Explorer) on A through the edge into a folder on B, in each direction between a Mac and a PC, Mac → Mac and PC → PC | The cursor carries the drag; the file is copied where it is released; the source keeps its file and its drag ends as a copy |
+| D2 | A tree and a large file | Drag a folder with Unicode names and inner links, then a 10 GB file | Everything arrives intact; Finder (Explorer) shows the copy's progress on the receiving side |
+| D3 | A chain | Drag from A through B onto C | Nothing is dropped on B; the file lands on C |
+| D4 | A controlled source | With A's mouse on B, drag a file on B onto C, then one on B back onto A | Each lands where it is released |
+| D5 | Back to the source | Drag from A onto B and back onto A without releasing, then release in another folder on A | The drag goes on as if it never left; the file is copied or moved as Finder (Explorer) does |
+| D6 | Cancel | Drag onto B, press Escape before releasing; drag onto B and release on a place that takes no files; drag onto B and press ⌃⌥⌘⎋ | Nothing is copied; the drag slides back on A |
+| D7 | Other drop targets | Release on the desktop, in Mail's message window, a browser upload field, Messages | The file arrives in each, through promises or a staged copy |
+| D8 | Lost network | Unplug the source's network during the 10 GB copy | The copy ends with an error on the receiving side and no partial file; the cursor comes back if it was on the lost computer |
+| D9 | Local input | While a drag waits on B, move A's own mouse when A is controlled by another computer | A's drag slides back; B's drop fetches nothing |
+
 ### Mac interface (Phase 16)
 
 | # | Scenario | Steps | Expected |

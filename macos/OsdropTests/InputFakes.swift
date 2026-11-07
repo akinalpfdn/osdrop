@@ -43,6 +43,7 @@ final class FakeInjector: InputInjecting {
         case releaseAll
         case releaseHere([HIDKey])
         case place(CGPoint)
+        case releaseDrag(CGPoint)
     }
 
     private(set) var calls: [Call] = []
@@ -71,6 +72,11 @@ final class FakeInjector: InputInjecting {
         cursorLocation = point
         calls.append(.place(point))
     }
+
+    func releaseDrag(at point: CGPoint) {
+        cursorLocation = point
+        calls.append(.releaseDrag(point))
+    }
 }
 
 /// Records input control's commands; tests deliver core's events.
@@ -84,6 +90,9 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
         case settings(InputSettings)
         case speed(UInt32, DeviceID)
         case capsLock(Bool)
+        case dragStarted([DraggedFile])
+        case dragStopped
+        case dropFinished(UInt32, DropOutcome)
     }
 
     let control: AsyncStream<ControlEvent>
@@ -107,8 +116,33 @@ final class FakeControlMesh: ControlDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) { record(.settings(settings)) }
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) { record(.speed(permille, device)) }
     func setCapsLock(_ on: Bool) { record(.capsLock(on)) }
+    func dragStarted(_ files: [DraggedFile]) { record(.dragStarted(files)) }
+    func dragStopped() { record(.dragStopped) }
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) { record(.dropFinished(dragID, outcome)) }
 
     private func record(_ call: Call) { lock.withLock { recorded.append(call) } }
+}
+
+/// Records what input control hands to drag and drop.
+@MainActor
+final class FakeDrags: DragCoordinating {
+    enum Call: Equatable {
+        case start
+        case stop
+        case arrived(DeviceID, UInt32, CGPoint, [ArrivingItem])
+        case withdrawn(UInt32)
+        case ended(UInt32, DropOutcome)
+    }
+
+    private(set) var calls: [Call] = []
+
+    func start() { calls.append(.start) }
+    func stop() { calls.append(.stop) }
+    func arrived(source: DeviceID, dragID: UInt32, at point: CGPoint, items: [ArrivingItem]) async {
+        calls.append(.arrived(source, dragID, point, items))
+    }
+    func withdrawn(_ dragID: UInt32) { calls.append(.withdrawn(dragID)) }
+    func ended(_ dragID: UInt32, _ outcome: DropOutcome) { calls.append(.ended(dragID, outcome)) }
 }
 
 /// Caps Lock in memory; tests flip it as the user would.
@@ -154,6 +188,14 @@ extension InputServices {
         InputServices(
             makeCapture: { capture }, makeInjector: { injector }, isTrusted: { trusted },
             cursorLocation: { cursor.location }, doubleClickInterval: { 0.5 }, keyboardLayout: { .ansi },
-            capsLock: capsLock, preferences: preferences)
+            capsLock: capsLock, preferences: preferences, makeDrags: { _, _ in FakeDrags() })
     }
+}
+
+/// No transfer ever reports.
+struct NoTransfers: TransferFollowing {
+    func watch(
+        _ id: UInt64, progress: @escaping @Sendable (TransferProgress) -> Void,
+        finished: @escaping @Sendable (Result<ReceivedItem, CoreError>) -> Void
+    ) {}
 }

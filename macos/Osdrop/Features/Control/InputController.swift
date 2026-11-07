@@ -29,6 +29,9 @@ struct InputServices: Sendable {
     let keyboardLayout: @MainActor @Sendable () -> KeyboardPhysicalLayout
     let capsLock: any CapsLockControlling
     let preferences: any InputPreferencesStoring
+    /// Drag and drop across computers, with the input controller's injector.
+    let makeDrags:
+        @MainActor @Sendable (any ControlDriving & TransferDriving, any InputInjecting) -> any DragCoordinating
 }
 
 /// Cursor and keyboard across computers on this Mac (DEVPLAN Phase 11). Core decides crossings,
@@ -54,6 +57,7 @@ final class InputController {
     @ObservationIgnored private let services: InputServices
     @ObservationIgnored private let capture: any InputCapturing
     @ObservationIgnored private let injector: any InputInjecting
+    @ObservationIgnored private let drags: (any DragCoordinating)?
     @ObservationIgnored private let nameOf: @MainActor (DeviceID) -> String
     @ObservationIgnored private var tasks: [Task<Void, Never>] = []
     @ObservationIgnored private var heartbeat: Task<Void, Never>?
@@ -68,11 +72,18 @@ final class InputController {
     @ObservationIgnored private var isPermitted = false
     @ObservationIgnored private var unavailable: ControlUnavailability??
 
-    init(mesh: any ControlDriving, services: InputServices, nameOf: @escaping @MainActor (DeviceID) -> String) {
+    /// `makeDrags` makes drag and drop with this controller's injector; none without it.
+    init(
+        mesh: any ControlDriving, services: InputServices,
+        makeDrags: ((any InputInjecting) -> any DragCoordinating)? = nil,
+        nameOf: @escaping @MainActor (DeviceID) -> String
+    ) {
         self.mesh = mesh
         self.services = services
         self.capture = services.makeCapture()
-        self.injector = services.makeInjector()
+        let injector = services.makeInjector()
+        self.injector = injector
+        self.drags = makeDrags?(injector)
         self.nameOf = nameOf
     }
 
@@ -85,7 +96,13 @@ final class InputController {
         tasks.append(
             Task { [weak self, control = mesh.control] in
                 for await event in control {
-                    self?.handle(event)
+                    if case .dragArrived(let source, let dragID, let point, let items) = event {
+                        // The input that follows waits until the drag has started.
+                        await self?.drags?.arrived(
+                            source: source, dragID: dragID, at: ControlCoordinates.point(point), items: items)
+                    } else {
+                        self?.handle(event)
+                    }
                 }
             })
         let forwarder = InputForwarder(doubleClickInterval: services.doubleClickInterval())
@@ -136,16 +153,19 @@ final class InputController {
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
         unwatch()
+        drags?.stop()
         injector.releaseAll()
     }
 
-    /// Whether a member is connected: this Mac's input is watched only then.
+    /// Whether a member is connected: this Mac's input and drags are watched only then.
     func setActive(_ active: Bool) {
         isActive = active
         if active {
             watchIfNeeded()
+            drags?.start()
         } else {
             unwatch()
+            drags?.stop()
         }
     }
 
@@ -284,6 +304,12 @@ final class InputController {
         case .inputLatency(let device, let samples, let median, let p99):
             latency[device] = InputLatency(
                 samples: samples, median: .microseconds(median), p99: .microseconds(p99))
+        case .dragArrived:
+            break  // awaited where the events are read
+        case .dragWithdrawn(let dragID):
+            drags?.withdrawn(dragID)
+        case .dragEnded(let dragID, let outcome):
+            drags?.ended(dragID, outcome)
         }
     }
 

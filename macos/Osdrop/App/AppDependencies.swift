@@ -62,6 +62,13 @@ extension InputServices {
             makeCapture: { EventTapCapture() }, makeInjector: { CGEventInjector() },
             isTrusted: { AXIsProcessTrusted() }, cursorLocation: { CGEventInjector.currentCursorLocation() },
             doubleClickInterval: { NSEvent.doubleClickInterval }, keyboardLayout: { KeyboardPhysicalLayout.current() },
-            capsLock: HIDCapsLock(), preferences: preferences)
+            capsLock: HIDCapsLock(), preferences: preferences,
+            makeDrags: { mesh, injector in
+                let staging = DragStaging()
+                return DragController(
+                    mesh: mesh, injector: injector, watcher: PasteboardDragWatcher(),
+                    starter: PromiseDragStarter(staging: staging), edge: EdgeReleasePanel(staging: staging),
+                    cursorLocation: { CGEventInjector.currentCursorLocation() })
+            })
     }
 }

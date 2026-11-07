@@ -139,6 +139,16 @@ final class CGEventInjector: InputInjecting {
         }
     }
 
+    func releaseDrag(at point: CGPoint) {
+        for location in [CGPoint(x: point.x + 1, y: point.y), point] {
+            let delta = CGVector(dx: location.x - cursorLocation.x, dy: location.y - cursorLocation.y)
+            cursorLocation = location
+            post(factory.pointerMove(to: location, delta: delta, heldButton: .left, flags: flags))
+        }
+        heldButtons.removeAll { $0 == .left }
+        post(factory.button(.left, isDown: false, at: point, clickCount: 1, flags: flags))
+    }
+
     func placeCursor(at point: CGPoint) {
         if CGWarpMouseCursorPosition(point) != .success {
             Log.input.error("Placing the cursor failed")

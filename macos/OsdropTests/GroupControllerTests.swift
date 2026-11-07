@@ -241,6 +241,10 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func dragStarted(_ files: [DraggedFile]) {}
+    func dragStopped() {}
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) {}
+    let transferWatch: any TransferFollowing = NoTransfers()
     private let continuation: AsyncStream<MeshEvent>.Continuation
     private let lock = NSLock()
     private var group: GroupID?

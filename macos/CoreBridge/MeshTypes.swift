@@ -388,6 +388,72 @@ public enum ControlEvent: Sendable, Equatable {
     case inject(ControlInput)
     /// While controlled: motion latency from the controller's capture to here, in microseconds.
     case inputLatency(DeviceID, samples: UInt32, medianMicroseconds: UInt32, p99Microseconds: UInt32)
+    /// A drag came to this Mac with the cursor: start a drag of `items` at `point`, pressing the
+    /// left button there. Fetch each item from `source` when the drop asks for it (kind `.drag`,
+    /// object ID `dragID`, index its place in `items`), and report the end with `dropFinished`.
+    case dragArrived(source: DeviceID, dragID: UInt32, at: CoordPoint, items: [ArrivingItem])
+    /// The drag `dragID` left this Mac, or cannot go on: end it without a drop. A held left
+    /// button is released afterwards.
+    case dragWithdrawn(dragID: UInt32)
+    /// This Mac's drag `dragID` waits at the edge where it left: release the left button there,
+    /// as a copy when it was dropped, sliding back otherwise.
+    case dragEnded(dragID: UInt32, DropOutcome)
+}
+
+/// A file or folder of a drag that came to this Mac (docs/PROTOCOL.md "0x31 DragOffer").
+public struct ArrivingItem: Sendable, Equatable {
+    /// One name, in NFC.
+    public let name: String
+    public let isFolder: Bool
+    /// The file's size, or the total of the files in the folder.
+    public let byteCount: UInt64
+    /// A Uniform Type Identifier.
+    public let contentType: String
+
+    public init(name: String, isFolder: Bool, byteCount: UInt64, contentType: String) {
+        self.name = name
+        self.isFolder = isFolder
+        self.byteCount = byteCount
+        self.contentType = contentType
+    }
+}
+
+/// A file or folder of a drag on this Mac.
+public struct DraggedFile: Sendable, Equatable {
+    public let url: URL
+    /// A Uniform Type Identifier; core replaces one it cannot send.
+    public let contentType: String
+
+    public init(url: URL, contentType: String) {
+        self.url = url
+        self.contentType = contentType
+    }
+}
+
+/// How a drag ended (docs/PROTOCOL.md "0x32 DragResult").
+public enum DropOutcome: Sendable, Equatable {
+    /// The drop took the items.
+    case dropped
+    /// Nothing took them: Escape, or a place that takes nothing.
+    case cancelled
+    /// The drag could not start.
+    case failed
+
+    init(_ raw: osdrop_drag_outcome) {
+        switch raw {
+        case OSDROP_DRAG_DROPPED: self = .dropped
+        case OSDROP_DRAG_FAILED: self = .failed
+        default: self = .cancelled
+        }
+    }
+
+    var raw: osdrop_drag_outcome {
+        switch self {
+        case .dropped: OSDROP_DRAG_DROPPED
+        case .cancelled: OSDROP_DRAG_CANCELLED
+        case .failed: OSDROP_DRAG_FAILED
+        }
+    }
 }
 
 /// A format of the shared clipboard (docs/PROTOCOL.md "0x40 ClipboardAnnounce").
