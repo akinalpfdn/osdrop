@@ -507,3 +507,39 @@ choices the plan leaves open are logged here.
 **Why:** The name travels only in Hello; a restart reuses the existing reconnect path and needs no protocol change.
 **Trade-offs:** Control, transfers and clipboard fetches in progress end when the name changes.
 **Revisit if:** Renaming becomes frequent.
+
+---
+
+## 2026-11-07 — A forwarded drag offer names its source
+**Chosen:** DragOffer carries the device ID of the computer the drag started on (zero without a drag); the group drops a forwarded offer whose source may not send files to this computer.
+**Alternatives:** The controller relays the contents itself; the target asks the controller where the drag came from.
+**Why:** When a third computer controls the source, the target must fetch from the source, and only the controller knows which computer that is. The protocol is unreleased, so the field is added in place.
+**Trade-offs:** 16 bytes more per offer; the largest offer holds slightly shorter names.
+**Revisit if:** Contents ever need to travel through the controller (computers that cannot reach each other).
+
+---
+
+## 2026-11-07 — The source keeps its drag held at the edge until the outcome
+**Chosen:** A drag waits at the edge it left with its button down (parked) until the computer it was dropped on reports the outcome: then the source releases the button over Osdrop's edge panel, which accepts the drop as a copy or refuses it so the drag slides back. A computer whose own drag was offered keeps the left button held when its controller leaves; the controller carries the drag on, and sends the cancellation itself when the cursor comes home another way than through an edge.
+**Alternatives:** Ending the source's drag at the crossing (accepted at the edge), so the outcome no longer matters to the source.
+**Why:** A drop that takes nothing must slide back (DEVPLAN Phase 2), and a drag carried back to its source must go on there as if it never left.
+**Trade-offs:** The source's button stays down while the drag is away; local input on the source, or losing its controller, slides the drag back. If the outcome is lost, the source's drag waits until one of those happens.
+**Revisit if:** Hardware tests show a source app that ends its drag on its own while the button is held elsewhere.
+
+---
+
+## 2026-11-07 — Drags from the controller come home as a drop target
+**Chosen:** When the cursor comes back to the controller through an edge with a drag from another computer, the controller becomes the target (it starts a drag under the cursor while the user still holds the button); coming home any other way cancels the drag.
+**Alternatives:** Cancel every drag that comes home.
+**Why:** "Any member can be the target" includes the computer whose mouse is in use; Universal Control works the same way.
+**Trade-offs:** The platform starts a drag while the physical button is already down; this is a hardware-test item on each platform.
+**Revisit if:** A platform cannot start a drag from that state.
+
+---
+
+## 2026-11-07 — Items of a dropped drag stay offered for a while
+**Chosen:** After a drop, the source keeps the items available until 16 newer drags have been dropped; a drag that ended any other way is withdrawn at once.
+**Alternatives:** Withdrawing when the target reports completion (no such message); a time limit.
+**Why:** The target fetches as long as the drop target asks for the files, and the source cannot tell when that ends; a count bounds what the sender keeps without cutting a slow copy short.
+**Trade-offs:** A 17th drop during a still running copy of the first one cuts that copy.
+**Revisit if:** The protocol gains a message for a finished fetch.

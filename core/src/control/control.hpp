@@ -11,9 +11,14 @@
 // controller that loses the computer with the cursor (it stops answering, leaves, or stops
 // accepting control) brings the cursor home to where it left.
 //
-// The layer sits after the clipboard in the mesh's observer chain: it keeps input messages and
-// motion datagrams to itself and passes everything else on to `next`. It also stands between the
-// layout and its observer, to follow the arrangement.
+// Drags of files travel with the cursor (docs/PROTOCOL.md, "Drag messages"): the computer a drag
+// started on offers its items to the transfers, the controller carries the drag across edges, and
+// the computer it is dropped on fetches the items from there.
+//
+// The layer sits after the clipboard in the mesh's observer chain: it keeps input and drag
+// messages and motion datagrams to itself and passes everything else on to `next`. It also stands
+// between the layout and its observer, to follow the arrangement, and between the transfers and
+// theirs, to learn the size of the items it offers.
 
 #include "control/held_inputs.hpp"
 #include "layout/crossing.hpp"
@@ -21,15 +26,23 @@
 #include "layout/layout.hpp"
 #include "mesh/mesh.hpp"
 #include "protocol/control_messages.hpp"
+#include "transfer/service.hpp"
+#include "transfer/types.hpp"
+#include "util/error.hpp"
+#include "util/expected.hpp"
 #include "util/time.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <set>
 #include <span>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -99,6 +112,23 @@ struct CaptureEnded {
     bool caps_lock = false; ///< Caps Lock as the user left it on the other computers
 };
 
+/// A file or folder of a drag on this computer, as the platform found it.
+struct DraggedItem {
+    std::filesystem::path path; ///< absolute
+    std::string content_type;   ///< its Uniform Type Identifier
+};
+
+/// A drag that comes to this computer: the platform starts a drag of `items` at `position`,
+/// pressing the left button there, and fetches each item from `source` with the transfers (object
+/// kind Drag, object_id `drag_id`, item_index its place in `items`) when the drop asks for it.
+struct DragArrival {
+    DeviceId source{};
+    std::uint32_t drag_id = 0;
+    std::vector<protocol::OfferedItem> items;
+    Point position;
+    bool operator==(const DragArrival&) const = default;
+};
+
 /// Motion latency on this computer while it is controlled, from the controller's capture to the
 /// arrival here, through the session clock offset.
 struct LatencyStats {
@@ -107,6 +137,9 @@ struct LatencyStats {
     Microseconds p99{0};
     bool operator==(const LatencyStats&) const = default;
 };
+
+/// The button a drag is made with: the left one.
+inline constexpr std::uint8_t kDragButton = 0;
 
 class ControlObserver {
 public:
@@ -122,6 +155,14 @@ public:
     virtual void on_inject(const Injection& injection) = 0;
     /// Endpoint, about once per session statistics interval while motion arrives.
     virtual void on_input_latency(const DeviceId& controller, const LatencyStats& stats) = 0;
+    /// Target: start a drag (see DragArrival); drop_finished() reports how it ended.
+    virtual void on_drag_arrived(const DragArrival& arrival) = 0;
+    /// Target: the drag left this computer with the cursor, or cannot go on; end it without a
+    /// drop. A held left button is released after this.
+    virtual void on_drag_withdrawn(std::uint32_t drag_id) = 0;
+    /// Source: end this computer's drag, which waits at the edge where it left, by releasing the
+    /// left button there: as a copy when it was dropped, sliding back otherwise.
+    virtual void on_drag_ended(std::uint32_t drag_id, protocol::DragOutcome outcome) = 0;
 };
 
 /// How modifiers travel between a Mac and a PC; between computers of one platform they never
@@ -145,26 +186,38 @@ struct ControlTunables {
     std::size_t latency_samples = 1000;
     /// An endpoint reports its cursor when something else moved it further than this.
     std::int64_t cursor_report_distance = layout::kUnit;
+    /// A push against an edge with a button held asks again this often whether a drag is in
+    /// progress, and gives up waiting for an answer after `probe_timeout`.
+    Milliseconds probe_interval{200};
+    Milliseconds probe_timeout{1000};
+    /// Drags dropped on other computers whose items stay available for their transfers; older
+    /// ones are withdrawn.
+    std::size_t kept_drags = 16;
 };
 
-class Control final : public mesh::MeshObserver, public layout::LayoutObserver {
+class Control final : public mesh::MeshObserver,
+                      public layout::LayoutObserver,
+                      public transfer::TransferObserver {
 public:
     Control(const DeviceId& self, protocol::Platform platform, const ControlTunables& tunables,
             ControlObserver& observer, layout::LayoutObserver& layout_observer,
-            mesh::MeshObserver& next);
+            transfer::TransferObserver& transfer_observer, mesh::MeshObserver& next);
     ~Control() override = default;
     Control(const Control&) = delete;
     Control& operator=(const Control&) = delete;
     Control(Control&&) = delete;
     Control& operator=(Control&&) = delete;
 
-    /// The mesh to send through and the layout to follow; set once, before the mesh delivers
-    /// anything.
-    void attach(mesh::Mesh& mesh, const layout::Layout& layout);
+    /// The mesh to send through, the layout to follow and the transfers that serve this
+    /// computer's drags; set once, before the mesh delivers anything.
+    void attach(mesh::Mesh& mesh, const layout::Layout& layout,
+                transfer::TransferService& transfers);
 
     // --- Commands, on the mesh's thread; flush the mesh afterwards ---
     /// The members that may control this computer (their control permission is on).
     void set_controllers(std::set<DeviceId> controllers);
+    /// The members that may send this computer files: a drag from them may be dropped here.
+    void set_file_senders(std::set<DeviceId> senders);
     /// Physical input on this computer, captured at `captured`.
     void input(const Input& input, TimePoint captured);
     /// Brings the cursor home: the user's hotkey (Leave reason 3) or a capture the platform lost
@@ -184,12 +237,28 @@ public:
     void set_unavailable(std::optional<protocol::RefuseReason> reason);
     /// Endpoint: where this computer's cursor really is; reported when something else moved it.
     void cursor_moved(Point position);
+    /// Source: a drag began on this computer with these items; nothing that can travel: an
+    /// empty list. INVALID_ARGUMENT for more than kMaxDragItems items or a relative path.
+    [[nodiscard]] Status<Error> drag_started(std::vector<DraggedItem> items);
+    /// Source: this computer's drag ended, however it ended. A drag waiting at the edge for its
+    /// outcome goes on: the platform may not see its button held.
+    void drag_stopped();
+    /// Target: the drag started for an arrival ended.
+    void drop_finished(std::uint32_t drag_id, protocol::DragOutcome outcome);
 
     [[nodiscard]] bool capturing() const { return away_.has_value(); }
+    /// The held left button carries a drag.
+    [[nodiscard]] bool carrying() const { return carried_.has_value(); }
     [[nodiscard]] std::optional<DeviceId> controller() const;
 
     // --- layout::LayoutObserver ---
     void on_layout_changed(const layout::LayoutState& state) override;
+
+    // --- transfer::TransferObserver ---
+    void on_offer_ready(const transfer::OfferReady& ready) override;
+    void on_transfer_progress(const transfer::TransferProgress& progress) override;
+    void on_transfer_finished(const transfer::TransferOutcome& outcome) override;
+    void on_content_received(const transfer::ContentOutcome& outcome) override;
 
     // --- mesh::MeshObserver ---
     mesh::TrustVerdict on_trust_query(const crypto::Key& peer_key,
@@ -222,6 +291,8 @@ private:
     struct Peer {
         bool responsive = true;
         bool accepts_control = false;
+        bool drag_source = false; ///< offers its drags
+        bool drag_target = false; ///< takes drags from this computer
         protocol::Platform platform = protocol::Platform::MacOS;
     };
     /// The computer this one's input goes to.
@@ -240,6 +311,34 @@ private:
         bool caps_lock{};
     };
 
+    /// This computer's own drag, as its source.
+    struct Outgoing {
+        std::uint32_t drag_id = 0;
+        std::vector<protocol::OfferedItem> items; ///< each filled in when its scan finishes
+        std::size_t scanning = 0;                 ///< items still being scanned
+        bool broken = false;                      ///< an item cannot travel: no drag to offer
+        std::vector<std::pair<DeviceId, std::uint32_t>> probes; ///< waiting for the scans
+        std::optional<DeviceId> offered_to;           ///< the controller it was offered to
+        bool parked = false;                          ///< waits at the edge for its outcome
+        bool stopped = false;                         ///< the platform reported its end meanwhile
+        std::optional<protocol::DragOutcome> outcome; ///< from the computer it went to
+    };
+    /// The drag the held left button carries, while this computer is the controller.
+    struct Carried {
+        protocol::DragOffer offer; ///< as forwarded: probe_id 0
+    };
+    struct Probe {
+        DeviceId device{};
+        std::uint32_t probe_id = 0;
+        TimePoint sent;
+    };
+    /// A drag started on this computer for an arrival, as a target.
+    struct Incoming {
+        DeviceId controller{}; ///< this computer when it is the controller, home again
+        DeviceId source{};
+        std::uint32_t drag_id = 0;
+    };
+
     // Controller.
     void moved(const PointerMoved& moved, TimePoint captured);
     void cross(const DeviceId& device, Point position);
@@ -250,6 +349,35 @@ private:
                          std::optional<protocol::RefuseReason> refused);
     [[nodiscard]] std::uint32_t next_control_id();
 
+    // Drags, as the controller (control_drag.cpp).
+    /// A push against `walled` with a button held: asks the computer under the cursor for its
+    /// drag.
+    void probe(const DeviceId& walled, Point position, TimePoint now);
+    void receive_offer(const DeviceId& device, const protocol::DragOffer& offer);
+    /// Starts or stops carrying a drag; the edges it may cross change with it.
+    void carry(std::optional<Carried> carried);
+    /// The cursor came home with the drag it carries.
+    void carry_home(protocol::DragOffer offer, Point cursor, CaptureEnd reason);
+    [[nodiscard]] bool only_left_held() const;
+
+    // Drags, as the source.
+    void receive_probe(const DeviceId& device, const protocol::DragProbe& probe);
+    void answer_probes();
+    [[nodiscard]] protocol::DragOffer outgoing_offer(const Outgoing& outgoing,
+                                                     std::uint32_t probe_id) const;
+    void receive_result(const DeviceId& device, const protocol::DragResult& result);
+    /// Slides a parked drag back; its controller is gone or this computer's own input took over.
+    void abandon_parked();
+    void withdraw_outgoing();
+    void keep_dropped(std::uint32_t drag_id);
+
+    // Drags, as the target.
+    /// Starts the drag of a forwarded offer where the controller entered, or lets a parked one go
+    /// on.
+    void arrive(Controlled& controlled, const protocol::DragOffer& offer);
+    /// Ends the drag shown here: `report` sends the source and the controller a cancellation.
+    void end_incoming(bool report);
+
     // Endpoint.
     void receive_enter(const DeviceId& device, const protocol::Enter& enter);
     [[nodiscard]] Controlled* controlled_by(const DeviceId& device, std::uint32_t control_id);
@@ -257,8 +385,10 @@ private:
     void inject_button(Controlled& controlled, const protocol::ButtonEvent& event);
     void receive_motion(Controlled& controlled, const protocol::PointerMotion& motion);
     void take_back();
-    /// Releases what is held and ends the control; the controller is told nothing here.
-    void release();
+    /// Releases what is held and ends the control; the controller is told nothing here. Its own
+    /// ending: a drag shown here is cancelled. `left`: the controller's Leave, which carries the
+    /// drag on; a drag this computer offered it parks.
+    void release(bool left = false);
     void release_held(Controlled& controlled);
     void report_latency(const DeviceId& device);
 
@@ -270,12 +400,15 @@ private:
     ControlTunables tunables_;
     ControlObserver& observer_;
     layout::LayoutObserver& layout_observer_;
+    transfer::TransferObserver& transfer_observer_;
     mesh::MeshObserver& next_;
     mesh::Mesh* mesh_ = nullptr;             // set by attach(); outlived by the mesh's owner
     const layout::Layout* layout_ = nullptr; // set by attach()
+    transfer::TransferService* transfers_ = nullptr; // set by attach()
 
     std::map<DeviceId, Peer> peers_; ///< members with an established session
     std::set<DeviceId> controllers_;
+    std::set<DeviceId> file_senders_;
     layout::CrossingEngine engine_;
     HeldInputs physical_; ///< this computer's own keys and buttons
     std::optional<Away> away_;
@@ -291,6 +424,17 @@ private:
     std::vector<std::int64_t> latencies_;            ///< microseconds, a ring of latency_samples
     std::size_t next_latency_ = 0;
     bool latency_changed_ = false;
+
+    std::optional<Outgoing> outgoing_;
+    std::deque<std::uint32_t> dropped_; ///< kept for their transfers, oldest first
+    std::uint32_t last_drag_id_ = 0;
+    std::optional<Carried> carried_;
+    std::optional<Probe> probe_;
+    std::optional<TimePoint> last_probe_;
+    std::uint32_t last_probe_id_ = 0;
+    /// A forwarded offer waiting for its Enter, with the controller that sent it.
+    std::optional<std::pair<DeviceId, protocol::DragOffer>> forwarded_;
+    std::optional<Incoming> incoming_;
 };
 
 } // namespace osdrop::control

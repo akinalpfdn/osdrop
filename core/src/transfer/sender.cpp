@@ -310,8 +310,13 @@ void Sender::scanned(const protocol::ObjectRef& item, std::uint64_t generation,
         return; // withdrawn or replaced meanwhile
     }
     Offer& offer = it->second;
-    OfferReady ready{
-        .item = item, .error = std::nullopt, .total_bytes = 0, .entry_count = 0, .skipped = 0};
+    OfferReady ready{.item = item,
+                     .error = std::nullopt,
+                     .total_bytes = 0,
+                     .entry_count = 0,
+                     .skipped = 0,
+                     .name = {},
+                     .folder = false};
     if (error) {
         offer.scan_error = error;
     } else if (tree->entries.empty()) {
@@ -321,6 +326,8 @@ void Sender::scanned(const protocol::ObjectRef& item, std::uint64_t generation,
         ready.total_bytes = tree->total_bytes;
         ready.entry_count = tree->entries.size();
         ready.skipped = tree->skipped;
+        ready.name = tree->entries.front().path;
+        ready.folder = tree->entries.front().kind == protocol::EntryKind::Folder;
         offer.tree = std::move(tree);
     }
     ready.error = offer.scan_error;

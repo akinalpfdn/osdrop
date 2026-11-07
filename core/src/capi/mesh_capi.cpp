@@ -273,6 +273,7 @@ public:
         }
         if (control_ != nullptr) {
             control_->set_controllers(state.controllers());
+            control_->set_file_senders(state.file_senders());
         }
         if (callbacks_.group_changed != nullptr) {
             const std::vector<std::uint8_t> bytes = group::encode_state(state);
@@ -467,6 +468,35 @@ public:
                                      static_cast<std::uint32_t>(stats.samples),
                                      static_cast<std::uint32_t>(stats.median.count()),
                                      static_cast<std::uint32_t>(stats.p99.count()));
+        }
+    }
+    void on_drag_arrived(const control::DragArrival& arrival) override {
+        if (callbacks_.drag_arrived == nullptr) {
+            return;
+        }
+        std::vector<osdrop_drag_item> items;
+        items.reserve(arrival.items.size());
+        for (const protocol::OfferedItem& item : arrival.items) {
+            items.push_back({.is_folder = static_cast<std::uint8_t>(
+                                 item.kind == protocol::ItemKind::Folder ? 1 : 0),
+                             .byte_count = item.byte_count,
+                             .content_type = item.content_type.c_str(),
+                             .name = item.name.c_str()});
+        }
+        callbacks_.drag_arrived(callbacks_.context, arrival.source.data(), arrival.drag_id,
+                                static_cast<std::int32_t>(arrival.position.x),
+                                static_cast<std::int32_t>(arrival.position.y), items.data(),
+                                items.size());
+    }
+    void on_drag_withdrawn(std::uint32_t drag_id) override {
+        if (callbacks_.drag_withdrawn != nullptr) {
+            callbacks_.drag_withdrawn(callbacks_.context, drag_id);
+        }
+    }
+    void on_drag_ended(std::uint32_t drag_id, protocol::DragOutcome outcome) override {
+        if (callbacks_.drag_ended != nullptr) {
+            callbacks_.drag_ended(callbacks_.context, drag_id,
+                                  static_cast<osdrop_drag_outcome>(outcome));
         }
     }
 
@@ -699,14 +729,15 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (!handle) {
         return OSDROP_ERROR_INTERNAL;
     }
-    // mesh → group → layout → transfers → clipboard → control → callbacks; the clipboard also
-    // stands between the transfers and the callbacks, the control between the layout and them.
+    // mesh → group → layout → transfers → clipboard → control → callbacks; the clipboard and the
+    // control also stand between the transfers and the callbacks, the control between the layout
+    // and them.
     const mesh::DeviceId self = osdrop::crypto::device_id(identity.value().public_key());
-    handle->control =
-        std::make_unique<control::Control>(self, mesh_config.platform, control::ControlTunables{},
-                                           handle->observer, handle->observer, handle->observer);
+    handle->control = std::make_unique<control::Control>(
+        self, mesh_config.platform, control::ControlTunables{}, handle->observer, handle->observer,
+        handle->observer, handle->observer);
     handle->clipboard = std::make_unique<clipboard::Clipboard>(self, handle->observer,
-                                                               handle->observer, *handle->control);
+                                                               *handle->control, *handle->control);
     handle->transfers = std::make_unique<transfer::TransferService>(
         transfer::TransferTunables{.max_streams = config->max_transfer_streams}, handle->executor,
         *handle->clipboard, *handle->clipboard);
@@ -718,6 +749,7 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     handle->transfers->set_files_permitted(state.value().file_senders());
     handle->clipboard->set_members(state.value().clipboard_members());
     handle->control->set_controllers(state.value().controllers());
+    handle->control->set_file_senders(state.value().file_senders());
     handle->group = std::make_unique<group::Group>(
         group::GroupConfig{.platform = mesh_config.platform, .device_name = name}, identity.value(),
         std::move(state.value()), handle->random, handle->observer, *handle->layout);
@@ -735,7 +767,7 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
             arrangement_layer.attach(mesh);
             transfer_layer.attach(mesh);
             clipboard_layer.attach(mesh, transfer_layer);
-            control_layer.attach(mesh, arrangement_layer);
+            control_layer.attach(mesh, arrangement_layer, transfer_layer);
         });
     if (!node) {
         return to_result(node.error());
@@ -1192,6 +1224,57 @@ osdrop_result osdrop_mesh_cursor_moved(osdrop_mesh* mesh, int32_t x, int32_t y) 
     control::Control& input_layer = *mesh->control;
     mesh->node->run([&input_layer, x, y](mesh::Mesh& node_mesh, TimePoint now) {
         input_layer.cursor_moved({.x = x, .y = y});
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_drag_started(osdrop_mesh* mesh, const osdrop_dragged_item* items,
+                                       size_t count) {
+    if (mesh == nullptr || (items == nullptr && count != 0) || count > protocol::kMaxDragItems) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<control::DraggedItem> dragged;
+    dragged.reserve(count);
+    for (const osdrop_dragged_item& item : std::span(items, count)) {
+        if (item.path == nullptr || item.content_type == nullptr) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        dragged.push_back(
+            {.path = transfer::path_from_utf8(item.path), .content_type = item.content_type});
+    }
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    control::Control& input_layer = *mesh->control;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        result = input_layer.drag_started(std::move(dragged));
+        node_mesh.flush(now);
+    }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_mesh_drag_stopped(osdrop_mesh* mesh) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.drag_stopped();
+        node_mesh.flush(now);
+    });
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_drop_finished(osdrop_mesh* mesh, uint32_t drag_id,
+                                        osdrop_drag_outcome outcome) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    if (drag_id == 0 || outcome < OSDROP_DRAG_DROPPED || outcome > OSDROP_DRAG_FAILED) {
+        return OSDROP_ERROR_VALUE_OUT_OF_RANGE;
+    }
+    control::Control& input_layer = *mesh->control;
+    mesh->node->run([&input_layer, drag_id, outcome](mesh::Mesh& node_mesh, TimePoint now) {
+        input_layer.drop_finished(drag_id, static_cast<protocol::DragOutcome>(outcome));
         node_mesh.flush(now);
     });
     return OSDROP_OK;

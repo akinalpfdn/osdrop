@@ -142,6 +142,7 @@ public:
         }
         if (control != nullptr) {
             control->set_controllers(state.controllers());
+            control->set_file_senders(state.file_senders());
         }
     }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
@@ -225,6 +226,9 @@ public:
     std::vector<std::optional<DeviceId>> controlled;
     std::vector<control::Injection> injected;
     std::vector<std::pair<DeviceId, control::LatencyStats>> latencies;
+    std::vector<control::DragArrival> arrivals;
+    std::vector<std::uint32_t> withdrawn;
+    std::vector<std::pair<std::uint32_t, protocol::DragOutcome>> drag_ends;
 
     void on_capture_began(const DeviceId& device,
                           std::span<const control::HeldKey> release_here) override {
@@ -240,6 +244,13 @@ public:
     void on_inject(const control::Injection& injection) override { injected.push_back(injection); }
     void on_input_latency(const DeviceId& controller, const control::LatencyStats& stats) override {
         latencies.emplace_back(controller, stats);
+    }
+    void on_drag_arrived(const control::DragArrival& arrival) override {
+        arrivals.push_back(arrival);
+    }
+    void on_drag_withdrawn(std::uint32_t drag_id) override { withdrawn.push_back(drag_id); }
+    void on_drag_ended(std::uint32_t drag_id, protocol::DragOutcome outcome) override {
+        drag_ends.emplace_back(drag_id, outcome);
     }
 };
 
@@ -303,13 +314,14 @@ public:
                   const control::ControlTunables& control_tunables = {}, bool with_control = true)
         : random(seed), identity(key_pair(random)), transport(network, index),
           control(group_state && with_control
-                      ? std::make_unique<control::Control>(
-                            crypto::device_id(identity.public_key()), config.platform,
-                            control_tunables, control_observer, layout_observer, observer)
+                      ? std::make_unique<control::Control>(crypto::device_id(identity.public_key()),
+                                                           config.platform, control_tunables,
+                                                           control_observer, layout_observer,
+                                                           transfer_observer, observer)
                       : nullptr),
           clipboard(group_state ? std::make_unique<clipboard::Clipboard>(
                                       crypto::device_id(identity.public_key()), clipboard_observer,
-                                      transfer_observer, after_clipboard())
+                                      transfers_after_clipboard(), after_clipboard())
                                 : nullptr),
           transfers(group_state ? std::make_unique<transfer::TransferService>(
                                       transfer_tunables, executor, *clipboard, *clipboard)
@@ -336,12 +348,13 @@ public:
             clipboard->set_members(group_state->clipboard_members());
             if (control) {
                 control->set_controllers(group_state->controllers());
+                control->set_file_senders(group_state->file_senders());
             }
             transfers->attach(mesh);
             clipboard->attach(mesh, *transfers);
             layout->attach(mesh);
             if (control) {
-                control->attach(mesh, *layout);
+                control->attach(mesh, *layout, *transfers);
             }
             group->attach(mesh);
         }
@@ -369,6 +382,9 @@ public:
 private:
     mesh::MeshObserver& after_clipboard() {
         return control ? static_cast<mesh::MeshObserver&>(*control) : observer;
+    }
+    transfer::TransferObserver& transfers_after_clipboard() {
+        return control ? static_cast<transfer::TransferObserver&>(*control) : transfer_observer;
     }
     layout::LayoutObserver& layout_listener() {
         return control ? static_cast<layout::LayoutObserver&>(*control) : layout_observer;

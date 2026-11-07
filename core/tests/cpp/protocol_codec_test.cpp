@@ -214,12 +214,12 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
                                          .source = id(3),
                                          .items = {{.content_type = "public.data", .name = ".."}}}),
         Error::InvalidString);
-    EXPECT_EQ(encode_error(protocol::DragOffer{.probe_id = 1,
-                                               .drag_id = 1,
-                                               .source = {},
-                                               .items = {{.content_type = "public.data",
-                                                          .name = "a"}}}),
-              Error::ValueOutOfRange); // a drag without its source
+    EXPECT_EQ(
+        encode_error(protocol::DragOffer{.probe_id = 1,
+                                         .drag_id = 1,
+                                         .source = {},
+                                         .items = {{.content_type = "public.data", .name = "a"}}}),
+        Error::ValueOutOfRange); // a drag without its source
     EXPECT_EQ(encode_error(protocol::ClipboardAnnounce{
                   .clip_id = 1,
                   .formats = {{.format = protocol::ClipboardFormat::Html},

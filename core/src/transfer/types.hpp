@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -76,6 +77,8 @@ struct OfferReady {
     std::uint64_t total_bytes = 0;
     std::size_t entry_count = 0;
     std::size_t skipped = 0; ///< entries that cannot travel
+    std::string name;        ///< the first root as it travels (NFC); empty after an error
+    bool folder = false;     ///< the first root is a folder
 };
 
 class TransferObserver {
