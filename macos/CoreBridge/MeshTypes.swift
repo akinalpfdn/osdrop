@@ -614,6 +614,12 @@ public struct LayoutComputer: Sendable, Equatable, Identifiable {
 
     public var id: DeviceID { deviceID }
 
+    public init(deviceID: DeviceID, placement: Placement?, monitors: [ScreenMonitor]) {
+        self.deviceID = deviceID
+        self.placement = placement
+        self.monitors = monitors
+    }
+
     init(_ raw: osdrop_layout_computer) {
         deviceID = DeviceID(field: raw.placement.device_id)
         placement =

@@ -24,9 +24,12 @@ final class ClipboardController {
     private let pasteboard: any PasteboardAccess
     private let staging: ClipboardStaging
     private let converter: any ImageConverting
-    private let limits: ClipboardLimits
+    private let currentLimits: @MainActor () -> ClipboardLimits
+    private let marksFiles: @MainActor () -> Bool
     /// True while a member is connected: copies are read and reported only then.
     private let isShared: @MainActor () -> Bool
+    /// The user's switch in Settings and the menu.
+    private let isEnabled: @MainActor () -> Bool
     private let nameOf: @MainActor (DeviceID) -> String
 
     private var seenChange: Int
@@ -35,6 +38,9 @@ final class ClipboardController {
     /// Copies are reported in the order they were made.
     private var reporting: Task<Void, Never>?
     private var incoming: Incoming?
+    /// This Mac's newest copy as core offers it, to withdraw when sharing is turned off.
+    private var offeredClip: UInt64?
+    private var wasEnabled = true
     /// Results that arrived before their request returned its ID.
     private var early: [UInt64: Result<Fetched, CoreError>] = [:]
 
@@ -60,14 +66,18 @@ final class ClipboardController {
 
     init(
         mesh: any MeshDriving, pasteboard: any PasteboardAccess, staging: ClipboardStaging,
-        converter: any ImageConverting, limits: ClipboardLimits = .standard,
+        converter: any ImageConverting, limits: @escaping @MainActor () -> ClipboardLimits = { .standard },
+        marksFiles: @escaping @MainActor () -> Bool = { false },
+        isEnabled: @escaping @MainActor () -> Bool = { true },
         isShared: @escaping @MainActor () -> Bool, nameOf: @escaping @MainActor (DeviceID) -> String
     ) {
         self.mesh = mesh
         self.pasteboard = pasteboard
         self.staging = staging
         self.converter = converter
-        self.limits = limits
+        self.currentLimits = limits
+        self.marksFiles = marksFiles
+        self.isEnabled = isEnabled
         self.isShared = isShared
         self.nameOf = nameOf
         seenChange = pasteboard.changeCount
@@ -98,6 +108,11 @@ final class ClipboardController {
 
     /// Looks for a new copy on the pasteboard; the polling task calls it.
     func poll() {
+        let enabled = isEnabled()
+        if wasEnabled, !enabled {
+            stopSharing()
+        }
+        wasEnabled = enabled
         let change = pasteboard.changeCount
         guard change != seenChange else { return }
         seenChange = change
@@ -106,6 +121,7 @@ final class ClipboardController {
             Log.clipboard.info("A concealed copy stays on this Mac")
             return
         }
+        let limits = currentLimits()
         guard let copy = LocalCopy(pasteboard.read(), limits: limits) else { return }
         incoming = nil  // this copy is newer than the one being fetched
         let previous = reporting
@@ -120,11 +136,38 @@ final class ClipboardController {
             }
             guard !contents.isEmpty || !copy.files.isEmpty else { return }
             do throws(CoreError) {
-                _ = try await mesh.clipboardCopied(contents, files: copy.files)
+                let clip = try await mesh.clipboardCopied(contents, files: copy.files)
+                await MainActor.run { [weak self] in self?.offeredClip = clip }
             } catch {
                 Log.clipboard.error("Reporting a copy failed: \(String(describing: error), privacy: .public)")
             }
         }
+    }
+
+    /// Sharing turned off: this Mac's copy can no longer be fetched, and another computer's copy
+    /// being fetched is dropped.
+    private func stopSharing() {
+        if let clip = offeredClip {
+            offeredClip = nil
+            Task { [mesh] in
+                do throws(CoreError) {
+                    try await mesh.withdraw(.clipboard, objectID: clip)
+                } catch {
+                    Log.clipboard.error("Withdrawing the copy failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        if let copy = incoming {
+            incoming = nil
+            let requests = Array(copy.pending.keys)
+            Task { [mesh] in
+                for id in requests {
+                    await mesh.cancelTransfer(id)
+                }
+            }
+            // Its staged files go with the next copy written; the pasteboard may still use others.
+        }
+        notice = nil
     }
 
     // MARK: - Copies on other computers
@@ -132,6 +175,7 @@ final class ClipboardController {
     func handle(_ event: MeshEvent) {
         switch event {
         case .clipboardChanged(let device, let clipID, let formats):
+            guard isShared() else { return }  // sharing turned off in Settings
             begin(device: device, clipID: clipID, formats: formats)
         case .contentReceived(let id, let result):
             settle(id, result.map { .content($0) })
@@ -147,7 +191,7 @@ final class ClipboardController {
         early.removeAll()
         var wanted: [AnnouncedFormat] = []
         for format in formats {
-            if format.byteCount > limits.limit(for: format.format) {
+            if format.byteCount > currentLimits().limit(for: format.format) {
                 copy.tooLarge = true
             } else {
                 wanted.append(format)
@@ -176,6 +220,7 @@ final class ClipboardController {
 
     private func request(_ format: ClipboardFormat, of copy: Incoming) {
         let item = TransferItem(kind: .clipboard, objectID: copy.clipID, index: format.code)
+        let limits = currentLimits()
         Task { [weak self, mesh, limits] in
             let id: UInt64
             do throws(CoreError) {
@@ -254,6 +299,9 @@ final class ClipboardController {
     private func write(_ copy: Incoming, tiff: Data?) {
         guard incoming?.clipID == copy.clipID else { return }  // a newer copy replaced it
         incoming = nil
+        if marksFiles() {
+            FileQuarantine.mark(copy.files)
+        }
         let content = RemoteCopy.content(received: copy.received, tiff: tiff, files: copy.files)
         let change = pasteboard.write(content)
         ownChange = change

@@ -203,10 +203,14 @@ struct InputControllerTests {
     @Test("Stored input settings and pointer speeds reach core at start")
     func appliesSettings() async throws {
         var preferences = FakeInputPreferences()
-        preferences.stored = InputSettings(modifierMapping: .positions, pushMilliseconds: 300, immediate: true)
-        preferences.speeds = [other: 1_500]
+        preferences.input = InputSettings(modifierMapping: .positions, pushMilliseconds: 300, immediate: true)
+        preferences.pointerSpeeds = [other: 1_500]
+        preferences.hotkeys.lockInput = Hotkey(keyCode: 40, modifiers: [.control, .option])
         let controller = start(preferences: preferences)
-        #expect(mesh.calls.prefix(2) == [.settings(preferences.stored), .speed(1_500, other)])
+        #expect(mesh.calls.prefix(2) == [.settings(preferences.input), .speed(1_500, other)])
+        #expect(capture.hotkeys == preferences.hotkeys)
+        controller.apply(InputSettings(pushMilliseconds: 200))
+        #expect(mesh.calls.last == .settings(InputSettings(pushMilliseconds: 200)))
         controller.stop()
     }
 
@@ -241,6 +245,24 @@ struct InputControllerTests {
         try await waitUntil { !capsLock.isOn }
         #expect(capsLock.setValues == [true, false], "set only when it differs")
         #expect(!injector.calls.contains { if case .key = $0 { true } else { false } })
+        controller.stop()
+    }
+
+    @Test("Right after Osdrop sets Caps Lock, a Caps Lock event is not taken for the user's key")
+    func ignoresTheCapsLockEcho() async throws {
+        let controller = start()
+        try await waitUntil { controller.isWatching }
+        mesh.send(.controlled(by: other))
+        mesh.send(.inject(.capsLock(true)))
+        try await waitUntil { capsLock.isOn }
+        let caps = CapturedInput(event: .key(.keyboard(ModifierKeys.capsLockUsage), .down), timestamp: 0)
+        capture.send(.input(caps))
+        capture.send(.input(CapturedInput(event: .key(.keyboard(0x04), .down), timestamp: 0)))
+        try await waitUntil { mesh.calls.contains(.input(.key(page: 7, usage: 4, action: 1))) }
+        #expect(!mesh.calls.contains(.input(.key(page: 7, usage: 0x39, action: 1))), "the echo stays home")
+        try await Task.sleep(for: Tunables.Control.capsEchoWindow + .milliseconds(100))
+        capture.send(.input(caps))
+        try await waitUntil { mesh.calls.contains(.input(.key(page: 7, usage: 0x39, action: 1))) }
         controller.stop()
     }
 

@@ -12,6 +12,7 @@ final class FakeCapture: InputCapturing, @unchecked Sendable {
     private var currentMode: CaptureMode = .observe
     private var running = false
     private var beats = 0
+    private var chords = CaptureHotkeys()
 
     init() {
         (events, continuation) = AsyncStream.makeStream(of: CaptureEvent.self)
@@ -25,6 +26,8 @@ final class FakeCapture: InputCapturing, @unchecked Sendable {
     func stop() { lock.withLock { running = false } }
     func setMode(_ mode: CaptureMode) { lock.withLock { currentMode = mode } }
     func heartbeat() { lock.withLock { beats += 1 } }
+    func setHotkeys(_ hotkeys: CaptureHotkeys) { lock.withLock { chords = hotkeys } }
+    var hotkeys: CaptureHotkeys { lock.withLock { chords } }
 
     func send(_ event: CaptureEvent) { continuation.yield(event) }
 }
@@ -130,11 +133,9 @@ final class FakeCapsLock: CapsLockControlling, @unchecked Sendable {
 
 /// Stored input settings in memory.
 struct FakeInputPreferences: InputPreferencesStoring {
-    var stored = InputSettings()
-    var speeds: [DeviceID: UInt32] = [:]
-
-    func settings() -> InputSettings { stored }
-    func pointerSpeeds() -> [DeviceID: UInt32] { speeds }
+    var input = InputSettings()
+    var pointerSpeeds: [DeviceID: UInt32] = [:]
+    var hotkeys = CaptureHotkeys()
 }
 
 /// Where the fake system cursor is; tests move it as an application would.

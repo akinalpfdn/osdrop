@@ -248,6 +248,28 @@ dial and whom to trust.
   and a new one made, so browsers see the new `grp` value as a change and pass it on; members
   then dial the computer that just joined.
 
+## macOS interface
+
+Built in Phase 16 (`macos/Osdrop/Features/Settings`, `Onboarding`, `Updates`, `App/MenuContentView`),
+following Osplay's macOS app so the sibling products look and behave alike: system fonts, grouped
+forms, SF Symbols, every visual value from `Theme`, every string from the catalog in English and
+Turkish.
+
+- **Menu bar panel.** Where the mouse and keyboard are, the lock and clipboard sharing as quick
+  toggles, an update when one is out, the group, and Settings and Quit as icons. Another icon
+  shows while another computer controls the Mac.
+- **Settings.** `AppSettings` keeps every user setting in UserDefaults and saves each change at
+  once; `SettingsViewModel` hands input settings, pointer speeds and chords to the running
+  `InputController`, permissions and the arrangement to the group, and the name to a restart of
+  the mesh. The arrangement editor draws each member's monitors to scale; a dropped computer
+  snaps beside the nearest other one, keeping an edge in common, and core checks the result.
+  General has launch at login (`SMAppService`) and the daily update check against GitHub
+  releases; Advanced copies diagnostics without names, addresses or contents and exports the log.
+- **Chords.** The return and lock chords are settings; the event tap matches them in both modes.
+- **Onboarding.** At first launch, and whenever Accessibility is missing: Accessibility and Local
+  Network with their live state and links to System Settings.
+- **Errors.** `ErrorMessages` gives every core error a localized message that says what to do.
+
 ## macOS input layer
 
 Built in Phase 1 (`macos/Osdrop/Services/Input`):

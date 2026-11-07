@@ -1,5 +1,6 @@
 # Phase 013 (MVP-13) — Input fidelity
-Status: ACTIVE
+Status: BACKLOG — core, Mac and Windows tables done (PR #15, draft, CI green); TESTING K1–K9
+wait for two computers, Windows injection for Phase 3
 
 DEVPLAN reference: Phase 12. Depends on: Phase 11
 

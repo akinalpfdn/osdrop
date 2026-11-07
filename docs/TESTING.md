@@ -247,10 +247,24 @@ session clock offset (the offset of the fastest of the last eight pings). The ca
 the event tap received the event, so the time inside the controller's input system is not
 included. The developer view shows the median and the 99th percentile of the last 1000 datagrams.
 
+### Mac interface (Phase 16)
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| U1 | First launch | Remove Osdrop's Accessibility access, start it | The permissions window opens; each row turns green once allowed in System Settings |
+| U2 | Language and appearance | Switch the system language between English and Turkish, and Light and Dark appearance | Every text changes language, nothing is cut off, colors follow the appearance |
+| U3 | Arrangement | With two computers, drag one to the other side of the first in Settings › Arrangement | It snaps beside the other one; the other computer shows the same arrangement within a second; the cursor crosses at the new edge |
+| U4 | Devices | Turn off "Can control this computer" for a member, rename this computer | That member's cursor no longer crosses in; the others show the new name after they reconnect |
+| U5 | Input settings | Change the push time, the modifier, the pointer speed and both chords | Each applies at once (the modifier mapping from the next crossing) |
+| U6 | Clipboard and files | Turn sharing off; set the files limit to 128 MB; turn marking on and copy an app from the other computer | Nothing is shared while off; larger copies show the notice; the pasted app asks before it first opens |
+| U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
+| U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-07 | Phase 16 branch, Debug, M3 Air | U1, U2 (Turkish, Light and Dark), U5–U8 | Pass (one computer; U3 and U4 need a second) |
 | 2026-11-03 | Phase 13 branch, Release, M3 Air | Loopback throughput, 1 GiB | 210 MB/s (sender and receiver on the same computer) |
 | 2026-11-02 | Phase 2 branch, Debug, M3 Air | D1–D7 | Pass after two fixes found by D4 (WhatsApp) and D5 (Photos): AppKit called promise callbacks off the main thread |
 | 2026-11-02 | Phase 1 branch, Debug, M3 Air | C1, C3, C5 | Pass (C3 after the capture guard was added; before it, the cursor stayed hidden while the app was stopped). C5: macOS refused Osdrop keyboard focus with Finder in front |
