@@ -143,14 +143,10 @@ public final class Mesh: Sendable {
 
     /// The group's members, this computer included.
     public func members() throws(CoreError) -> [GroupMember] {
-        var count = 0
-        let counted = handle.withPointer { osdrop_mesh_members($0, nil, 0, &count) }
-        if counted != OSDROP_ERROR_BUFFER_TOO_SMALL {
-            try check(counted)
+        try Self.readList(of: osdrop_member()) { buffer, capacity, count in
+            handle.withPointer { osdrop_mesh_members($0, buffer, capacity, count) }
         }
-        var members = [osdrop_member](repeating: osdrop_member(), count: count)
-        try check(handle.withPointer { osdrop_mesh_members($0, &members, members.count, &count) })
-        return members.prefix(count).map(GroupMember.init)
+        .map(GroupMember.init)
     }
 
     /// Removes a member everywhere; it is told it was removed.
@@ -183,14 +179,36 @@ public final class Mesh: Sendable {
 
     /// The members whose screens are known, this computer included, with their places.
     public func layout() throws(CoreError) -> [LayoutComputer] {
-        var count = 0
-        let counted = handle.withPointer { osdrop_mesh_layout($0, nil, 0, &count) }
-        if counted != OSDROP_ERROR_BUFFER_TOO_SMALL {
-            try check(counted)
+        try Self.readList(of: osdrop_layout_computer()) { buffer, capacity, count in
+            handle.withPointer { osdrop_mesh_layout($0, buffer, capacity, count) }
         }
-        var computers = [osdrop_layout_computer](repeating: osdrop_layout_computer(), count: count)
-        try check(handle.withPointer { osdrop_mesh_layout($0, &computers, computers.count, &count) })
-        return computers.prefix(count).map(LayoutComputer.init)
+        .map(LayoutComputer.init)
+    }
+
+    /// Times a list is read again when it grew between asking for its size and filling it.
+    static let listAttempts = 8
+
+    /// Reads a list core fills in: `read` writes the size it needs to its last argument and returns
+    /// BUFFER_TOO_SMALL when the capacity is short. Another member's state can arrive between
+    /// asking for the size and filling the list, so a list that grew is read again.
+    static func readList<Raw>(
+        of empty: Raw, _ read: (UnsafeMutablePointer<Raw>?, Int, UnsafeMutablePointer<Int>) -> osdrop_result?
+    ) throws(CoreError) -> [Raw] {
+        var count = 0
+        for _ in 0..<listAttempts {
+            var items = [Raw](repeating: empty, count: count)
+            let capacity = items.count
+            let result = items.withUnsafeMutableBufferPointer { buffer in
+                withUnsafeMutablePointer(to: &count) { read(buffer.baseAddress, capacity, $0) }
+            }
+            guard let result else { throw .invalidState }
+            if result == OSDROP_ERROR_BUFFER_TOO_SMALL {
+                continue  // `count` is the size it needs now
+            }
+            if let error = CoreError(result: result) { throw error }
+            return Array(items.prefix(count))
+        }
+        throw .bufferTooSmall
     }
 
     /// A new arrangement, shared with every member; `.invalidLayout` when monitors overlap or a
