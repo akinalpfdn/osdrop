@@ -159,4 +159,43 @@
   <data name="ClipboardOtherComputer" xml:space="preserve">
     <value>diğer bilgisayar</value>
   </data>
+  <data name="AppName" xml:space="preserve">
+    <value>Osdrop</value>
+  </data>
+  <data name="ClipboardFetching" xml:space="preserve">
+    <value>Dosyalar kopyalanıyor (gönderen: {0})</value>
+  </data>
+  <data name="ClipboardFetchingHint" xml:space="preserve">
+    <value>Bu bitince yapıştırın; o zamana kadar yapıştırma önceki kopyayı verir.</value>
+  </data>
+  <data name="ClipboardFetchCancel" xml:space="preserve">
+    <value>İptal et</value>
+  </data>
+  <data name="ClipboardFetchBytes" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="ClipboardFetchProgress" xml:space="preserve">
+    <value>İlerleme</value>
+  </data>
+  <data name="ClipboardReadyTitle" xml:space="preserve">
+    <value>Yapıştırmaya hazır</value>
+  </data>
+  <data name="ClipboardReady" xml:space="preserve">
+    <value>Kopyalanan dosyalar yapıştırılabilir (gönderen: {0}).</value>
+  </data>
+  <data name="ClipboardNoticeTitle" xml:space="preserve">
+    <value>Panoya alınmadı</value>
+  </data>
+  <data name="UnitBytes" xml:space="preserve">
+    <value>{0} bayt</value>
+  </data>
+  <data name="UnitKilobytes" xml:space="preserve">
+    <value>{0} KB</value>
+  </data>
+  <data name="UnitMegabytes" xml:space="preserve">
+    <value>{0} MB</value>
+  </data>
+  <data name="UnitGigabytes" xml:space="preserve">
+    <value>{0} GB</value>
+  </data>
 </root>

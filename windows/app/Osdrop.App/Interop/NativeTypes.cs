@@ -56,6 +56,9 @@ internal enum EngineEventKind
     Log = 10,
     ClipboardUnavailable = 11,
     ClipboardTooLarge = 12,
+    ClipboardFetching = 13,
+    ClipboardFetchEnded = 14,
+    ClipboardReady = 15,
 }
 
 internal static class NativeSizes
@@ -98,6 +101,8 @@ internal unsafe struct NativeEngineEvent
     public fixed byte Name[NativeSizes.Name];
     public NativeSessionStats Stats;
     public byte* Message;
+    public ulong BytesDone;
+    public ulong BytesTotal;
 }
 
 /// <summary>osdrop_engine_info.</summary>

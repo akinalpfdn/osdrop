@@ -145,6 +145,7 @@ public:
     void log(osdrop_log_level /*level*/, const char* /*message*/) override {}
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
                           const std::string& /*name*/) override {}
+    void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);

@@ -200,8 +200,8 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL2 | Rich text and HTML | Copy formatted text from Pages or Word and from a web page; paste into Word / TextEdit on the other computer | Formatting arrives |
 | CL3 | Images | Copy a screenshot (Cmd+Ctrl+Shift+4) and an image in Preview / Paint; paste on the other computer | The image arrives, also in apps that take only TIFF (Mac) or DIB (PC) |
 | CL4 | Passwords | Copy a password in 1Password or Passwords (Mac), and in a password manager on the PC | Nothing changes on the other computers |
-| CL5 | Files | Copy files and a folder in Finder / Explorer; paste in the other's Finder / Explorer | They are copied, with progress for large ones |
-| CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and shows that the copy is too large |
+| CL5 | Files | Copy files and a folder in Finder / Explorer; watch the corner of the other computer's screen; paste in its Finder / Explorer once it says they are ready | A window shows them coming with their progress and a cancel button; a notification says when they can be pasted; they paste. Pasting earlier gives the clipboard's previous content |
+| CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and a notification says the copy is too large |
 | CL7 | Source gone | Copy on one computer, quit Osdrop there at once, paste on another | The paste is immediate (the old clipboard) and a notice says the copy could not be fetched |
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
 
@@ -284,6 +284,7 @@ these tests take over input on every computer they cross.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-07 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | G1, CL1–CL8 | G1 pass after the Mac's pairing window was fixed (it hid when Osdrop went to the background). CL1–CL4, CL7, CL8 pass. CL5: a paste before the files arrived gave the old clipboard with no progress shown; CL6: the notice was only inside the menu and the Computers window. Both now show a progress window and notifications; to run again |
 | 2026-11-07 | Phase 16 branch, Debug, M3 Air | U1, U2 (Turkish, Light and Dark), U5–U8 | Pass (one computer; U3 and U4 need a second) |
 | 2026-11-03 | Phase 13 branch, Release, M3 Air | Loopback throughput, 1 GiB | 210 MB/s (sender and receiver on the same computer) |
 | 2026-11-02 | Phase 2 branch, Debug, M3 Air | D1–D7 | Pass after two fixes found by D4 (WhatsApp) and D5 (Photos): AppKit called promise callbacks off the main thread |

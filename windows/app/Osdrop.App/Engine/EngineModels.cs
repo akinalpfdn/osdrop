@@ -24,7 +24,9 @@ internal sealed record EngineEvent(
     bool Responsive = false,
     SessionStats? Stats = null,
     LogLevel Level = LogLevel.Info,
-    string Message = "");
+    string Message = "",
+    ulong BytesDone = 0,
+    ulong BytesTotal = 0);
 
 /// <summary>The engine as the view models use it; events arrive on the UI thread.</summary>
 internal interface IGroupEngine
@@ -38,4 +40,6 @@ internal interface IGroupEngine
     Task<CoreResult> ConfirmPairingAsync(ulong connection, bool accepted);
     Task<CoreResult> RevokeAsync(string deviceId);
     Task<CoreResult> LeaveGroupAsync();
+    /// <summary>Stops fetching copied files; the clipboard keeps what it had.</summary>
+    Task CancelClipboardFetchAsync();
 }

@@ -58,6 +58,10 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult CloseAll(nint engine, byte sleeping);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_cancel_clipboard_fetch")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult CancelClipboardFetch(nint engine);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_resume")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult Resume(nint engine);

@@ -40,6 +40,13 @@ public sealed partial class GroupViewModel : ObservableObject
 
     public bool HasClipboardNotice => ClipboardNotice is not null;
 
+    /// <summary>Copied files on their way from another computer; null when none are.</summary>
+    [ObservableProperty]
+    public partial ClipboardFetchViewModel? ClipboardFetch { get; set; }
+
+    /// <summary>A notification to show: its title and its text.</summary>
+    public event Action<string, string>? NotificationRequested;
+
     [ObservableProperty]
     public partial string DeviceId { get; set; } = string.Empty;
 
@@ -101,6 +108,13 @@ public sealed partial class GroupViewModel : ObservableObject
 
     [RelayCommand]
     private void DismissClipboardNotice() => ClipboardNotice = null;
+
+    /// <summary>Stops fetching copied files; the clipboard keeps what it had.</summary>
+    internal void CancelClipboardFetch()
+    {
+        ClipboardFetch = null;
+        _ = _engine.CancelClipboardFetchAsync();
+    }
 
     /// <summary>The user's answer to the code both computers show.</summary>
     internal async Task AnswerAsync(bool accepted)
@@ -181,17 +195,33 @@ public sealed partial class GroupViewModel : ObservableObject
                 break;
             case EngineEventKind.ClipboardUnavailable:
                 ClipboardNotice = Describe(Localization.Strings.ClipboardUnavailable, received.Name);
+                NotificationRequested?.Invoke(Localization.Strings.ClipboardNoticeTitle, ClipboardNotice);
                 break;
             case EngineEventKind.ClipboardTooLarge:
                 ClipboardNotice = Describe(Localization.Strings.ClipboardTooLarge, received.Name);
+                NotificationRequested?.Invoke(Localization.Strings.ClipboardNoticeTitle, ClipboardNotice);
+                break;
+            case EngineEventKind.ClipboardFetching:
+                ClipboardFetch = new ClipboardFetchViewModel(
+                    this, NameOrOther(received.Name), received.BytesDone, received.BytesTotal);
+                break;
+            case EngineEventKind.ClipboardFetchEnded:
+                ClipboardFetch = null;
+                break;
+            case EngineEventKind.ClipboardReady:
+                NotificationRequested?.Invoke(
+                    Localization.Strings.ClipboardReadyTitle, Describe(Localization.Strings.ClipboardReady, received.Name));
                 break;
             default:
                 break;
         }
     }
 
-    private static string Describe(string text, string name) => string.Format(
-        CultureInfo.CurrentCulture, text, string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name);
+    private static string Describe(string text, string name) =>
+        string.Format(CultureInfo.CurrentCulture, text, NameOrOther(name));
+
+    private static string NameOrOther(string name) =>
+        string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name;
 
     private MemberItem? Find(string deviceId) => Members.FirstOrDefault(member => member.DeviceId == deviceId);
 

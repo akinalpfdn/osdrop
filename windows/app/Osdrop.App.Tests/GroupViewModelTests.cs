@@ -74,6 +74,49 @@ public sealed class GroupViewModelTests
             group.ClipboardNotice);
     }
 
+    [Fact]
+    public void CopiedFilesOnTheirWayShowTheirProgressUntilTheyEnd()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        var notifications = new List<(string Title, string Text)>();
+        group.NotificationRequested += (title, text) => notifications.Add((title, text));
+
+        engine.Raise(new EngineEvent(
+            EngineEventKind.ClipboardFetching, DeviceId: _laptop, Name: "Laptop", BytesDone: 512, BytesTotal: 2048));
+        Assert.NotNull(group.ClipboardFetch);
+        Assert.Equal(25, group.ClipboardFetch.Percent);
+        Assert.Equal(Formatted(Localization.Strings.ClipboardFetching, "Laptop"), group.ClipboardFetch.Message);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardFetchEnded));
+        Assert.Null(group.ClipboardFetch);
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardReady, DeviceId: _laptop, Name: "Laptop"));
+        Assert.Equal([(Localization.Strings.ClipboardReadyTitle, Formatted(Localization.Strings.ClipboardReady, "Laptop"))], notifications);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardTooLarge, DeviceId: _laptop, Name: "Laptop"));
+        Assert.Equal(2, notifications.Count);
+        Assert.Equal(Localization.Strings.ClipboardNoticeTitle, notifications[1].Title);
+    }
+
+    [Fact]
+    public void CancellingCopiedFilesStopsThem()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardFetching, Name: "Laptop", BytesDone: 0, BytesTotal: 10));
+        group.ClipboardFetch!.CancelCommand.Execute(null);
+        Assert.Null(group.ClipboardFetch);
+        Assert.Equal(1, engine.FetchCancels);
+    }
+
+    [Fact]
+    public void SizesReadAsExplorerShowsThem()
+    {
+        Assert.Equal(Formatted(Localization.Strings.UnitBytes, "512"), ClipboardFetchViewModel.Size(512));
+        Assert.Equal(Formatted(Localization.Strings.UnitMegabytes, (1.5).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)),
+            ClipboardFetchViewModel.Size(1_572_864));
+    }
+
     private static string Formatted(string text, string value) =>
         string.Format(System.Globalization.CultureInfo.CurrentCulture, text, value);
 
@@ -140,5 +183,13 @@ public sealed class GroupViewModelTests
         }
 
         public Task<CoreResult> LeaveGroupAsync() => Task.FromResult(CoreResult.Ok);
+
+        public int FetchCancels { get; private set; }
+
+        public Task CancelClipboardFetchAsync()
+        {
+            FetchCancels++;
+            return Task.CompletedTask;
+        }
     }
 }

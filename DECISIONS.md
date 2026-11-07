@@ -561,3 +561,12 @@ choices the plan leaves open are logged here.
 **Why:** DEVPLAN asks for progress and cancel on both sides; the sender is the only place that sees what goes out, and a drag usually goes to one member, so withdrawing it is the cancel the user means.
 **Trade-offs:** A send cannot tell a member that stopped asking from one that failed: both show as not finished. Cancelling a send also stops other members fetching the same drag.
 **Revisit if:** Drags are commonly dropped on several computers at once.
+
+---
+
+## 2026-11-07 — Copied files on their way show themselves
+**Chosen:** User decision after the Mac ↔ PC run: while another computer's copied files are fetched, both computers show a small window in the screen's corner with their progress and a cancel button, a notification tells when they can be pasted, and the clipboard's notices (too large, out of reach) are notifications too. A paste before then still gives the clipboard's previous content.
+**Alternatives:** Pasting at paste time with Explorer's own progress (virtual files; needs Phase 4's machinery, and Finder takes no promises); clearing the old clipboard as soon as a copy is announced.
+**Why:** The fetch-first design (2026-11-04) left the user pasting the old content with no sign that files were coming. Clearing the old clipboard would break CL7 (a copy whose source is gone keeps the previous clipboard).
+**Trade-offs:** A paste during the fetch still gives the old content; the window only tells the user to wait.
+**Revisit if:** Phase 4 brings virtual files on the PC: Explorer could then paste while the files arrive.

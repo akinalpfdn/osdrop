@@ -112,9 +112,12 @@ public:
     virtual void peer_responsive(const DeviceIdBytes& device, bool responsive) = 0;
     virtual void stats(const DeviceIdBytes& device, const osdrop_session_stats& stats) = 0;
     virtual void log(osdrop_log_level level, const char* message) = 0;
-    /// Another computer's copy is not on the clipboard; `name` is empty when not known.
+    /// Another computer's copy is not on the clipboard, or its files are now; `name` is empty
+    /// when not known.
     virtual void clipboard_notice(ClipboardNotice notice, const DeviceIdBytes& device,
                                   const std::string& name) = 0;
+    /// Copied files on their way from another computer; nullopt once they no longer are.
+    virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
 };
 
 /// What a PC can do so far: share the clipboard and receive files. Taking control comes with the

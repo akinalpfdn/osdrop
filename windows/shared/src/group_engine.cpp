@@ -50,7 +50,8 @@ GroupEngine::GroupEngine(Config config, StateStore& store, Discovery& discovery,
             *config_.clipboard,
             [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
                 events_.clipboard_notice(notice, device, name);
-            });
+            },
+            [this](const std::optional<ClipboardFetch>& fetch) { events_.clipboard_fetch(fetch); });
     }
 }
 
@@ -267,6 +268,12 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
                 paths.emplace_back(item);
             }
             engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
+        }
+    };
+    result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_ && progress != nullptr) {
+            engine->clipboard_->transfer_progress(progress->transfer_id, progress->bytes_done);
         }
     };
     return result;

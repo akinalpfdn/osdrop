@@ -82,6 +82,8 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task ResumeAsync() => Native.Run(() => NativeMethods.Resume(_engine));
 
+    public Task CancelClipboardFetchAsync() => Native.Run(() => NativeMethods.CancelClipboardFetch(_engine));
+
     /// <summary>Stops the engine while the app exits: waits on the native worker, never on this thread.</summary>
     public void Shutdown()
     {
@@ -202,7 +204,7 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
             new SessionStats(
                 stats.RoundTripMicroseconds, stats.ClockOffsetMicroseconds, stats.DatagramsRejected,
                 stats.StaleMotionDropped),
-            native->Level, Utf8.Read(native->Message));
+            native->Level, Utf8.Read(native->Message), native->BytesDone, native->BytesTotal);
         self._dispatcher.BeginInvoke(() => self.EventReceived?.Invoke(received));
     }
 }
