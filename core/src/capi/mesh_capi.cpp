@@ -409,6 +409,17 @@ public:
                                         outcome.content.data(), outcome.content.size());
         }
     }
+    void on_send_progress(const transfer::SendProgress& progress) override {
+        if (callbacks_.send_progress != nullptr) {
+            const osdrop_object_ref item{.kind =
+                                             static_cast<osdrop_object_kind>(progress.item.kind),
+                                         .object_id = progress.item.object_id,
+                                         .item_index = progress.item.item_index};
+            callbacks_.send_progress(callbacks_.context, progress.device.data(), &item,
+                                     progress.bytes_sent, progress.bytes_total,
+                                     static_cast<std::uint8_t>(progress.state));
+        }
+    }
 
     // --- clipboard::ClipboardObserver ---
     void on_remote_clip(const clipboard::RemoteClip& clip) override {

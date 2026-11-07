@@ -458,6 +458,13 @@ typedef struct osdrop_mesh_callbacks {
      * the edge (the drag ends there) and report them with osdrop_mesh_drag_started, or no items
      * when they do not come. */
     void (*drag_wanted)(void* context);
+    /*
+     * The member `device_id` fetches `item`, which this computer offered: about every 100 ms
+     * while its files' content goes out, and once at the end. `state`: 1 sending, 2 done (every
+     * byte went out), 3 stopped (the member stopped asking, or the item was withdrawn).
+     */
+    void (*send_progress)(void* context, const uint8_t* device_id, const osdrop_object_ref* item,
+                          uint64_t bytes_sent, uint64_t bytes_total, uint8_t state);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {

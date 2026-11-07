@@ -267,6 +267,7 @@ public:
     void on_transfer_progress(const transfer::TransferProgress& progress) override;
     void on_transfer_finished(const transfer::TransferOutcome& outcome) override;
     void on_content_received(const transfer::ContentOutcome& outcome) override;
+    void on_send_progress(const transfer::SendProgress& progress) override;
 
     // --- mesh::MeshObserver ---
     mesh::TrustVerdict on_trust_query(const crypto::Key& peer_key,

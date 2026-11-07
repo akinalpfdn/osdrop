@@ -218,6 +218,9 @@ void Sender::withdraw(protocol::ObjectKind kind, std::uint64_t object_id) {
     const auto matches = [&](const protocol::ObjectRef& item) {
         return item.kind == kind && item.object_id == object_id;
     };
+    stop_sending([&](const SendingKey& sending, const Sending& /*state*/) {
+        return matches(sending.second);
+    });
     std::erase_if(offers_, [&](const auto& entry) { return matches(entry.first); });
     drop_jobs([&](const StreamKey& /*key*/, const Job& job) { return matches(job.item); },
               Error::Cancelled);
@@ -284,6 +287,8 @@ void Sender::pumped(const StreamKey& key, std::size_t queued) {
 
 void Sender::closed(const StreamKey& key) {
     serving_.erase(key);
+    stop_sending(
+        [&](const SendingKey& /*sending*/, const Sending& state) { return state.stream == key; });
 }
 
 void Sender::scan(const protocol::ObjectRef& item, Offer& offer) {
@@ -466,16 +471,16 @@ bool Sender::serve_memory(const StreamKey& key, Serving& serving, const Job& job
 
 void Sender::read_next(const StreamKey& key, Serving& serving, std::uint32_t request_id) {
     serving.reading = request_id;
-    executor_.run_file_work(
-        [this, key, request_id, read = serving.read, budget = tunables_.read_batch] {
-            Batch result = read_batch(*read, budget);
-            executor_.run_on_mesh([this, key, request_id, batch = std::move(result)](TimePoint) {
-                read_done(key, request_id, batch);
-            });
+    executor_.run_file_work([this, key, request_id, read = serving.read,
+                             budget = tunables_.read_batch] {
+        Batch result = read_batch(*read, budget);
+        executor_.run_on_mesh([this, key, request_id, batch = std::move(result)](TimePoint now) {
+            read_done(key, request_id, batch, now);
         });
+    });
 }
 
-void Sender::read_done(const StreamKey& key, std::uint32_t request_id, Batch batch) {
+void Sender::read_done(const StreamKey& key, std::uint32_t request_id, Batch batch, TimePoint now) {
     const auto it = serving_.find(key);
     if (it == serving_.end()) {
         return; // the stream closed meanwhile
@@ -502,6 +507,7 @@ void Sender::read_done(const StreamKey& key, std::uint32_t request_id, Batch bat
         offset += size;
         serving.sent += size;
     }
+    count_sent(key, serving.jobs.front().item, offset - batch.offset, now);
     if (batch.done) {
         streams_.send(key, protocol::ContentEnd{.request_id = request_id,
                                                 .byte_count = serving.sent,
@@ -541,6 +547,53 @@ void Sender::drop_jobs(const std::function<bool(const StreamKey&, const Job&)>& 
             front = false;
         }
         serving.jobs = std::move(kept);
+    }
+}
+
+void Sender::count_sent(const StreamKey& key, const protocol::ObjectRef& item, std::uint64_t bytes,
+                        TimePoint now) {
+    const auto offer = offers_.find(item);
+    if (offer == offers_.end() || offer->second.tree == nullptr) {
+        return;
+    }
+    const std::uint64_t total = offer->second.tree->total_bytes;
+    const SendingKey sending_key{key.device, item};
+    auto [it, added] =
+        sending_.try_emplace(sending_key, Sending{.stream = key, .sent = 0, .reported = now});
+    Sending& sending = it->second;
+    sending.stream = key;
+    sending.sent = std::min(sending.sent + bytes, total);
+    const bool done = sending.sent == total;
+    if (!done && !added && now - sending.reported < tunables_.progress_interval) {
+        return;
+    }
+    sending.reported = now;
+    observer_.on_send_progress({.device = key.device,
+                                .item = item,
+                                .bytes_sent = sending.sent,
+                                .bytes_total = total,
+                                .state = done ? SendState::Done : SendState::Sending});
+    if (done) {
+        sending_.erase(it);
+    }
+}
+
+void Sender::stop_sending(const std::function<bool(const SendingKey&, const Sending&)>& matches) {
+    for (auto it = sending_.begin(); it != sending_.end();) {
+        if (!matches(it->first, it->second)) {
+            ++it;
+            continue;
+        }
+        const auto offer = offers_.find(it->first.second);
+        const std::uint64_t total = offer != offers_.end() && offer->second.tree != nullptr
+                                        ? offer->second.tree->total_bytes
+                                        : it->second.sent;
+        observer_.on_send_progress({.device = it->first.first,
+                                    .item = it->first.second,
+                                    .bytes_sent = it->second.sent,
+                                    .bytes_total = total,
+                                    .state = SendState::Stopped});
+        it = sending_.erase(it);
     }
 }
 
