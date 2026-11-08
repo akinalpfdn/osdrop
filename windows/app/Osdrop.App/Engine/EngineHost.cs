@@ -11,6 +11,8 @@ namespace Osdrop.App.Engine;
 /// </summary>
 internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 {
+    private const int _listAttempts = 8;
+
     private readonly Dispatcher _dispatcher;
     private GCHandle _self;
     private nint _engine;
@@ -117,58 +119,72 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         return new EngineInfo(Utf8.Hex(info.DeviceId, NativeSizes.DeviceId), group, info.ListenPort);
     }
 
-    private static unsafe List<GroupMember> ReadMembers(nint engine)
+    private unsafe delegate CoreResult ListReader<T>(T* items, nuint capacity, nuint* count)
+        where T : unmanaged;
+
+    /// <summary>
+    /// One of the engine's lists, counted and then read; read again when it grew in between, because the
+    /// engine keeps working on its own threads and a computer can join after the count.
+    /// </summary>
+    private static unsafe T[] ReadList<T>(ListReader<T> read)
+        where T : unmanaged
     {
-        nuint count = 0;
-        CoreResult counted = NativeMethods.Members(engine, null, 0, &count);
-        if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
+        for (int attempt = 0; attempt < _listAttempts; ++attempt)
         {
-            return [];
-        }
-        var members = new NativeMember[(int)count];
-        fixed (NativeMember* pointer = members)
-        {
-            if (NativeMethods.Members(engine, pointer, (nuint)members.Length, &count) != CoreResult.Ok)
+            nuint count = 0;
+            CoreResult counted = read(null, 0, &count);
+            if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
             {
                 return [];
             }
-            var list = new List<GroupMember>((int)count);
-            for (int i = 0; i < (int)count; ++i)
+            var items = new T[(int)count];
+            fixed (T* pointer = items)
+            {
+                CoreResult listed = read(pointer, (nuint)items.Length, &count);
+                if (listed == CoreResult.BufferTooSmall)
+                {
+                    continue;
+                }
+                return listed == CoreResult.Ok ? items[..(int)count] : [];
+            }
+        }
+        return [];
+    }
+
+    private static unsafe List<GroupMember> ReadMembers(nint engine)
+    {
+        NativeMember[] members = ReadList<NativeMember>(
+            (items, capacity, count) => NativeMethods.Members(engine, items, capacity, count));
+        var list = new List<GroupMember>(members.Length);
+        fixed (NativeMember* pointer = members)
+        {
+            for (int i = 0; i < members.Length; ++i)
             {
                 NativeMember* member = pointer + i;
                 list.Add(new GroupMember(
                     Utf8.Hex(member->DeviceId, NativeSizes.DeviceId), Utf8.Read(member->Name, NativeSizes.Name),
                     member->Platform, member->Self == 1, member->Connected == 1));
             }
-            return list;
         }
+        return list;
     }
 
     private static unsafe List<NearbyComputer> ReadNearby(nint engine)
     {
-        nuint count = 0;
-        CoreResult counted = NativeMethods.Nearby(engine, null, 0, &count);
-        if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
-        {
-            return [];
-        }
-        var computers = new NativeNearbyComputer[(int)count];
+        NativeNearbyComputer[] computers = ReadList<NativeNearbyComputer>(
+            (items, capacity, count) => NativeMethods.Nearby(engine, items, capacity, count));
+        var list = new List<NearbyComputer>(computers.Length);
         fixed (NativeNearbyComputer* pointer = computers)
         {
-            if (NativeMethods.Nearby(engine, pointer, (nuint)computers.Length, &count) != CoreResult.Ok)
-            {
-                return [];
-            }
-            var list = new List<NearbyComputer>((int)count);
-            for (int i = 0; i < (int)count; ++i)
+            for (int i = 0; i < computers.Length; ++i)
             {
                 NativeNearbyComputer* computer = pointer + i;
                 list.Add(new NearbyComputer(
                     Utf8.Hex(computer->DeviceId, NativeSizes.DeviceId), Utf8.Read(computer->Name, NativeSizes.Name),
                     computer->Platform, computer->InAnotherGroup == 1, computer->NeedsUpdate == 1));
             }
-            return list;
         }
+        return list;
     }
 
     private static unsafe (CoreResult Result, ulong Connection) PairNative(nint engine, byte[] deviceId)

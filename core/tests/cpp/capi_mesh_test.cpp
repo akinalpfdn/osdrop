@@ -266,6 +266,27 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
 
 /// One computer. The same seed gives the same identity, so a computer can be started again with
 /// the state it stored.
+/// Reads one of core's lists by counting and then reading, again when it grew in between: core
+/// keeps working on its own thread, so a member or computer can join after the count.
+template <typename T, typename Read>
+std::vector<T> read_list(const Read& read) {
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        size_t count = 0;
+        const osdrop_result counted = read(nullptr, 0, &count);
+        EXPECT_EQ(counted, count == 0 ? OSDROP_OK : OSDROP_ERROR_BUFFER_TOO_SMALL);
+        std::vector<T> list(count);
+        const osdrop_result listed = read(list.data(), list.size(), &count);
+        if (listed == OSDROP_ERROR_BUFFER_TOO_SMALL) {
+            continue;
+        }
+        EXPECT_EQ(listed, OSDROP_OK);
+        list.resize(count);
+        return list;
+    }
+    ADD_FAILURE() << "the list kept growing";
+    return {};
+}
+
 struct CMesh {
     CMesh(std::uint64_t seed, const char* name, const Bytes& state = {}, const Bytes& layout = {})
         : random{seed} {
@@ -294,13 +315,9 @@ struct CMesh {
     CMesh& operator=(CMesh&&) = delete;
 
     [[nodiscard]] std::vector<osdrop_member> members() const {
-        size_t count = 0;
-        const osdrop_result counted = osdrop_mesh_members(mesh, nullptr, 0, &count);
-        EXPECT_EQ(counted, count == 0 ? OSDROP_OK : OSDROP_ERROR_BUFFER_TOO_SMALL);
-        std::vector<osdrop_member> list(count);
-        EXPECT_EQ(osdrop_mesh_members(mesh, list.data(), list.size(), &count), OSDROP_OK);
-        list.resize(count);
-        return list;
+        return read_list<osdrop_member>([this](osdrop_member* out, size_t capacity, size_t* count) {
+            return osdrop_mesh_members(mesh, out, capacity, count);
+        });
     }
     [[nodiscard]] std::optional<GroupId> group() const {
         GroupId id{};
@@ -309,13 +326,10 @@ struct CMesh {
         return has_group == 1 ? std::optional(id) : std::nullopt;
     }
     [[nodiscard]] std::vector<osdrop_layout_computer> layout() const {
-        size_t count = 0;
-        const osdrop_result counted = osdrop_mesh_layout(mesh, nullptr, 0, &count);
-        EXPECT_EQ(counted, count == 0 ? OSDROP_OK : OSDROP_ERROR_BUFFER_TOO_SMALL);
-        std::vector<osdrop_layout_computer> list(count);
-        EXPECT_EQ(osdrop_mesh_layout(mesh, list.data(), list.size(), &count), OSDROP_OK);
-        list.resize(count);
-        return list;
+        return read_list<osdrop_layout_computer>(
+            [this](osdrop_layout_computer* out, size_t capacity, size_t* count) {
+                return osdrop_mesh_layout(mesh, out, capacity, count);
+            });
     }
     [[nodiscard]] Bytes stored_layout() {
         std::lock_guard lock(events.mutex);

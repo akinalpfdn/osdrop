@@ -25,6 +25,33 @@ std::uint16_t port_of(const std::vector<std::uint8_t>& bytes) {
     return bytes.size() == 2 ? static_cast<std::uint16_t>(bytes[0] | (bytes[1] << 8U)) : 0;
 }
 
+constexpr int kListAttempts = 8;
+
+/// One of core's lists, counted and then read; read again when it grew in between, because core
+/// keeps working on its own thread and a computer can join after the count.
+template <typename Item, typename Read>
+Expected<std::vector<Item>, osdrop_result> read_list(const Read& read) {
+    using Result = Expected<std::vector<Item>, osdrop_result>;
+    for (int attempt = 0; attempt < kListAttempts; ++attempt) {
+        std::size_t count = 0;
+        const osdrop_result counted = read(nullptr, 0, &count);
+        if (counted != OSDROP_OK && counted != OSDROP_ERROR_BUFFER_TOO_SMALL) {
+            return Result::failure(counted);
+        }
+        std::vector<Item> list(count);
+        const osdrop_result listed = read(list.data(), list.size(), &count);
+        if (listed == OSDROP_ERROR_BUFFER_TOO_SMALL) {
+            continue;
+        }
+        if (listed != OSDROP_OK) {
+            return Result::failure(listed);
+        }
+        list.resize(count);
+        return list;
+    }
+    return Result::failure(OSDROP_ERROR_BUFFER_TOO_SMALL);
+}
+
 } // namespace
 
 Expected<std::unique_ptr<GroupEngine>, osdrop_result>
@@ -363,19 +390,10 @@ EngineInfo GroupEngine::info() const {
 }
 
 Expected<std::vector<osdrop_member>, osdrop_result> GroupEngine::members() const {
-    using Result = Expected<std::vector<osdrop_member>, osdrop_result>;
-    std::size_t count = 0;
-    const osdrop_result counted = osdrop_mesh_members(mesh_, nullptr, 0, &count);
-    if (counted != OSDROP_OK && counted != OSDROP_ERROR_BUFFER_TOO_SMALL) {
-        return Result::failure(counted);
-    }
-    std::vector<osdrop_member> list(count);
-    if (const osdrop_result listed = osdrop_mesh_members(mesh_, list.data(), list.size(), &count);
-        listed != OSDROP_OK) {
-        return Result::failure(listed);
-    }
-    list.resize(count);
-    return list;
+    return read_list<osdrop_member>(
+        [this](osdrop_member* out, std::size_t capacity, std::size_t* count) {
+            return osdrop_mesh_members(mesh_, out, capacity, count);
+        });
 }
 
 std::vector<NearbyComputer> GroupEngine::nearby() const {
