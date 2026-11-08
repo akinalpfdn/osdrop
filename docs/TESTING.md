@@ -171,10 +171,11 @@ Macs; PC rows need two PCs.
 | G1 | Mac ↔ PC | On the Mac, menu › Nearby › **Pair** next to the PC | Both show the same code; after **Pair** on both, each lists the other as connected |
 | G2 | Mac ↔ Mac, PC ↔ PC | As G1 between two Macs, then between two PCs | As G1 |
 | G3 | Third computer | Pair a third computer with any member | Every member lists it as connected without another code |
-| G4 | Revocation | On any member, remove another one | It disappears everywhere; the removed computer says it was removed and lists no group |
+| G4 | Revocation | On any member, remove another one; then pair the two again, once from each side | It disappears everywhere; the removed computer says it was removed and lists no group. Pairing again shows a code and brings it back to every member |
 | G5 | Restart | Quit and start Osdrop on one member; then restart that computer | Members reconnect without a code or any action |
 | G6 | Different groups | Pair a computer of one group with one of another group | Refused before any code: the two are in different groups |
 | G7 | Local Network off (Mac) | Turn off Osdrop in System Settings › Local Network | The menu says Local Network access is needed; turning it on finds computers again |
+| G8 | Blocking | On a member, choose **Remove and Block** for another member; on that computer, pair again. Then pair a new computer and choose **Block** at its code; unblock both in Settings › Devices (PC: the Computers window) | Each blocked computer is refused at once, by every member and without a code; the blocked list names both; after unblocking, pairing shows a code again |
 
 ### File transfer (Phase 13)
 
@@ -200,10 +201,11 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL2 | Rich text and HTML | Copy formatted text from Pages or Word and from a web page; paste into Word / TextEdit on the other computer | Formatting arrives |
 | CL3 | Images | Copy a screenshot (Cmd+Ctrl+Shift+4) and an image in Preview / Paint; paste on the other computer | The image arrives, also in apps that take only TIFF (Mac) or DIB (PC) |
 | CL4 | Passwords | Copy a password in 1Password or Passwords (Mac), and in a password manager on the PC | Nothing changes on the other computers |
-| CL5 | Files | Copy files and a folder in Finder / Explorer; paste in the other's Finder / Explorer | They are copied, with progress for large ones |
-| CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and shows that the copy is too large |
+| CL5 | Files | Copy files and a folder in Finder / Explorer; watch the corner of the other computer's screen; paste in its Finder / Explorer once it says they are ready | A window shows them coming with their progress and a cancel button; a notification says when they can be pasted; they paste. Pasting earlier gives the clipboard's previous content |
+| CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and a notification says the copy is too large |
 | CL7 | Source gone | Copy on one computer, quit Osdrop there at once, paste on another | The paste is immediate (the old clipboard) and a notice says the copy could not be fetched |
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
+| CL9 | The same copy again | Copy a file, wait until the other computer says it can be pasted, then copy the same file again | Nothing is fetched again: no progress window, no notification |
 
 ### Cursor and keyboard (Phase 11)
 
@@ -247,6 +249,26 @@ session clock offset (the offset of the fastest of the last eight pings). The ca
 the event tap received the event, so the time inside the controller's input system is not
 included. The developer view shows the median and the 99th percentile of the last 1000 datagrams.
 
+### Drag and drop (Phase 14)
+
+Run with three computers in a row (A | B | C), members of one group, files allowed. The rows marked
+PC need the PC; Mac ↔ Mac needs the second Mac. Before each run, say whose mouse will be used:
+these tests take over input on every computer they cross.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| D1 | Every direction | Drag a file from Finder (Explorer) on A through the edge into a folder on B, in each direction between a Mac and a PC, Mac → Mac and PC → PC | The cursor carries the drag; the file is copied where it is released; the source keeps its file and its drag ends as a copy |
+| D2 | A tree and a large file | Drag a folder with Unicode names and inner links, then a 10 GB file | Everything arrives intact; Finder (Explorer) shows the copy's progress on the receiving side |
+| D3 | A chain | Drag from A through B onto C | Nothing is dropped on B; the file lands on C |
+| D4 | A controlled source | With A's mouse on B, drag a file on B onto C, then one on B back onto A | Each lands where it is released |
+| D5 | Back to the source | Drag from A onto B and back onto A without releasing, then release in another folder on A | The drag goes on as if it never left; the file is copied or moved as Finder (Explorer) does |
+| D6 | Cancel | Drag onto B, press Escape before releasing; drag onto B and release on a place that takes no files; drag onto B and press ⌃⌥⌘⎋ | Nothing is copied; the drag slides back on A |
+| D7 | Other drop targets | Release on the desktop, in Mail's message window, a browser upload field, Messages | The file arrives in each, through promises or a staged copy |
+| D8 | Lost network | Unplug the source's network during the 10 GB copy | The copy ends with an error on the receiving side and no partial file; the cursor comes back if it was on the lost computer |
+| D9 | Local input | While a drag waits on B, move A's own mouse when A is controlled by another computer | A's drag slides back; B's drop fetches nothing |
+| D10 | Photos and Mail | Drag a photo from Photos and an attachment from Mail onto B | The cursor waits at the edge while the files come out of the app, then crosses; the files land on B |
+| D11 | Progress and cancel | Drag the 10 GB file onto B; watch both menus; cancel on B, then again and cancel on A | Both menus show the transfer moving; either cancel ends it on both sides with no partial file; a notification on each side tells it did not finish; a finished one notifies too |
+
 ### Mac interface (Phase 16)
 
 | # | Scenario | Steps | Expected |
@@ -264,6 +286,9 @@ included. The developer view shows the median and the 99th percentile of the las
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-08 | Phase 14 branch (fdb0e04), Debug, M3 Air + PC (Release shell, debug engine) | G4, G8 | Pass. G4 first failed: the member that removed a computer refused it before any code, so it could never pair again; fixed, then blocking was added (G8) |
+| 2026-11-08 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | CL5, CL6, CL9 | Pass. CL6 on the Mac showed no notification until Osdrop's notifications were allowed in System Settings › Notifications: they had been refused at macOS's first prompt |
+| 2026-11-07 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | G1, CL1–CL8 | G1 pass after the Mac's pairing window was fixed (it hid when Osdrop went to the background). CL1–CL4, CL7, CL8 pass. CL5: a paste before the files arrived gave the old clipboard with no progress shown; CL6: the notice was only inside the menu and the Computers window. Both now show a progress window and notifications; to run again |
 | 2026-11-07 | Phase 16 branch, Debug, M3 Air | U1, U2 (Turkish, Light and Dark), U5–U8 | Pass (one computer; U3 and U4 need a second) |
 | 2026-11-03 | Phase 13 branch, Release, M3 Air | Loopback throughput, 1 GiB | 210 MB/s (sender and receiver on the same computer) |
 | 2026-11-02 | Phase 2 branch, Debug, M3 Air | D1–D7 | Pass after two fixes found by D4 (WhatsApp) and D5 (Photos): AppKit called promise callbacks off the main thread |

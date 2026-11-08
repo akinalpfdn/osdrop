@@ -36,14 +36,16 @@ constexpr std::size_t kP99Percent = 99;
 
 Control::Control(const DeviceId& self, protocol::Platform platform, const ControlTunables& tunables,
                  ControlObserver& observer, layout::LayoutObserver& layout_observer,
-                 mesh::MeshObserver& next)
+                 transfer::TransferObserver& transfer_observer, mesh::MeshObserver& next)
     : self_(self), tunables_(tunables), observer_(observer), layout_observer_(layout_observer),
-      next_(next), engine_(self, tunables.settings.push), platform_(platform),
-      settings_(tunables.settings) {}
+      transfer_observer_(transfer_observer), next_(next), engine_(self, tunables.settings.push),
+      platform_(platform), settings_(tunables.settings) {}
 
-void Control::attach(mesh::Mesh& mesh, const layout::Layout& layout) {
+void Control::attach(mesh::Mesh& mesh, const layout::Layout& layout,
+                     transfer::TransferService& transfers) {
     mesh_ = &mesh;
     layout_ = &layout;
+    transfers_ = &transfers;
     refresh();
 }
 
@@ -63,9 +65,16 @@ void Control::set_controllers(std::set<DeviceId> controllers) {
     }
 }
 
+void Control::set_file_senders(std::set<DeviceId> senders) {
+    file_senders_ = std::move(senders);
+}
+
 void Control::input(const Input& input, TimePoint captured) {
     if (controlled_) {
         take_back(); // local input always wins
+    }
+    if (outgoing_ && outgoing_->parked && !away_) {
+        abandon_parked(); // the drag waited here for another computer's controller
     }
     std::visit(
         Overloaded{
@@ -89,7 +98,14 @@ void Control::input(const Input& input, TimePoint captured) {
             },
             [&](const ButtonInput& m) {
                 physical_.button(m.button, m.action);
-                update_lock(); // no crossing with a button held
+                if (m.button == kDragButton && m.action == protocol::ButtonAction::Up) {
+                    probe_.reset();
+                    carry(std::nullopt); // dropped, wherever the cursor is
+                    if (!away_ && outgoing_ && outgoing_->detached) {
+                        withdraw_outgoing(); // its files were taken, but it stayed here
+                    }
+                }
+                update_lock(); // no crossing with a button held, unless it carries a drag
                 if (away_) {
                     const Point at = engine_.position();
                     send(away_->device, protocol::ButtonEvent{.control_id = away_->control_id,
@@ -177,6 +193,9 @@ void Control::cursor_moved(Point position) {
 
 void Control::moved(const PointerMoved& moved, TimePoint captured) {
     const layout::CursorUpdate update = engine_.motion(captured, moved.position, moved.delta);
+    if (update.walled) {
+        probe(*update.walled, update.position, captured);
+    }
     if (update.device == self_) {
         if (away_) { // pushed back through an edge
             send(away_->device, protocol::Leave{.control_id = away_->control_id,
@@ -207,7 +226,17 @@ void Control::cross(const DeviceId& device, Point position) {
         send(away_->device, protocol::Leave{.control_id = away_->control_id,
                                             .reason = protocol::LeaveReason::CrossedOn});
     } else {
+        if (carried_ && incoming_ && incoming_->controller == self_) {
+            end_incoming(false); // the drag shown here moves on with the cursor
+        }
+        if (carried_ && outgoing_ && outgoing_->drag_id == carried_->offer.drag_id &&
+            carried_->offer.source == self_ && !outgoing_->detached) {
+            outgoing_->parked = true; // this computer's own drag waits at the edge
+        }
         observer_.on_capture_began(device, physical_.keys());
+    }
+    if (carried_) {
+        send(device, carried_->offer); // before the Enter that refers to it
     }
     const auto peer = peers_.find(device);
     const bool swap = settings_.modifier_mapping == ModifierMapping::Shortcuts &&
@@ -223,7 +252,7 @@ void Control::cross(const DeviceId& device, Point position) {
                          .y = coord(position.y),
                          .modifiers = swap ? swap_control_and_command(modifiers) : modifiers,
                          .locks = caps_lock_ ? protocol::kCapsLock : std::uint8_t{0},
-                         .drag_id = 0});
+                         .drag_id = carried_ ? carried_->offer.drag_id : 0});
 }
 
 void Control::come_home(Point cursor, CaptureEnd reason,
@@ -233,11 +262,15 @@ void Control::come_home(Point cursor, CaptureEnd reason,
     }
     const DeviceId device = away_->device;
     away_.reset();
+    probe_.reset();
     observer_.on_capture_ended({.device = device,
                                 .cursor = cursor,
                                 .reason = reason,
                                 .refused = refused,
                                 .caps_lock = caps_lock_});
+    if (carried_) {
+        carry_home(carried_->offer, cursor, reason);
+    }
 }
 
 void Control::refresh() {
@@ -246,7 +279,9 @@ void Control::refresh() {
     }
     std::set<DeviceId> reachable{self_};
     for (const auto& [device, peer] : peers_) {
-        if (peer.responsive && peer.accepts_control) {
+        // A drag goes only where it can be dropped, or back to where it started.
+        const bool takes_drag = !carried_ || peer.drag_target || device == carried_->offer.source;
+        if (peer.responsive && peer.accepts_control && takes_drag) {
             reachable.insert(device);
         }
     }
@@ -262,7 +297,8 @@ void Control::refresh() {
 void Control::update_lock() {
     const std::uint8_t required = settings_.crossing_modifiers;
     const bool missing_modifier = required != 0 && (physical_.modifiers() & required) == 0;
-    engine_.set_locked(locked_ || !physical_.buttons().empty() || missing_modifier);
+    const bool held = !physical_.buttons().empty() && !carried_;
+    engine_.set_locked(locked_ || held || missing_modifier);
 }
 
 void Control::receive_refusal(const DeviceId& device, std::uint32_t control_id, CaptureEnd reason,
@@ -296,8 +332,19 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
         refuse(protocol::RefuseReason::Busy);
         return;
     }
+    std::optional<protocol::DragOffer> drag;
+    if (enter.drag_id != 0) {
+        // Only with the offer it refers to; the group drops offers whose files are not wanted.
+        if (!forwarded_ || forwarded_->first != device ||
+            forwarded_->second.drag_id != enter.drag_id) {
+            refuse(protocol::RefuseReason::NotPermitted);
+            return;
+        }
+        drag = std::move(forwarded_->second);
+        forwarded_.reset();
+    }
     if (controlled_) {
-        release(); // the controller's previous entry ended with this one
+        release(true); // the controller's previous entry ended with this one
     }
     Controlled& controlled =
         controlled_.emplace(Controlled{.controller = device,
@@ -313,6 +360,9 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
                                 .page = key.page,
                                 .usage = key.usage,
                                 .action = protocol::KeyAction::Down});
+    }
+    if (drag) {
+        arrive(controlled, *drag);
     }
 }
 
@@ -340,6 +390,10 @@ void Control::inject_button(Controlled& controlled, const protocol::ButtonEvent&
     controlled.position = point(event.x, event.y);
     if (controlled.held.button(event.button, event.action)) {
         observer_.on_inject(event);
+    }
+    if (event.button == kDragButton && event.action == protocol::ButtonAction::Up && outgoing_ &&
+        outgoing_->detached) {
+        withdraw_outgoing(); // its files were taken, but it stayed here
     }
 }
 
@@ -373,11 +427,19 @@ void Control::take_back() {
     release();
 }
 
-void Control::release() {
+void Control::release(bool left) {
     if (!controlled_) {
         return;
     }
-    release_held(*controlled_);
+    Controlled& controlled = *controlled_;
+    if (incoming_ && incoming_->controller == controlled.controller) {
+        end_incoming(!left);
+    }
+    if (left && outgoing_ && outgoing_->offered_to == controlled.controller &&
+        !outgoing_->detached && controlled.held.button(kDragButton, protocol::ButtonAction::Up)) {
+        outgoing_->parked = true; // the left button stays down: the drag waits for its outcome
+    }
+    release_held(controlled);
     controlled_.reset();
     latencies_.clear();
     next_latency_ = 0;
@@ -430,7 +492,7 @@ bool Control::handle(const DeviceId& device, const protocol::ControlMessage& mes
             },
             [&](const protocol::Leave& m) {
                 if (controlled_by(device, m.control_id) != nullptr) {
-                    release();
+                    release(true);
                 }
                 return true;
             },
@@ -474,6 +536,22 @@ bool Control::handle(const DeviceId& device, const protocol::ControlMessage& mes
                 }
                 return true;
             },
+            [&](const protocol::DragProbe& m) {
+                receive_probe(device, m);
+                return true;
+            },
+            [&](const protocol::DragOffer& m) {
+                if (m.probe_id != 0) {
+                    receive_offer(device, m);
+                } else {
+                    forwarded_.emplace(device, m); // the Enter follows
+                }
+                return true;
+            },
+            [&](const protocol::DragResult& m) {
+                receive_result(device, m);
+                return true;
+            },
             [&](const auto& /*other*/) { return false; },
         },
         message);
@@ -510,6 +588,8 @@ void Control::on_peer_connected(const DeviceId& device, const crypto::Key& peer_
     peers_[device] =
         Peer{.responsive = true,
              .accepts_control = (capabilities.features & protocol::kFeatureTakesControl) != 0,
+             .drag_source = (capabilities.features & protocol::kFeatureDragSource) != 0,
+             .drag_target = (capabilities.features & protocol::kFeatureDragTarget) != 0,
              .platform = hello.platform};
     refresh();
     next_.on_peer_connected(device, peer_key, hello, capabilities);
@@ -519,9 +599,24 @@ void Control::on_peer_disconnected(const DeviceId& device, std::optional<Error> 
                                    std::optional<protocol::ByeReason> bye) {
     peers_.erase(device);
     clock_offsets_.erase(device);
+    if (probe_ && probe_->device == device) {
+        probe_.reset();
+    }
+    if (forwarded_ && forwarded_->first == device) {
+        forwarded_.reset();
+    }
+    if (carried_ && carried_->offer.source == device) {
+        carry(std::nullopt); // nothing to fetch any more
+    }
     refresh();
     if (controlled_ && controlled_->controller == device) {
         release();
+    }
+    if (incoming_ && incoming_->source == device) {
+        end_incoming(false);
+    }
+    if (outgoing_ && outgoing_->parked && outgoing_->offered_to == device) {
+        abandon_parked();
     }
     next_.on_peer_disconnected(device, reason, bye);
 }
@@ -531,6 +626,8 @@ void Control::on_peer_capabilities(const DeviceId& device,
     if (auto peer = peers_.find(device); peer != peers_.end()) {
         peer->second.accepts_control =
             (capabilities.features & protocol::kFeatureTakesControl) != 0;
+        peer->second.drag_source = (capabilities.features & protocol::kFeatureDragSource) != 0;
+        peer->second.drag_target = (capabilities.features & protocol::kFeatureDragTarget) != 0;
         refresh();
     }
     next_.on_peer_capabilities(device, capabilities);
@@ -593,6 +690,22 @@ void Control::on_transfer_closed(const DeviceId& device, std::uint32_t stream_id
 
 void Control::on_log(mesh::LogLevel level, std::string_view message) {
     next_.on_log(level, message);
+}
+
+void Control::on_transfer_progress(const transfer::TransferProgress& progress) {
+    transfer_observer_.on_transfer_progress(progress);
+}
+
+void Control::on_transfer_finished(const transfer::TransferOutcome& outcome) {
+    transfer_observer_.on_transfer_finished(outcome);
+}
+
+void Control::on_content_received(const transfer::ContentOutcome& outcome) {
+    transfer_observer_.on_content_received(outcome);
+}
+
+void Control::on_send_progress(const transfer::SendProgress& progress) {
+    transfer_observer_.on_send_progress(progress);
 }
 
 } // namespace osdrop::control

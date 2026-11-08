@@ -106,15 +106,24 @@ public:
     virtual void pairing_code(std::uint64_t connection, std::uint32_t code,
                               const osdrop_peer& peer) = 0;
     virtual void pairing_failed(std::uint64_t connection, osdrop_result reason) = 0;
-    virtual void peer_connected(const osdrop_peer& peer) = 0;
+    /// `features`: what the member announces (OSDROP_FEATURE_* bits).
+    virtual void peer_connected(const osdrop_peer& peer, std::uint32_t features) = 0;
     virtual void peer_disconnected(const DeviceIdBytes& device, osdrop_result reason) = 0;
     virtual void peer_responsive(const DeviceIdBytes& device, bool responsive) = 0;
     virtual void stats(const DeviceIdBytes& device, const osdrop_session_stats& stats) = 0;
     virtual void log(osdrop_log_level level, const char* message) = 0;
-    /// Another computer's copy is not on the clipboard; `name` is empty when not known.
+    /// Another computer's copy is not on the clipboard, or its files are now; `name` is empty
+    /// when not known.
     virtual void clipboard_notice(ClipboardNotice notice, const DeviceIdBytes& device,
                                   const std::string& name) = 0;
+    /// Copied files on their way from another computer; nullopt once they no longer are.
+    virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
 };
+
+/// What a PC can do so far: share the clipboard and receive files. Taking control comes with the
+/// input process (DEVPLAN Phase 3), drags with the drag bridge (Phase 4); announcing them earlier
+/// would let a Mac's cursor cross into a PC that cannot follow it.
+inline constexpr std::uint32_t kAvailableFeatures = OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES;
 
 class GroupEngine {
 public:
@@ -123,6 +132,8 @@ public:
         osdrop_random_source random{};
         /// The clipboard to share; none: the clipboard is not shared. Outlives the engine.
         ClipboardHost* clipboard = nullptr;
+        /// What this computer announces to the members (OSDROP_FEATURE_* bits).
+        std::uint32_t features = kAvailableFeatures;
     };
 
     /// Fails with UNSUPPORTED_VERSION for a group stored by a newer Osdrop (it is kept, not
@@ -141,11 +152,16 @@ public:
     // Commands: from any thread, never from inside an EngineEvents callback.
     [[nodiscard]] EngineInfo info() const;
     [[nodiscard]] Expected<std::vector<osdrop_member>, osdrop_result> members() const;
+    [[nodiscard]] Expected<std::vector<osdrop_blocked_device>, osdrop_result> blocked() const;
+    /// Computers nearby that are neither members nor blocked.
     [[nodiscard]] std::vector<NearbyComputer> nearby() const;
     /// Dials a nearby computer to pair; the result identifies the pairing's events.
     [[nodiscard]] Expected<std::uint64_t, osdrop_result> pair(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result confirm_pairing(std::uint64_t connection, bool accepted);
     [[nodiscard]] osdrop_result revoke(const DeviceIdBytes& device);
+    /// As osdrop_mesh_block and osdrop_mesh_unblock.
+    [[nodiscard]] osdrop_result block(const DeviceIdBytes& device);
+    [[nodiscard]] osdrop_result unblock(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result leave_group();
     [[nodiscard]] osdrop_result set_screens(std::span<const osdrop_monitor> monitors);
     /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.

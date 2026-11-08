@@ -8,9 +8,6 @@
 namespace osdrop::win {
 namespace {
 
-constexpr std::uint32_t kAllFeatures = OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_DRAG_SOURCE |
-                                       OSDROP_FEATURE_DRAG_TARGET | OSDROP_FEATURE_CLIPBOARD |
-                                       OSDROP_FEATURE_FILES;
 constexpr std::uint8_t kTransferStreams = 4;
 
 template <std::size_t Size>
@@ -26,6 +23,33 @@ std::vector<std::uint8_t> port_bytes(std::uint16_t port) {
 
 std::uint16_t port_of(const std::vector<std::uint8_t>& bytes) {
     return bytes.size() == 2 ? static_cast<std::uint16_t>(bytes[0] | (bytes[1] << 8U)) : 0;
+}
+
+constexpr int kListAttempts = 8;
+
+/// One of core's lists, counted and then read; read again when it grew in between, because core
+/// keeps working on its own thread and a computer can join after the count.
+template <typename Item, typename Read>
+Expected<std::vector<Item>, osdrop_result> read_list(const Read& read) {
+    using Result = Expected<std::vector<Item>, osdrop_result>;
+    for (int attempt = 0; attempt < kListAttempts; ++attempt) {
+        std::size_t count = 0;
+        const osdrop_result counted = read(nullptr, 0, &count);
+        if (counted != OSDROP_OK && counted != OSDROP_ERROR_BUFFER_TOO_SMALL) {
+            return Result::failure(counted);
+        }
+        std::vector<Item> list(count);
+        const osdrop_result listed = read(list.data(), list.size(), &count);
+        if (listed == OSDROP_ERROR_BUFFER_TOO_SMALL) {
+            continue;
+        }
+        if (listed != OSDROP_OK) {
+            return Result::failure(listed);
+        }
+        list.resize(count);
+        return list;
+    }
+    return Result::failure(OSDROP_ERROR_BUFFER_TOO_SMALL);
 }
 
 } // namespace
@@ -53,7 +77,8 @@ GroupEngine::GroupEngine(Config config, StateStore& store, Discovery& discovery,
             *config_.clipboard,
             [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
                 events_.clipboard_notice(notice, device, name);
-            });
+            },
+            [this](const std::optional<ClipboardFetch>& fetch) { events_.clipboard_fetch(fetch); });
     }
 }
 
@@ -157,7 +182,7 @@ osdrop_result GroupEngine::create_mesh(const std::vector<std::uint8_t>& secret,
                                     .group_state_size = group ? group->size() : 0,
                                     .layout_state = layout ? layout->data() : nullptr,
                                     .layout_state_size = layout ? layout->size() : 0,
-                                    .features = kAllFeatures,
+                                    .features = config_.features,
                                     .max_transfer_streams = kTransferStreams,
                                     .listen_port = port};
     const osdrop_mesh_callbacks mesh_callbacks = callbacks();
@@ -209,14 +234,14 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     result.pairing_failed = [](void* context, std::uint64_t connection, osdrop_result reason) {
         static_cast<GroupEngine*>(context)->events_.pairing_failed(connection, reason);
     };
-    result.peer_connected = [](void* context, const osdrop_peer* peer, std::uint32_t /*features*/) {
+    result.peer_connected = [](void* context, const osdrop_peer* peer, std::uint32_t features) {
         auto* engine = static_cast<GroupEngine*>(context);
         if (engine->clipboard_) {
             engine->clipboard_->peer_connected(
                 bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(peer->device_id)),
                 std::string(std::data(peer->name)));
         }
-        engine->events_.peer_connected(*peer);
+        engine->events_.peer_connected(*peer, features);
         engine->events_.group_changed();
         engine->events_.nearby_changed();
     };
@@ -270,6 +295,12 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
                 paths.emplace_back(item);
             }
             engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
+        }
+    };
+    result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_ && progress != nullptr) {
+            engine->clipboard_->transfer_progress(progress->transfer_id, progress->bytes_done);
         }
     };
     return result;
@@ -359,26 +390,29 @@ EngineInfo GroupEngine::info() const {
 }
 
 Expected<std::vector<osdrop_member>, osdrop_result> GroupEngine::members() const {
-    using Result = Expected<std::vector<osdrop_member>, osdrop_result>;
-    std::size_t count = 0;
-    const osdrop_result counted = osdrop_mesh_members(mesh_, nullptr, 0, &count);
-    if (counted != OSDROP_OK && counted != OSDROP_ERROR_BUFFER_TOO_SMALL) {
-        return Result::failure(counted);
-    }
-    std::vector<osdrop_member> list(count);
-    if (const osdrop_result listed = osdrop_mesh_members(mesh_, list.data(), list.size(), &count);
-        listed != OSDROP_OK) {
-        return Result::failure(listed);
-    }
-    list.resize(count);
-    return list;
+    return read_list<osdrop_member>(
+        [this](osdrop_member* out, std::size_t capacity, std::size_t* count) {
+            return osdrop_mesh_members(mesh_, out, capacity, count);
+        });
+}
+
+Expected<std::vector<osdrop_blocked_device>, osdrop_result> GroupEngine::blocked() const {
+    return read_list<osdrop_blocked_device>(
+        [this](osdrop_blocked_device* out, std::size_t capacity, std::size_t* count) {
+            return osdrop_mesh_blocked(mesh_, out, capacity, count);
+        });
 }
 
 std::vector<NearbyComputer> GroupEngine::nearby() const {
-    std::set<DeviceIdBytes> member_ids;
+    std::set<DeviceIdBytes> member_ids; // members and blocked computers are not offered
     if (const auto list = members()) {
         for (const osdrop_member& member : list.value()) {
             member_ids.insert(bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(member.device_id)));
+        }
+    }
+    if (const auto list = blocked()) {
+        for (const osdrop_blocked_device& device : list.value()) {
+            member_ids.insert(bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(device.device_id)));
         }
     }
     std::vector<NearbyComputer> result;
@@ -433,6 +467,14 @@ osdrop_result GroupEngine::confirm_pairing(std::uint64_t connection, bool accept
 
 osdrop_result GroupEngine::revoke(const DeviceIdBytes& device) {
     return osdrop_mesh_revoke(mesh_, device.data());
+}
+
+osdrop_result GroupEngine::block(const DeviceIdBytes& device) {
+    return osdrop_mesh_block(mesh_, device.data()); // group_changed and nearby_changed follow
+}
+
+osdrop_result GroupEngine::unblock(const DeviceIdBytes& device) {
+    return osdrop_mesh_unblock(mesh_, device.data());
 }
 
 osdrop_result GroupEngine::leave_group() {

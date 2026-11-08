@@ -3,10 +3,11 @@
 // The shared clipboard on the PC (DEVPLAN, Phase 15), free of Windows headers. A copy on this PC
 // is reported to core while a member is connected; a copy on another computer is fetched in the
 // background within limits and written to the clipboard as real data once everything arrived, so
-// a paste never waits on the network (user decision, as on the Mac). The Win32 clipboard sits
-// behind ClipboardHost (windows/engine). All of the sync's work runs on the host's clipboard
-// thread: core's callbacks only post to it, so results are always handled after their request
-// returned.
+// a paste never waits on the network (user decision, as on the Mac). Until then the clipboard
+// keeps what it had, so copied files on their way report their progress and when they are ready.
+// The Win32 clipboard sits behind ClipboardHost (windows/engine). All of the sync's work runs on
+// the host's clipboard thread: core's callbacks only post to it, so results are always handled
+// after their request returned.
 
 #include <osdrop/osdrop.h>
 
@@ -35,6 +36,28 @@ struct ClipData {
     bool operator==(const ClipData&) const = default;
 };
 
+/// What makes two copies on this PC the same: each content's format, size and hash, and each
+/// file's path, size and modification time. Copying the same thing again is not offered again.
+struct CopySignature {
+    struct Content {
+        osdrop_clipboard_format format = OSDROP_CLIPBOARD_TEXT;
+        std::size_t size = 0;
+        std::size_t hash = 0;
+        bool operator==(const Content&) const = default;
+    };
+    struct File {
+        std::string path;
+        std::uintmax_t size = 0;
+        std::int64_t modified = 0; ///< file clock ticks; 0 when unknown
+        bool operator==(const File&) const = default;
+    };
+    std::vector<Content> contents;
+    std::vector<File> files;
+    bool operator==(const CopySignature&) const = default;
+
+    [[nodiscard]] static CopySignature of(const ClipData& data);
+};
+
 /// The largest copy of each kind moved through the clipboard.
 struct ClipboardLimits {
     std::uint64_t text = std::uint64_t{16} * 1024 * 1024;
@@ -44,10 +67,20 @@ struct ClipboardLimits {
     [[nodiscard]] std::uint64_t limit(osdrop_clipboard_format format) const;
 };
 
-/// Why another computer's copy is not on the clipboard.
+/// Another computer's copy: why it is not on the clipboard, or that its files are.
 enum class ClipboardNotice : std::uint8_t {
     Unavailable, ///< nothing of it could be fetched
     TooLarge,    ///< larger than the limits; drag and drop moves it
+    Ready,       ///< its files arrived and can be pasted
+};
+
+/// Copied files on their way from another computer.
+struct ClipboardFetch {
+    ClipDevice device{};
+    std::string name; ///< of the computer; empty when not known
+    std::uint64_t bytes_done = 0;
+    std::uint64_t bytes_total = 0;
+    bool operator==(const ClipboardFetch&) const = default;
 };
 
 /// The Win32 clipboard, as the sync uses it.
@@ -74,6 +107,7 @@ public:
     virtual osdrop_result receive(const ClipDevice& device, const osdrop_object_ref& item,
                                   const std::string& folder, std::uint64_t max_bytes,
                                   std::uint64_t& id) = 0;
+    virtual void cancel(std::uint64_t id) = 0;
 };
 
 /// ClipboardMesh over the C API.
@@ -86,6 +120,7 @@ public:
     osdrop_result receive(const ClipDevice& device, const osdrop_object_ref& item,
                           const std::string& folder, std::uint64_t max_bytes,
                           std::uint64_t& id) override;
+    void cancel(std::uint64_t id) override;
 
 private:
     osdrop_mesh* mesh_;
@@ -95,8 +130,12 @@ class ClipboardSync {
 public:
     using Notify = std::function<void(ClipboardNotice notice, const ClipDevice& device,
                                       const std::string& name)>;
+    /// Copied files on their way; nullopt once they are no longer (arrived, failed, cancelled,
+    /// replaced by a newer copy).
+    using Progress = std::function<void(const std::optional<ClipboardFetch>& fetch)>;
 
-    ClipboardSync(ClipboardHost& host, Notify notify, ClipboardLimits limits = {});
+    ClipboardSync(ClipboardHost& host, Notify notify, Progress progress = {},
+                  ClipboardLimits limits = {});
     ~ClipboardSync() = default;
     ClipboardSync(const ClipboardSync&) = delete;
     ClipboardSync& operator=(const ClipboardSync&) = delete;
@@ -110,6 +149,9 @@ public:
     // --- On the clipboard thread ---
     /// A copy on this PC, already checked for concealed data.
     void copied(ClipData data);
+    /// Stops fetching copied files; the clipboard keeps what it had. Posts to the clipboard
+    /// thread.
+    void cancel_fetch();
 
     // --- From core's callbacks: they post to the clipboard thread ---
     void peer_connected(const ClipDevice& device, std::string name);
@@ -119,6 +161,7 @@ public:
     void content_received(std::uint64_t id, osdrop_result result,
                           std::vector<std::uint8_t> content);
     void transfer_finished(std::uint64_t id, osdrop_result result, std::vector<std::string> items);
+    void transfer_progress(std::uint64_t id, std::uint64_t bytes_done);
 
 private:
     struct Incoming {
@@ -130,6 +173,7 @@ private:
         ClipData received;
         std::optional<std::string> folder;
         bool too_large = false;
+        std::optional<ClipboardFetch> fetch; ///< its files, while they come
     };
 
     void begin(const ClipDevice& device, std::uint64_t clip_id,
@@ -138,15 +182,20 @@ private:
     void settle(std::uint64_t id, osdrop_result result, std::vector<std::uint8_t> content,
                 std::vector<std::string> items);
     void finish();
+    /// Drops the copy being fetched, telling that its files no longer come.
+    void drop_incoming();
     [[nodiscard]] std::string name_of(const ClipDevice& device) const;
 
     ClipboardHost& host_;
     Notify notify_;
+    Progress progress_;
     ClipboardLimits limits_;
     ClipboardMesh* mesh_ = nullptr;
     // On the clipboard thread only:
     std::map<ClipDevice, std::string> connected_;
     std::optional<Incoming> incoming_;
+    /// What this PC last offered, while no other computer's copy came after it.
+    std::optional<CopySignature> last_offered_;
 };
 
 } // namespace osdrop::win

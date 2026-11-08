@@ -14,11 +14,39 @@ protocol ControlDriving: Sendable {
     func setInputSettings(_ settings: InputSettings)
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID)
     func setCapsLock(_ on: Bool)
+    /// A drag began on this Mac with these files and folders (none: nothing can travel), or the
+    /// files of a wanted drag of promised files arrived. Its drag ID; nil without one.
+    @discardableResult
+    func dragStarted(_ files: [DraggedFile]) -> UInt32?
+    /// A drag of promised files began on this Mac.
+    func dragPromised()
+    func dragStopped()
+    /// A drag that came from another computer ended here.
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome)
+}
+
+/// Follows a transfer by its ID without the main thread (CoreBridge's `TransferWatch`).
+protocol TransferFollowing: Sendable {
+    func watch(
+        _ id: UInt64, progress: @escaping @Sendable (TransferProgress) -> Void,
+        finished: @escaping @Sendable (Result<ReceivedItem, CoreError>) -> Void)
+}
+
+extension TransferWatch: TransferFollowing {}
+
+/// Fetching items other members offer.
+protocol TransferDriving: Sendable {
+    var transferWatch: any TransferFollowing { get }
+    func receive(
+        _ item: TransferItem, from device: DeviceID, into folder: URL, maxBytes: UInt64
+    )
+        async throws(CoreError) -> UInt64
+    func cancelTransfer(_ id: UInt64) async
 }
 
 /// The mesh as the app drives it. Core's commands wait for its I/O thread, so the real one runs
 /// them on an actor, off the main thread.
-protocol MeshDriving: ControlDriving {
+protocol MeshDriving: ControlDriving, TransferDriving {
     var events: AsyncStream<MeshEvent> { get }
     var deviceID: DeviceID { get }
     var listenPort: UInt16 { get }
@@ -31,12 +59,14 @@ protocol MeshDriving: ControlDriving {
     func members() async throws(CoreError) -> [GroupMember]
     func revoke(_ device: DeviceID) async throws(CoreError)
     func leaveGroup() async throws(CoreError)
+    func block(_ device: DeviceID) async throws(CoreError)
+    func unblock(_ device: DeviceID) async throws(CoreError)
+    func blocked() async throws(CoreError) -> [BlockedDevice]
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError)
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError)
     func layout() async throws(CoreError) -> [LayoutComputer]
     func setLayout(_ placements: [Placement]) async throws(CoreError)
     func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError)
-    func cancelTransfer(_ id: UInt64) async
     /// Returns at once: core queues the Byes, also while the app is quitting.
     func closeAll(sleeping: Bool)
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64
@@ -44,15 +74,12 @@ protocol MeshDriving: ControlDriving {
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
     ) async throws(CoreError)
         -> UInt64
-    func receive(
-        _ item: TransferItem, from device: DeviceID, into folder: URL, maxBytes: UInt64
-    )
-        async throws(CoreError) -> UInt64
 }
 
 actor CoreMesh: MeshDriving {
     nonisolated let events: AsyncStream<MeshEvent>
     nonisolated let control: AsyncStream<ControlEvent>
+    nonisolated let transferWatch: any TransferFollowing
     nonisolated let deviceID: DeviceID
     nonisolated let listenPort: UInt16
     private let mesh: Mesh
@@ -62,6 +89,7 @@ actor CoreMesh: MeshDriving {
         self.mesh = mesh
         events = mesh.events
         control = mesh.control
+        transferWatch = mesh.transfers
         deviceID = mesh.deviceID
         listenPort = mesh.listenPort
     }
@@ -85,6 +113,12 @@ actor CoreMesh: MeshDriving {
     func revoke(_ device: DeviceID) throws(CoreError) { try mesh.revoke(device) }
 
     func leaveGroup() throws(CoreError) { try mesh.leaveGroup() }
+
+    func block(_ device: DeviceID) throws(CoreError) { try mesh.block(device) }
+
+    func unblock(_ device: DeviceID) throws(CoreError) { try mesh.unblock(device) }
+
+    func blocked() throws(CoreError) -> [BlockedDevice] { try mesh.blocked() }
 
     func setScreens(_ monitors: [ScreenMonitor]) throws(CoreError) { try mesh.setScreens(monitors) }
 
@@ -136,6 +170,28 @@ actor CoreMesh: MeshDriving {
 
     nonisolated func setCapsLock(_ on: Bool) {
         report { () throws(CoreError) in try mesh.setCapsLock(on) }
+    }
+
+    nonisolated func dragStarted(_ files: [DraggedFile]) -> UInt32? {
+        do throws(CoreError) {
+            let dragID = try mesh.dragStarted(files)
+            return dragID == 0 ? nil : dragID
+        } catch {
+            Log.input.error("Reporting a drag failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    nonisolated func dragPromised() {
+        report { () throws(CoreError) in try mesh.dragPromised() }
+    }
+
+    nonisolated func dragStopped() {
+        report { () throws(CoreError) in try mesh.dragStopped() }
+    }
+
+    nonisolated func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) {
+        report { () throws(CoreError) in try mesh.dropFinished(dragID, outcome) }
     }
 
     private nonisolated func report(_ command: () throws(CoreError) -> Void) {

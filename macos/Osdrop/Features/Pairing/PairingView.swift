@@ -23,6 +23,7 @@ struct PairingView: View {
                     .foregroundStyle(Theme.Colors.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
+                    Button("pairing.block", role: .destructive) { controller.blockPairing() }
                     Spacer()
                     Button("pairing.reject") { controller.answerPairing(accepted: false) }
                         .keyboardShortcut(.cancelAction)
@@ -87,6 +88,7 @@ extension PairingFailure {
         case .busy: "pairing.failed.busy"
         case .groupFull: "pairing.failed.groupFull"
         case .inAnotherGroup: "pairing.failed.inAnotherGroup"
+        case .refused: "pairing.failed.refused"
         case .timedOut: "pairing.failed.timedOut"
         case .unreachable: "pairing.failed.unreachable"
         }

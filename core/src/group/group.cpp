@@ -71,22 +71,34 @@ std::vector<MemberStatus> Group::members() const {
     return list;
 }
 
+std::vector<BlockedDevice> Group::blocked() const {
+    std::vector<BlockedDevice> list;
+    for (const auto& [device, block] : state_.roster.blocks()) {
+        if (block.blocked) {
+            list.push_back({.device_id = device, .platform = block.platform, .name = block.name});
+        }
+    }
+    return list;
+}
+
 // --- Trust ---------------------------------------------------------------------------------------
 
 TrustVerdict Group::on_trust_query(const crypto::Key& peer_key, const protocol::Hello& hello) {
     const DeviceId device = crypto::device_id(peer_key);
+    if (state_.roster.is_blocked(device)) {
+        return {.decision = TrustDecision::Blocked, .refusal = Error::NotTrusted};
+    }
     if (const auto member = state_.roster.member(device)) {
         return {.decision = TrustDecision::Trusted,
                 .refusal = Error::NotTrusted,
                 .features = offered_features(state_.permissions_for(device))};
     }
-    if (state_.roster.pairings().contains(device)) {
-        return {.decision = TrustDecision::Blocked, .refusal = Error::NotTrusted};
-    }
+    // A removed computer that has left the group pairs again like any other, with a code; its
+    // new pairing gets an epoch above its revocation.
     const bool peer_in_group = !protocol::is_zero(hello.group_id);
     if (state_.in_group() && peer_in_group) {
-        // Another group, or a new member this computer has not heard of yet: the mesh dials it
-        // again once a roster from a member names it.
+        // Another group, a removed member that has not heard of it, or a new member this computer
+        // has not heard of yet: the mesh dials it again once a roster from a member names it.
         return {.decision = TrustDecision::Blocked,
                 .refusal =
                     hello.group_id == state_.group_id ? Error::NotTrusted : Error::InAnotherGroup};
@@ -104,13 +116,16 @@ TrustVerdict Group::on_trust_query(const crypto::Key& peer_key, const protocol::
 
 void Group::on_pairing_code(mesh::ConnectionId connection, std::uint32_t code,
                             const crypto::Key& peer_key, const protocol::Hello& hello) {
-    pairing_prompts_[connection] = crypto::device_id(peer_key);
+    pairing_prompts_[connection] = Prompt{.device = crypto::device_id(peer_key),
+                                          .platform = hello.platform,
+                                          .name = hello.device_name};
     observer_.on_pairing_code(connection, code, peer_key, hello);
 }
 
 void Group::on_paired(const crypto::Key& peer_key, const protocol::Hello& hello) {
     const DeviceId device = crypto::device_id(peer_key);
-    std::erase_if(pairing_prompts_, [&](const auto& entry) { return entry.second == device; });
+    std::erase_if(pairing_prompts_,
+                  [&](const auto& entry) { return entry.second.device == device; });
     joining_[device] = Joining{.key = peer_key, .hello = hello};
     log(LogLevel::Info, "Paired with " + hello.device_name);
 }
@@ -237,7 +252,10 @@ void Group::adopt(const DeviceId& device, const protocol::RosterState& message) 
         return;
     }
     state_.group_id = message.group_id;
-    state_.roster = incoming.value();
+    Roster roster = incoming.value();
+    // This computer's blocks join the group with it; the computer it joined learns them too.
+    const bool own_blocks = roster.merge(state_.roster.blocks_without(self_));
+    state_.roster = std::move(roster);
     joining_.erase(device);
     if (mesh_ != nullptr) {
         mesh_->defer([group = state_.group_id](mesh::Mesh& mesh, TimePoint now) {
@@ -245,7 +263,7 @@ void Group::adopt(const DeviceId& device, const protocol::RosterState& message) 
         });
     }
     log(LogLevel::Info, "Joined a group");
-    roster_changed(device);
+    roster_changed(own_blocks ? std::nullopt : std::optional(device));
     for (const auto& [peer, session] : sessions_) {
         announce(peer);
     }
@@ -278,7 +296,9 @@ void Group::roster_changed(std::optional<DeviceId> from) {
 }
 
 void Group::clear(std::optional<Error> reason, protocol::ByeReason bye) {
+    Roster blocks = state_.roster.blocks_without(self_); // they keep protecting this computer
     state_ = GroupState{};
+    state_.roster = std::move(blocks);
     joining_.clear();
     if (mesh_ != nullptr) {
         mesh_->defer([bye](mesh::Mesh& mesh, TimePoint now) {
@@ -304,6 +324,67 @@ Status<Error> Group::revoke(const DeviceId& device, TimePoint now) {
     state_.permissions.erase(device);
     log(LogLevel::Info, "Revoked " + member->name);
     roster_changed(std::nullopt); // tells the others and disconnects it with Bye 6
+    if (mesh_ != nullptr) {
+        mesh_->flush(now);
+    }
+    return Status<Error>::ok();
+}
+
+Status<Error> Group::block(const DeviceId& device, TimePoint now) {
+    if (device == self_) {
+        return Status<Error>::failure(Error::InvalidArgument);
+    }
+    if (state_.roster.is_blocked(device)) {
+        return Status<Error>::ok();
+    }
+    std::optional<std::pair<protocol::Platform, std::string>> known;
+    if (const auto pairing = state_.roster.pairings().find(device);
+        pairing != state_.roster.pairings().end()) {
+        known.emplace(pairing->second.platform, pairing->second.name);
+    } else if (const auto old = state_.roster.blocks().find(device);
+               old != state_.roster.blocks().end()) {
+        known.emplace(old->second.platform, old->second.name);
+    }
+    std::vector<mesh::ConnectionId> prompts;
+    for (const auto& [connection, prompt] : pairing_prompts_) {
+        if (prompt.device == device) {
+            prompts.push_back(connection);
+            if (!known) {
+                known.emplace(prompt.platform, prompt.name);
+            }
+        }
+    }
+    if (!known) {
+        return Status<Error>::failure(Error::InvalidArgument); // nothing names it here
+    }
+    for (const mesh::ConnectionId connection : prompts) {
+        pairing_prompts_.erase(connection);
+        if (mesh_ != nullptr) {
+            mesh_->defer([connection](mesh::Mesh& mesh, TimePoint at) {
+                static_cast<void>(mesh.confirm_pairing(connection, false, at)); // gone: fine
+            });
+        }
+    }
+    if (const auto member = state_.roster.member(device)) {
+        state_.roster.revoke(device, member->epoch);
+    }
+    state_.permissions.erase(device);
+    state_.roster.block(device, known->first, known->second);
+    log(LogLevel::Info, "Blocked " + known->second);
+    roster_changed(std::nullopt); // tells the others and disconnects it with Bye 6
+    if (mesh_ != nullptr) {
+        mesh_->flush(now);
+    }
+    return Status<Error>::ok();
+}
+
+Status<Error> Group::unblock(const DeviceId& device, TimePoint now) {
+    if (!state_.roster.is_blocked(device)) {
+        return Status<Error>::failure(Error::InvalidArgument);
+    }
+    state_.roster.unblock(device);
+    log(LogLevel::Info, "Unblocked " + state_.roster.blocks().at(device).name);
+    roster_changed(std::nullopt);
     if (mesh_ != nullptr) {
         mesh_->flush(now);
     }
@@ -383,7 +464,13 @@ bool Group::admits(const DeviceId& device, const protocol::ControlMessage& messa
             [&](const protocol::ButtonEvent& /*m*/) { return permissions.control; },
             [&](const protocol::ScrollEvent& /*m*/) { return permissions.control; },
             [&](const protocol::ReleaseAll& /*m*/) { return permissions.control; },
-            [&](const protocol::DragOffer& m) { return m.probe_id != 0 || permissions.files; },
+            [&](const protocol::DragOffer& m) {
+                // A forwarded offer brings files from its source, which may be a third member.
+                const bool source_sends =
+                    m.source == self_ ||
+                    (state_.roster.is_member(m.source) && state_.permissions_for(m.source).files);
+                return m.probe_id != 0 || (permissions.files && source_sends);
+            },
             [&](const protocol::ClipboardAnnounce& /*m*/) { return permissions.clipboard; },
             [&](const auto& /*other*/) { return true; },
         },

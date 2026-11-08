@@ -10,15 +10,30 @@ enum ClipboardNotice: Equatable {
     case tooLarge(name: String)
 }
 
+/// Files copied on another computer while they come to this Mac.
+struct ClipboardFetch: Equatable {
+    let name: String
+    var bytesDone: UInt64
+    let bytesTotal: UInt64
+
+    var fraction: Double {
+        bytesTotal == 0 ? 0 : min(Double(bytesDone) / Double(bytesTotal), 1)
+    }
+}
+
 /// The shared clipboard on this Mac (DEVPLAN, Phase 15). A copy here is read from the pasteboard
 /// and reported to core, which announces it to the members; concealed copies (passwords) never
 /// leave. A copy on another computer is fetched in the background, within limits, and written to
 /// the pasteboard as real data once everything has arrived, so a paste never waits on the network
-/// (DECISIONS.md: macOS asks for lazily provided data at once).
+/// (DECISIONS.md: macOS asks for lazily provided data at once). Until then the pasteboard keeps
+/// what it had, so files being fetched show their progress, and a notification tells when they
+/// can be pasted.
 @MainActor
 @Observable
 final class ClipboardController {
     private(set) var notice: ClipboardNotice?
+    /// Copied files on their way here; nil when none.
+    private(set) var fetching: ClipboardFetch?
 
     private let mesh: any MeshDriving
     private let pasteboard: any PasteboardAccess
@@ -31,6 +46,7 @@ final class ClipboardController {
     /// The user's switch in Settings and the menu.
     private let isEnabled: @MainActor () -> Bool
     private let nameOf: @MainActor (DeviceID) -> String
+    private let notifier: (any TransferNotifying)?
 
     private var seenChange: Int
     private var ownChange: Int?
@@ -40,6 +56,9 @@ final class ClipboardController {
     private var incoming: Incoming?
     /// This Mac's newest copy as core offers it, to withdraw when sharing is turned off.
     private var offeredClip: UInt64?
+    /// What this Mac last offered, while no other computer's copy came after it: the same copy
+    /// again is not offered again, so the others fetch nothing again.
+    private var lastOffered: CopySignature?
     private var wasEnabled = true
     /// Results that arrived before their request returned its ID.
     private var early: [UInt64: Result<Fetched, CoreError>] = [:]
@@ -69,7 +88,8 @@ final class ClipboardController {
         converter: any ImageConverting, limits: @escaping @MainActor () -> ClipboardLimits = { .standard },
         marksFiles: @escaping @MainActor () -> Bool = { false },
         isEnabled: @escaping @MainActor () -> Bool = { true },
-        isShared: @escaping @MainActor () -> Bool, nameOf: @escaping @MainActor (DeviceID) -> String
+        isShared: @escaping @MainActor () -> Bool, nameOf: @escaping @MainActor (DeviceID) -> String,
+        notifier: (any TransferNotifying)? = nil
     ) {
         self.mesh = mesh
         self.pasteboard = pasteboard
@@ -80,6 +100,7 @@ final class ClipboardController {
         self.isEnabled = isEnabled
         self.isShared = isShared
         self.nameOf = nameOf
+        self.notifier = notifier
         seenChange = pasteboard.changeCount
     }
 
@@ -104,6 +125,19 @@ final class ClipboardController {
         notice = nil
     }
 
+    /// Stops fetching the copied files; the pasteboard keeps what it had.
+    func cancelFetch() {
+        guard let copy = incoming, fetching != nil else { return }
+        incoming = nil
+        fetching = nil
+        let requests = Array(copy.pending.keys)
+        Task { [mesh] in
+            for id in requests {
+                await mesh.cancelTransfer(id)
+            }
+        }
+    }
+
     // MARK: - Copies on this Mac
 
     /// Looks for a new copy on the pasteboard; the polling task calls it.
@@ -123,7 +157,14 @@ final class ClipboardController {
         }
         let limits = currentLimits()
         guard let copy = LocalCopy(pasteboard.read(), limits: limits) else { return }
+        let signature = CopySignature(copy)
+        guard signature != lastOffered else {
+            Log.clipboard.info("The same copy again: the others have it already")
+            return
+        }
+        lastOffered = signature
         incoming = nil  // this copy is newer than the one being fetched
+        fetching = nil
         let previous = reporting
         reporting = Task { [mesh, converter, limits] in
             await previous?.value
@@ -140,6 +181,7 @@ final class ClipboardController {
                 await MainActor.run { [weak self] in self?.offeredClip = clip }
             } catch {
                 Log.clipboard.error("Reporting a copy failed: \(String(describing: error), privacy: .public)")
+                await MainActor.run { [weak self] in self?.lastOffered = nil }
             }
         }
     }
@@ -147,6 +189,7 @@ final class ClipboardController {
     /// Sharing turned off: this Mac's copy can no longer be fetched, and another computer's copy
     /// being fetched is dropped.
     private func stopSharing() {
+        lastOffered = nil
         if let clip = offeredClip {
             offeredClip = nil
             Task { [mesh] in
@@ -159,6 +202,7 @@ final class ClipboardController {
         }
         if let copy = incoming {
             incoming = nil
+            fetching = nil
             let requests = Array(copy.pending.keys)
             Task { [mesh] in
                 for id in requests {
@@ -176,11 +220,16 @@ final class ClipboardController {
         switch event {
         case .clipboardChanged(let device, let clipID, let formats):
             guard isShared() else { return }  // sharing turned off in Settings
+            lastOffered = nil  // a copy here, even the same one, is newer than this
             begin(device: device, clipID: clipID, formats: formats)
         case .contentReceived(let id, let result):
             settle(id, result.map { .content($0) })
         case .transferFinished(let id, let result):
             settle(id, result.map { .files($0.items) })
+        case .transferProgress(let progress):
+            if fetching != nil, incoming?.pending[progress.id] == .files {
+                fetching?.bytesDone = progress.bytesDone
+            }
         default:
             break
         }
@@ -189,6 +238,7 @@ final class ClipboardController {
     private func begin(device: DeviceID, clipID: UInt64, formats: [AnnouncedFormat]) {
         var copy = Incoming(clipID: clipID, device: device)
         early.removeAll()
+        fetching = nil
         var wanted: [AnnouncedFormat] = []
         for format in formats {
             if format.byteCount > currentLimits().limit(for: format.format) {
@@ -209,9 +259,12 @@ final class ClipboardController {
         incoming = copy
         guard !wanted.isEmpty else {
             if copy.tooLarge {
-                notice = .tooLarge(name: nameOf(device))
+                set(.tooLarge(name: nameOf(device)))
             }
             return
+        }
+        if let files = wanted.first(where: { $0.format == .files }) {
+            fetching = ClipboardFetch(name: nameOf(device), bytesDone: 0, bytesTotal: files.byteCount)
         }
         for format in wanted {
             request(format.format, of: copy)
@@ -282,9 +335,10 @@ final class ClipboardController {
         guard let copy = incoming, copy.isComplete else { return }
         guard !copy.received.isEmpty || !copy.files.isEmpty else {
             incoming = nil
+            fetching = nil
             staging.removeAll()
             let name = nameOf(copy.device)
-            notice = copy.tooLarge ? .tooLarge(name: name) : .unavailable(name: name)
+            set(copy.tooLarge ? .tooLarge(name: name) : .unavailable(name: name))
             return
         }
         Task { [weak self, converter] in
@@ -307,6 +361,24 @@ final class ClipboardController {
         ownChange = change
         seenChange = change
         staging.removeAll(except: copy.files.isEmpty ? nil : copy.folder)
-        notice = copy.tooLarge ? .tooLarge(name: nameOf(copy.device)) : nil
+        fetching = nil
+        set(copy.tooLarge ? .tooLarge(name: nameOf(copy.device)) : nil)
+        if !copy.files.isEmpty {
+            notifier?.notify(
+                title: String(localized: "clipboard.ready.title"),
+                body: String(localized: "clipboard.ready \(nameOf(copy.device))"))
+        }
+    }
+
+    /// Shows a notice in the menu and as a notification.
+    private func set(_ notice: ClipboardNotice?) {
+        self.notice = notice
+        let body: String
+        switch notice {
+        case .unavailable(let name): body = String(localized: "clipboard.unavailable \(name)")
+        case .tooLarge(let name): body = String(localized: "clipboard.tooLarge \(name)")
+        case nil: return
+        }
+        notifier?.notify(title: String(localized: "clipboard.notice.title"), body: body)
     }
 }

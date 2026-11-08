@@ -57,6 +57,26 @@ enum Tunables {
         /// How long a capture waits for the source app to write promised files. Photos may first
         /// download originals from iCloud.
         static let promiseTimeout: Duration = .seconds(120)
+        /// A drag from another computer: the window it starts from shows for this long before the
+        /// press reaches it, and the drag is given up when it has not begun this long after.
+        static let pressDelay: Duration = .milliseconds(50)
+        static let beginTimeout: Duration = .seconds(1)
+        /// This Mac's drag waiting at the edge: the drop target under it shows for this long
+        /// before the release, and stays this long after.
+        static let releaseSettle: Duration = .milliseconds(50)
+        static let releaseHold: Duration = .seconds(1)
+        /// Promised files taken at the edge stay staged for this many later drags: core keeps
+        /// offering dropped drags until 16 newer ones were dropped.
+        static let keptStagings = 16
+    }
+
+    enum Transfers {
+        /// Ended transfers the menu still shows, newest first.
+        static let endedRows = 5
+        /// This Mac's drags whose item names are kept for the transfers that fetch them.
+        static let rememberedDrags = 32
+        /// Ends of transfers kept until the transfer is registered.
+        static let earlyEnds = 64
     }
 
     enum Logs {

@@ -7,6 +7,9 @@ internal sealed record EngineInfo(string DeviceId, string? GroupId, ushort Liste
 
 internal sealed record GroupMember(string DeviceId, string Name, Platform Platform, bool IsSelf, bool IsConnected);
 
+/// <summary>A computer no member pairs with until one unblocks it.</summary>
+internal sealed record BlockedComputer(string DeviceId, string Name, Platform Platform);
+
 internal sealed record NearbyComputer(
     string DeviceId, string Name, Platform Platform, bool InAnotherGroup, bool NeedsUpdate);
 
@@ -24,7 +27,9 @@ internal sealed record EngineEvent(
     bool Responsive = false,
     SessionStats? Stats = null,
     LogLevel Level = LogLevel.Info,
-    string Message = "");
+    string Message = "",
+    ulong BytesDone = 0,
+    ulong BytesTotal = 0);
 
 /// <summary>The engine as the view models use it; events arrive on the UI thread.</summary>
 internal interface IGroupEngine
@@ -34,8 +39,14 @@ internal interface IGroupEngine
     Task<EngineInfo?> GetInfoAsync();
     Task<IReadOnlyList<GroupMember>> GetMembersAsync();
     Task<IReadOnlyList<NearbyComputer>> GetNearbyAsync();
+    Task<IReadOnlyList<BlockedComputer>> GetBlockedAsync();
     Task<(CoreResult Result, ulong Connection)> PairAsync(string deviceId);
     Task<CoreResult> ConfirmPairingAsync(ulong connection, bool accepted);
     Task<CoreResult> RevokeAsync(string deviceId);
+    /// <summary>Blocks a computer everywhere in the group: a member is removed, a computer showing its code is refused.</summary>
+    Task<CoreResult> BlockAsync(string deviceId);
+    Task<CoreResult> UnblockAsync(string deviceId);
     Task<CoreResult> LeaveGroupAsync();
+    /// <summary>Stops fetching copied files; the clipboard keeps what it had.</summary>
+    Task CancelClipboardFetchAsync();
 }

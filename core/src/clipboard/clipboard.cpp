@@ -228,4 +228,8 @@ void Clipboard::on_content_received(const transfer::ContentOutcome& outcome) {
     transfer_observer_.on_content_received(outcome);
 }
 
+void Clipboard::on_send_progress(const transfer::SendProgress& progress) {
+    transfer_observer_.on_send_progress(progress);
+}
+
 } // namespace osdrop::clipboard

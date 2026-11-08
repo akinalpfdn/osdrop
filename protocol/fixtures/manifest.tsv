@@ -19,7 +19,8 @@ control/bye_revoked.bin	control	valid	10	Bye: revoked
 control/bye_duplicate.bin	control	valid	10	Bye: duplicate connection
 control/roster_two_members.bin	control	valid	16	two members and a revocation
 control/roster_repaired_member.bin	control	valid	16	the same device at epochs 1 and 2, epoch 1 revoked
-control/roster_largest.bin	control	valid	16	64 members and 255 revocations
+control/roster_blocks.bin	control	valid	16	a member, a removed and blocked device, and an unblocked one
+control/roster_largest.bin	control	valid	16	64 members, 255 revocations and 255 blocks
 control/screen_report_two.bin	control	valid	17	built-in display and an external one on its left
 control/screen_report_mixed_scale.bin	control	valid	17	a PC: a 150% laptop panel and a 100% monitor on its right, in physical pixels
 control/screen_report_bounds.bin	control	valid	17	smallest and largest monitor sizes at the coordinate limits
@@ -43,7 +44,7 @@ control/local_takeover.bin	control	valid	40	LocalTakeover
 control/drag_probe.bin	control	valid	48	DragProbe
 control/drag_offer_none.bin	control	valid	49	no drag in progress
 control/drag_offer_two.bin	control	valid	49	a file and a folder
-control/drag_offer_forwarded.bin	control	valid	49	forwarded to the target, emoji name in NFC
+control/drag_offer_forwarded.bin	control	valid	49	forwarded to the target, emoji name in NFC, started on another computer
 control/drag_offer_nfd_name.bin	control	valid	49	decomposed (NFD) name: decoders do not check the form
 control/drag_offer_max_size.bin	control	valid	49	DragOffer of exactly 65536 bytes
 control/drag_result_dropped.bin	control	valid	50	DragResult dropped
@@ -102,6 +103,13 @@ malformed/roster_duplicate_member.bin	control	error	8	same device and epoch twic
 malformed/roster_revocation_epoch_0.bin	control	error	8	revocation epoch 0
 malformed/roster_duplicate_revocation.bin	control	error	8	same revocation twice
 malformed/roster_revocation_cut.bin	control	error	3	revocation epoch cut short
+malformed/roster_block_version_0.bin	control	error	8	block version 0
+malformed/roster_block_flags.bin	control	error	8	block flags with a reserved bit set
+malformed/roster_block_platform_3.bin	control	error	8	block platform 3
+malformed/roster_block_reserved.bin	control	error	8	block reserved byte is 1
+malformed/roster_block_empty_name.bin	control	error	9	block name empty
+malformed/roster_duplicate_block.bin	control	error	8	two blocks for the same device
+malformed/roster_block_cut.bin	control	error	3	block name cut short
 malformed/screen_none.bin	control	error	8	monitor_count 0
 malformed/screen_17_monitors.bin	control	error	8	monitor_count 17
 malformed/screen_duplicate_key.bin	control	error	8	same key twice
@@ -155,6 +163,8 @@ malformed/drag_probe_id_0.bin	control	error	8	probe_id 0
 malformed/drag_offer_none_with_items.bin	control	error	8	no drag but one item
 malformed/drag_offer_forwarded_none.bin	control	error	8	forwarded offer without a drag
 malformed/drag_offer_no_items.bin	control	error	8	a drag with no items
+malformed/drag_offer_no_source.bin	control	error	8	a drag without its source
+malformed/drag_offer_none_with_source.bin	control	error	8	no drag but a source
 malformed/drag_offer_1025_items.bin	control	error	8	item_count 1025
 malformed/drag_offer_item_count_mismatch.bin	control	error	3	item_count 2, one item
 malformed/drag_offer_kind_3.bin	control	error	8	item kind 3

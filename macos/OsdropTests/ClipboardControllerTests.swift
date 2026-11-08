@@ -1,3 +1,4 @@
+import AppKit
 import CoreBridge
 import Foundation
 import Testing
@@ -24,6 +25,24 @@ struct ClipboardControllerTests {
             ])
         fixture.controller.poll()  // nothing changed
         #expect(fixture.mesh.copies.count == 1)
+    }
+
+    @Test("The same copy again is not offered again, unless another computer's copy came between")
+    func sameCopyOnce() async throws {
+        let fixture = ClipboardFixture()
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.copies.count == 1 }
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.mesh.copies.count == 1, "the others have it already")
+
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 20, formats: [AnnouncedFormat(format: .text, byteCount: 3)]))
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.copies.count == 2 }
     }
 
     @Test("Turning sharing off withdraws this Mac's copy")
@@ -125,6 +144,53 @@ struct ClipboardControllerTests {
         #expect(fixture.pasteboard.written[0].fileURLs == [file])
     }
 
+    @Test("Copied files show their progress until they can be pasted, then a notification tells it")
+    func showsFetchProgress() async throws {
+        let fixture = ClipboardFixture()
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 9, formats: [AnnouncedFormat(format: .files, byteCount: 50)]))
+        #expect(fixture.controller.fetching == ClipboardFetch(name: "PC", bytesDone: 0, bytesTotal: 50))
+        try await waitUntil { fixture.mesh.receives.count == 1 }
+        let receive = fixture.mesh.receives[0]
+        fixture.controller.handle(
+            .transferProgress(
+                TransferProgress(id: receive.id, bytesDone: 20, bytesTotal: 50, filesDone: 0, filesTotal: 1)))
+        #expect(fixture.controller.fetching?.fraction == 0.4)
+        #expect(fixture.notifier.notifications.isEmpty)
+        let file = receive.folder.appending(path: "report.pdf")
+        fixture.controller.handle(
+            .transferFinished(id: receive.id, .success(ReceivedItem(items: [file], skippedLinks: 0))))
+        try await waitUntil { fixture.pasteboard.written.count == 1 }
+        #expect(fixture.controller.fetching == nil)
+        #expect(fixture.notifier.notifications.count == 1)
+    }
+
+    @Test("The window of copied files on their way sits inside the screen's top right corner")
+    func placesTheFetchWindow() {
+        let screen = NSRect(x: 1440, y: -200, width: 1920, height: 1055)
+        let origin = ClipboardFetchPresenter.origin(of: NSSize(width: 300, height: 180), in: screen, margin: 20)
+        #expect(origin == NSPoint(x: 3040, y: 655))
+        let tall = ClipboardFetchPresenter.origin(of: NSSize(width: 300, height: 2000), in: screen, margin: 20)
+        #expect(tall.y == screen.minY, "a window taller than the screen starts at its bottom")
+    }
+
+    @Test("Cancelling copied files on their way keeps the pasteboard as it was, without a notice")
+    func cancelsTheFetch() async throws {
+        let fixture = ClipboardFixture()
+        fixture.controller.handle(
+            .clipboardChanged(Self.pc, clipID: 9, formats: [AnnouncedFormat(format: .files, byteCount: 50)]))
+        try await waitUntil { fixture.mesh.receives.count == 1 }
+        let receive = fixture.mesh.receives[0]
+        fixture.controller.cancelFetch()
+        #expect(fixture.controller.fetching == nil)
+        try await waitUntil { fixture.mesh.cancellations == [receive.id] }
+        fixture.controller.handle(.transferFinished(id: receive.id, .failure(.cancelled)))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.pasteboard.written.isEmpty)
+        #expect(fixture.controller.notice == nil)
+        #expect(fixture.notifier.notifications.isEmpty)
+    }
+
     @Test("A copy too large or out of reach leaves a notice")
     func notices() async throws {
         let fixture = ClipboardFixture()
@@ -132,6 +198,7 @@ struct ClipboardControllerTests {
             .clipboardChanged(Self.pc, clipID: 10, formats: [AnnouncedFormat(format: .files, byteCount: 10_000)]))
         #expect(fixture.controller.notice == .tooLarge(name: "PC"))
         #expect(fixture.mesh.receives.isEmpty)
+        #expect(fixture.notifier.notifications.count == 1, "shown as a notification too")
 
         fixture.controller.handle(
             .clipboardChanged(Self.pc, clipID: 11, formats: [AnnouncedFormat(format: .text, byteCount: 3)]))
@@ -178,6 +245,7 @@ private func makeDeviceID(_ byte: UInt8) -> DeviceID {
 private final class ClipboardFixture {
     let pasteboard = FakePasteboard()
     let mesh = ClipboardMesh()
+    let notifier = FakeNotifier()
     let staging = ClipboardStaging(
         root: FileManager.default.temporaryDirectory.appending(path: "osdrop-clipboard-tests-\(UUID())"))
     var shared = true
@@ -188,7 +256,8 @@ private final class ClipboardFixture {
         weak var box: ClipboardFixture?
         controller = ClipboardController(
             mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: { limits },
-            isEnabled: { box?.enabled ?? false }, isShared: { box?.shared ?? false }, nameOf: { _ in "PC" })
+            isEnabled: { box?.enabled ?? false }, isShared: { box?.shared ?? false }, nameOf: { _ in "PC" },
+            notifier: notifier)
         box = self
     }
 
@@ -225,6 +294,11 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func dragStarted(_ files: [DraggedFile]) -> UInt32? { nil }
+    func dragPromised() {}
+    func dragStopped() {}
+    func dropFinished(_ dragID: UInt32, _ outcome: DropOutcome) {}
+    let transferWatch: any TransferFollowing = NoTransfers()
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {}
     func layout() async throws(CoreError) -> [LayoutComputer] { [] }
     func setLayout(_ placements: [Placement]) async throws(CoreError) {}
@@ -295,6 +369,9 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func members() async throws(CoreError) -> [GroupMember] { [] }
     func revoke(_ device: DeviceID) async throws(CoreError) {}
     func leaveGroup() async throws(CoreError) {}
+    func block(_ device: DeviceID) async throws(CoreError) {}
+    func unblock(_ device: DeviceID) async throws(CoreError) {}
+    func blocked() async throws(CoreError) -> [BlockedDevice] { [] }
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {}
     func closeAll(sleeping: Bool) {}
 }

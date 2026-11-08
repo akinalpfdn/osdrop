@@ -5,6 +5,7 @@ struct OsdropApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     private let dependencies: AppDependencies
     private let pairingWindow: PairingWindowPresenter
+    private let clipboardWindow: ClipboardFetchPresenter
     private let systemEvents: SystemEvents
     private let onboarding: OnboardingWindow
     @State private var settings: SettingsViewModel
@@ -22,6 +23,7 @@ struct OsdropApp: App {
         dependencies.group.start()
         self.dependencies = dependencies
         pairingWindow = PairingWindowPresenter(controller: dependencies.group)
+        clipboardWindow = ClipboardFetchPresenter(group: dependencies.group)
         systemEvents = SystemEvents(group: dependencies.group)
         let onboardingModel = OnboardingViewModel(
             accessibility: dependencies.accessibility, localNetworkCheck: BonjourLocalNetworkCheck(),

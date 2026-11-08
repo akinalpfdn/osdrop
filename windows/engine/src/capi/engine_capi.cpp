@@ -18,6 +18,7 @@
 #include <iterator>
 #include <memory>
 #include <new>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -69,7 +70,9 @@ osdrop_engine_event blank_event(osdrop_engine_event_kind kind) {
             .responsive = 0,
             .name = {},
             .stats = {},
-            .message = nullptr};
+            .message = nullptr,
+            .bytes_done = 0,
+            .bytes_total = 0};
 }
 
 /// Turns engine events into the shell's C callback.
@@ -100,7 +103,7 @@ public:
         event.reason = reason;
         send(event);
     }
-    void peer_connected(const osdrop_peer& peer) override {
+    void peer_connected(const osdrop_peer& peer, std::uint32_t /*features*/) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_PEER_CONNECTED);
         std::ranges::copy(peer.device_id, std::begin(event.device_id));
         copy_name(std::data(peer.name), event.name);
@@ -132,16 +135,38 @@ public:
     }
     void clipboard_notice(win::ClipboardNotice notice, const win::DeviceIdBytes& device,
                           const std::string& name) override {
-        osdrop_engine_event event = blank_event(notice == win::ClipboardNotice::TooLarge
-                                                    ? OSDROP_ENGINE_CLIPBOARD_TOO_LARGE
-                                                    : OSDROP_ENGINE_CLIPBOARD_UNAVAILABLE);
+        osdrop_engine_event event = blank_event(kind_of(notice));
         std::ranges::copy(device, std::begin(event.device_id));
         copy_name(name, event.name);
+        send(event);
+    }
+    void clipboard_fetch(const std::optional<win::ClipboardFetch>& fetch) override {
+        if (!fetch) {
+            send(blank_event(OSDROP_ENGINE_CLIPBOARD_FETCH_ENDED));
+            return;
+        }
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_CLIPBOARD_FETCHING);
+        std::ranges::copy(fetch->device, std::begin(event.device_id));
+        copy_name(fetch->name, event.name);
+        event.bytes_done = fetch->bytes_done;
+        event.bytes_total = fetch->bytes_total;
         send(event);
     }
 
 private:
     void send(const osdrop_engine_event& event) const { callback_(context_, &event); }
+
+    static osdrop_engine_event_kind kind_of(win::ClipboardNotice notice) {
+        switch (notice) {
+        case win::ClipboardNotice::TooLarge:
+            return OSDROP_ENGINE_CLIPBOARD_TOO_LARGE;
+        case win::ClipboardNotice::Ready:
+            return OSDROP_ENGINE_CLIPBOARD_READY;
+        case win::ClipboardNotice::Unavailable:
+            break;
+        }
+        return OSDROP_ENGINE_CLIPBOARD_UNAVAILABLE;
+    }
 
     osdrop_engine_callback callback_;
     void* context_;
@@ -311,6 +336,37 @@ osdrop_result osdrop_engine_revoke(osdrop_engine* engine, const uint8_t* device_
     return engine->group->revoke(read_id(device_id));
 }
 
+osdrop_result osdrop_engine_block(osdrop_engine* engine, const uint8_t* device_id) {
+    if (engine == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    return engine->group->block(read_id(device_id));
+}
+
+osdrop_result osdrop_engine_unblock(osdrop_engine* engine, const uint8_t* device_id) {
+    if (engine == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    return engine->group->unblock(read_id(device_id));
+}
+
+osdrop_result osdrop_engine_blocked(osdrop_engine* engine, osdrop_blocked_device* out,
+                                    size_t capacity, size_t* out_count) {
+    if (engine == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto blocked = engine->group->blocked();
+    if (!blocked) {
+        return blocked.error();
+    }
+    *out_count = blocked.value().size();
+    if (blocked.value().size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    std::ranges::copy(blocked.value(), out);
+    return OSDROP_OK;
+}
+
 osdrop_result osdrop_engine_leave_group(osdrop_engine* engine) {
     if (engine == nullptr) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
@@ -338,6 +394,16 @@ osdrop_result osdrop_engine_resume(osdrop_engine* engine) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->group->resume();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    if (win::ClipboardSync* sync = engine->group->clipboard()) {
+        sync->cancel_fetch();
+    }
     return OSDROP_OK;
 }
 

@@ -111,10 +111,6 @@ CursorUpdate CrossingEngine::motion_away(TimePoint now, Point logical) {
 
 CursorUpdate CrossingEngine::push_against(TimePoint now, std::size_t monitor,
                                           const std::vector<Push>& pushes) {
-    if (locked_) {
-        push_.reset(); // every edge is a wall
-        return here();
-    }
     // At a corner, the edge pushed harder that has a neighbour.
     std::optional<Push> chosen;
     std::optional<Entry> target;
@@ -131,6 +127,12 @@ CursorUpdate CrossingEngine::push_against(TimePoint now, std::size_t monitor,
         push_.reset(); // a wall, or not pushing
         return here();
     }
+    if (locked_) {
+        push_.reset(); // every edge is a wall
+        CursorUpdate update = here();
+        update.walled = target->device;
+        return update;
+    }
     const EdgeContact contact{.device = current_, .monitor = monitor, .edge = chosen->edge};
     if (!push_.push(now, contact, chosen->distance)) {
         CursorUpdate update = here();
@@ -142,7 +144,7 @@ CursorUpdate CrossingEngine::push_against(TimePoint now, std::size_t monitor,
     }
     current_ = target->device;
     position_ = target->position;
-    return {.device = current_, .position = position_, .crossed = true, .push = 0};
+    return {.device = current_, .position = position_, .crossed = true, .push = 0, .walled = {}};
 }
 
 CursorUpdate CrossingEngine::return_home() {
@@ -152,11 +154,11 @@ CursorUpdate CrossingEngine::return_home() {
     current_ = self_;
     position_ = departure_;
     push_.reset();
-    return {.device = current_, .position = position_, .crossed = true, .push = 0};
+    return {.device = current_, .position = position_, .crossed = true, .push = 0, .walled = {}};
 }
 
 CursorUpdate CrossingEngine::here() const {
-    return {.device = current_, .position = position_, .crossed = false, .push = 0};
+    return {.device = current_, .position = position_, .crossed = false, .push = 0, .walled = {}};
 }
 
 } // namespace osdrop::layout

@@ -140,11 +140,19 @@ def revocation(device_id: bytes, epoch: int) -> bytes:
     return device_id + u32(epoch)
 
 
+def block(device_id: bytes, version: int, blocked: bool, platform: int, name: str | bytes, flags: int | None = None,
+          reserved: int = 0) -> bytes:
+    flag_byte = (1 if blocked else 0) if flags is None else flags
+    return device_id + u32(version) + u8(flag_byte) + u8(platform) + u8(reserved) + string(name)
+
+
 def roster(members: list[bytes], revocations: list[bytes] | None = None, group: bytes = GROUP,
-           member_count: int | None = None) -> bytes:
+           member_count: int | None = None, blocks: list[bytes] | None = None) -> bytes:
     revoked = revocations or []
+    blocked = blocks or []
     count = len(members) if member_count is None else member_count
-    return control(0x10, group + u8(count) + u8(len(revoked)) + b"".join(members) + b"".join(revoked))
+    return control(0x10, group + u8(count) + u8(len(revoked)) + u8(len(blocked)) + b"".join(members)
+                   + b"".join(revoked) + b"".join(blocked))
 
 
 def monitor(key: bytes, x: int, y: int, width: int, height: int, pixel_width: int, pixel_height: int,
@@ -203,17 +211,20 @@ PDF = offered_item(1, 482_113, "com.adobe.pdf", "Report.pdf")
 FOLDER = offered_item(2, 3_221_225_472, "public.folder", "Photos 2026")
 
 
-def drag_offer(probe_id: int, drag_id: int, items: list[bytes], count: int | None = None) -> bytes:
-    return control(0x31, u32(probe_id) + u32(drag_id) + u16(len(items) if count is None else count)
+def drag_offer(probe_id: int, drag_id: int, items: list[bytes], count: int | None = None,
+               source: bytes | None = None) -> bytes:
+    if source is None:
+        source = ZERO_ID if drag_id == 0 else MAC_ID
+    return control(0x31, u32(probe_id) + u32(drag_id) + source + u16(len(items) if count is None else count)
                    + b"".join(items))
 
 
 def max_size_drag_offer() -> bytes:
-    """A DragOffer of exactly 65536 bytes: 234 items with 255-byte names and one with a 212-byte name."""
+    """A DragOffer of exactly 65536 bytes: 234 items with 255-byte names and one with a 196-byte name."""
     def item(index: int, name_length: int) -> bytes:
         name = f"{index:04d}" + "n" * (name_length - 4)
         return offered_item(1, index, "public.data", name)
-    items = [item(i, 255) for i in range(234)] + [item(234, 212)]
+    items = [item(i, 255) for i in range(234)] + [item(234, 196)]
     return drag_offer(1, 2, items)
 
 
@@ -232,6 +243,7 @@ def control_fixtures() -> list[Fixture]:
     roster_two = [member(MAC_ID, 1, 1, "MacBook Air"), member(PC_ID, 3, 2, "Akınalp'ın PC")]
     many_members = [member(pattern(i), 1, 1 + i % 2, f"Computer {i:02d} " + "x" * 50) for i in range(64)]
     many_revocations = [revocation(pattern(i + 100), 1 + i) for i in range(255)]
+    many_blocks = [block(pattern(i), 1 + i, i % 2 == 0, 1 + i % 2, f"Blocked {i:03d} " + "x" * 52) for i in range(255)]
     return [
         # Valid: every message type, with boundary values.
         Fixture("control/hello_macos.bin", "control", v, 0x01, "Hello from a Mac in no group", hello()),
@@ -266,8 +278,12 @@ def control_fixtures() -> list[Fixture]:
         Fixture("control/roster_repaired_member.bin", "control", v, 0x10,
                 "the same device at epochs 1 and 2, epoch 1 revoked",
                 roster([member(PC_ID, 1, 2, "PC"), member(PC_ID, 2, 2, "PC")], [revocation(PC_ID, 1)])),
-        Fixture("control/roster_largest.bin", "control", v, 0x10, "64 members and 255 revocations",
-                roster(many_members, many_revocations)),
+        Fixture("control/roster_blocks.bin", "control", v, 0x10,
+                "a member, a removed and blocked device, and an unblocked one",
+                roster([member(MAC_ID, 1, 1, "MacBook Air")], [revocation(PC_ID, 3)],
+                       blocks=[block(PC_ID, 1, True, 2, "Akınalp'ın PC"), block(LAPTOP_ID, 2, False, 1, "Laptop")])),
+        Fixture("control/roster_largest.bin", "control", v, 0x10, "64 members, 255 revocations and 255 blocks",
+                roster(many_members, many_revocations, blocks=many_blocks)),
         Fixture("control/screen_report_two.bin", "control", v, 0x11,
                 "built-in display and an external one on its left",
                 screen_report([built_in(), monitor(pattern(2), -2560 * 16, -240 * 16, 2560 * 16, 1440 * 16,
@@ -316,8 +332,8 @@ def control_fixtures() -> list[Fixture]:
         Fixture("control/drag_offer_two.bin", "control", v, 0x31, "a file and a folder",
                 drag_offer(5, 9, [PDF, FOLDER])),
         Fixture("control/drag_offer_forwarded.bin", "control", v, 0x31,
-                "forwarded to the target, emoji name in NFC", drag_offer(0, 9, [
-                    offered_item(1, 0, "public.png", "Ekran Görüntüsü 🎉.png")])),
+                "forwarded to the target, emoji name in NFC, started on another computer", drag_offer(0, 9, [
+                    offered_item(1, 0, "public.png", "Ekran Görüntüsü 🎉.png")], source=PC_ID)),
         Fixture("control/drag_offer_nfd_name.bin", "control", v, 0x31,
                 "decomposed (NFD) name: decoders do not check the form",
                 drag_offer(5, 9, [offered_item(1, 12, "public.plain-text", nfd)])),
@@ -437,6 +453,21 @@ def control_fixtures() -> list[Fixture]:
                 "same revocation twice", roster(roster_two, [revocation(LAPTOP_ID, 1), revocation(LAPTOP_ID, 1)])),
         Fixture("malformed/roster_revocation_cut.bin", "control", e, TRUNCATED, "revocation epoch cut short",
                 roster(roster_two, [revocation(LAPTOP_ID, 1)])[:-2]),
+        Fixture("malformed/roster_block_version_0.bin", "control", e, VALUE_OUT_OF_RANGE, "block version 0",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 0, True, 1, "Laptop")])),
+        Fixture("malformed/roster_block_flags.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "block flags with a reserved bit set", roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop", flags=3)])),
+        Fixture("malformed/roster_block_platform_3.bin", "control", e, VALUE_OUT_OF_RANGE, "block platform 3",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 3, "Laptop")])),
+        Fixture("malformed/roster_block_reserved.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "block reserved byte is 1", roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop", reserved=1)])),
+        Fixture("malformed/roster_block_empty_name.bin", "control", e, INVALID_STRING, "block name empty",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "")])),
+        Fixture("malformed/roster_duplicate_block.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "two blocks for the same device",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop"), block(LAPTOP_ID, 2, False, 1, "Laptop")])),
+        Fixture("malformed/roster_block_cut.bin", "control", e, TRUNCATED, "block name cut short",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop")])[:-2]),
 
         # ScreenReport.
         Fixture("malformed/screen_none.bin", "control", e, VALUE_OUT_OF_RANGE, "monitor_count 0",
@@ -545,6 +576,10 @@ def control_fixtures() -> list[Fixture]:
                 "forwarded offer without a drag", drag_offer(0, 0, [])),
         Fixture("malformed/drag_offer_no_items.bin", "control", e, VALUE_OUT_OF_RANGE, "a drag with no items",
                 drag_offer(5, 9, [])),
+        Fixture("malformed/drag_offer_no_source.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "a drag without its source", drag_offer(5, 9, [PDF], source=ZERO_ID)),
+        Fixture("malformed/drag_offer_none_with_source.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "no drag but a source", drag_offer(5, 0, [], source=MAC_ID)),
         Fixture("malformed/drag_offer_1025_items.bin", "control", e, VALUE_OUT_OF_RANGE, "item_count 1025",
                 drag_offer(5, 9, [PDF], count=1025)),
         Fixture("malformed/drag_offer_item_count_mismatch.bin", "control", e, TRUNCATED,

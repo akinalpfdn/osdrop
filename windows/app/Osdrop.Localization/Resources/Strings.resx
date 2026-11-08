@@ -159,4 +159,61 @@
   <data name="ClipboardOtherComputer" xml:space="preserve">
     <value>another computer</value>
   </data>
+  <data name="AppName" xml:space="preserve">
+    <value>Osdrop</value>
+  </data>
+  <data name="ClipboardFetching" xml:space="preserve">
+    <value>Copying files from {0}</value>
+  </data>
+  <data name="ClipboardFetchingHint" xml:space="preserve">
+    <value>Paste once this is done; until then a paste gives what was copied before.</value>
+  </data>
+  <data name="ClipboardFetchCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ClipboardFetchBytes" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="ClipboardFetchProgress" xml:space="preserve">
+    <value>Progress</value>
+  </data>
+  <data name="ClipboardReadyTitle" xml:space="preserve">
+    <value>Ready to paste</value>
+  </data>
+  <data name="ClipboardReady" xml:space="preserve">
+    <value>The files copied on {0} can be pasted now.</value>
+  </data>
+  <data name="ClipboardNoticeTitle" xml:space="preserve">
+    <value>Not on the clipboard</value>
+  </data>
+  <data name="UnitBytes" xml:space="preserve">
+    <value>{0} bytes</value>
+  </data>
+  <data name="UnitKilobytes" xml:space="preserve">
+    <value>{0} KB</value>
+  </data>
+  <data name="UnitMegabytes" xml:space="preserve">
+    <value>{0} MB</value>
+  </data>
+  <data name="UnitGigabytes" xml:space="preserve">
+    <value>{0} GB</value>
+  </data>
+  <data name="GroupBlock" xml:space="preserve">
+    <value>Remove and block</value>
+  </data>
+  <data name="GroupBlocked" xml:space="preserve">
+    <value>Blocked computers</value>
+  </data>
+  <data name="GroupBlockedHint" xml:space="preserve">
+    <value>They cannot pair with any computer in the group. Unblock one to pair with it again.</value>
+  </data>
+  <data name="GroupUnblock" xml:space="preserve">
+    <value>Unblock</value>
+  </data>
+  <data name="PairingBlock" xml:space="preserve">
+    <value>Block</value>
+  </data>
+  <data name="PairingFailedRefused" xml:space="preserve">
+    <value>It does not accept pairing with this computer.</value>
+  </data>
 </root>

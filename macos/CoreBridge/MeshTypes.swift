@@ -87,6 +87,28 @@ public struct MemberPermissions: Sendable, Equatable {
     }
 }
 
+/// A device blocked from the group: every member refuses it before any pairing code.
+public struct BlockedDevice: Sendable, Equatable, Identifiable {
+    public let deviceID: DeviceID
+    public let platform: PeerPlatform
+    /// As it was when it was blocked.
+    public let name: String
+
+    public var id: DeviceID { deviceID }
+
+    public init(deviceID: DeviceID, platform: PeerPlatform, name: String) {
+        self.deviceID = deviceID
+        self.platform = platform
+        self.name = name
+    }
+
+    init(_ device: osdrop_blocked_device) {
+        deviceID = DeviceID(field: device.device_id)
+        platform = PeerPlatform(device.platform)
+        name = CArray.string(of: device.name)
+    }
+}
+
 public struct GroupMember: Sendable, Equatable, Identifiable {
     public let deviceID: DeviceID
     public let publicKey: [UInt8]
@@ -183,6 +205,8 @@ public enum MeshEvent: Sendable, Equatable {
     case clipboardChanged(DeviceID, clipID: UInt64, formats: [AnnouncedFormat])
     /// The end of a `fetchContent`.
     case contentReceived(id: UInt64, Result<Data, CoreError>)
+    /// A member fetches an item this Mac offered: about every 100 ms, and once at the end.
+    case sendProgress(SendProgress)
 }
 
 /// A position in 1/16 point of a computer's native desktop (docs/PROTOCOL.md "Conventions").
@@ -388,6 +412,76 @@ public enum ControlEvent: Sendable, Equatable {
     case inject(ControlInput)
     /// While controlled: motion latency from the controller's capture to here, in microseconds.
     case inputLatency(DeviceID, samples: UInt32, medianMicroseconds: UInt32, p99Microseconds: UInt32)
+    /// A drag came to this Mac with the cursor: start a drag of `items` at `point`, pressing the
+    /// left button there. Fetch each item from `source` when the drop asks for it (kind `.drag`,
+    /// object ID `dragID`, index its place in `items`), and report the end with `dropFinished`.
+    case dragArrived(source: DeviceID, dragID: UInt32, at: CoordPoint, items: [ArrivingItem])
+    /// The drag `dragID` left this Mac, or cannot go on: end it without a drop. A held left
+    /// button is released afterwards.
+    case dragWithdrawn(dragID: UInt32)
+    /// This Mac's drag `dragID` waits at the edge where it left: release the left button there,
+    /// as a copy when it was dropped, sliding back otherwise.
+    case dragEnded(dragID: UInt32, DropOutcome)
+    /// This Mac's drag of promised files is wanted on another computer: take its files at the
+    /// edge (the drag ends there) and report them with `dragStarted`, or none when they do not
+    /// come.
+    case dragWanted
+}
+
+/// A file or folder of a drag that came to this Mac (docs/PROTOCOL.md "0x31 DragOffer").
+public struct ArrivingItem: Sendable, Equatable {
+    /// One name, in NFC.
+    public let name: String
+    public let isFolder: Bool
+    /// The file's size, or the total of the files in the folder.
+    public let byteCount: UInt64
+    /// A Uniform Type Identifier.
+    public let contentType: String
+
+    public init(name: String, isFolder: Bool, byteCount: UInt64, contentType: String) {
+        self.name = name
+        self.isFolder = isFolder
+        self.byteCount = byteCount
+        self.contentType = contentType
+    }
+}
+
+/// A file or folder of a drag on this Mac.
+public struct DraggedFile: Sendable, Equatable {
+    public let url: URL
+    /// A Uniform Type Identifier; core replaces one it cannot send.
+    public let contentType: String
+
+    public init(url: URL, contentType: String) {
+        self.url = url
+        self.contentType = contentType
+    }
+}
+
+/// How a drag ended (docs/PROTOCOL.md "0x32 DragResult").
+public enum DropOutcome: Sendable, Equatable {
+    /// The drop took the items.
+    case dropped
+    /// Nothing took them: Escape, or a place that takes nothing.
+    case cancelled
+    /// The drag could not start.
+    case failed
+
+    init(_ raw: osdrop_drag_outcome) {
+        switch raw {
+        case OSDROP_DRAG_DROPPED: self = .dropped
+        case OSDROP_DRAG_FAILED: self = .failed
+        default: self = .cancelled
+        }
+    }
+
+    var raw: osdrop_drag_outcome {
+        switch self {
+        case .dropped: OSDROP_DRAG_DROPPED
+        case .cancelled: OSDROP_DRAG_CANCELLED
+        case .failed: OSDROP_DRAG_FAILED
+        }
+    }
 }
 
 /// A format of the shared clipboard (docs/PROTOCOL.md "0x40 ClipboardAnnounce").
@@ -492,12 +586,54 @@ public struct OfferSummary: Sendable, Equatable {
     public let skipped: UInt64
 }
 
+/// Where sending an offered item to one member stands.
+public enum SendState: Sendable, Equatable {
+    case sending
+    /// Every byte of its files went out.
+    case done
+    /// The member stopped asking, or the item was withdrawn.
+    case stopped
+
+    init(_ raw: UInt8) {
+        switch raw {
+        case 2: self = .done
+        case 3: self = .stopped
+        default: self = .sending
+        }
+    }
+}
+
+/// A member fetching an item this Mac offered.
+public struct SendProgress: Sendable, Equatable {
+    public let device: DeviceID
+    public let item: TransferItem
+    public let bytesSent: UInt64
+    public let bytesTotal: UInt64
+    public let state: SendState
+
+    public init(device: DeviceID, item: TransferItem, bytesSent: UInt64, bytesTotal: UInt64, state: SendState) {
+        self.device = device
+        self.item = item
+        self.bytesSent = bytesSent
+        self.bytesTotal = bytesTotal
+        self.state = state
+    }
+}
+
 public struct TransferProgress: Sendable, Equatable {
     public let id: UInt64
     public let bytesDone: UInt64
     public let bytesTotal: UInt64
     public let filesDone: UInt64
     public let filesTotal: UInt64
+
+    public init(id: UInt64, bytesDone: UInt64, bytesTotal: UInt64, filesDone: UInt64, filesTotal: UInt64) {
+        self.id = id
+        self.bytesDone = bytesDone
+        self.bytesTotal = bytesTotal
+        self.filesDone = filesDone
+        self.filesTotal = filesTotal
+    }
 
     init(_ raw: osdrop_transfer_progress) {
         id = raw.transfer_id

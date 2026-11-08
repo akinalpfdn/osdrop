@@ -10,6 +10,7 @@ public sealed class GroupViewModelTests
 {
     private const string _laptop = "31313131313131313131313131313131";
     private const string _self = "30303030303030303030303030303030";
+    private const string _other = "32323232323232323232323232323232";
 
     [Fact]
     public async Task APairingShowsTheCodeSendsTheAnswerAndEndsWhenTheComputerConnects()
@@ -74,6 +75,49 @@ public sealed class GroupViewModelTests
             group.ClipboardNotice);
     }
 
+    [Fact]
+    public void CopiedFilesOnTheirWayShowTheirProgressUntilTheyEnd()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        var notifications = new List<(string Title, string Text)>();
+        group.NotificationRequested += (title, text) => notifications.Add((title, text));
+
+        engine.Raise(new EngineEvent(
+            EngineEventKind.ClipboardFetching, DeviceId: _laptop, Name: "Laptop", BytesDone: 512, BytesTotal: 2048));
+        Assert.NotNull(group.ClipboardFetch);
+        Assert.Equal(25, group.ClipboardFetch.Percent);
+        Assert.Equal(Formatted(Localization.Strings.ClipboardFetching, "Laptop"), group.ClipboardFetch.Message);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardFetchEnded));
+        Assert.Null(group.ClipboardFetch);
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardReady, DeviceId: _laptop, Name: "Laptop"));
+        Assert.Equal([(Localization.Strings.ClipboardReadyTitle, Formatted(Localization.Strings.ClipboardReady, "Laptop"))], notifications);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardTooLarge, DeviceId: _laptop, Name: "Laptop"));
+        Assert.Equal(2, notifications.Count);
+        Assert.Equal(Localization.Strings.ClipboardNoticeTitle, notifications[1].Title);
+    }
+
+    [Fact]
+    public void CancellingCopiedFilesStopsThem()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardFetching, Name: "Laptop", BytesDone: 0, BytesTotal: 10));
+        group.ClipboardFetch!.CancelCommand.Execute(null);
+        Assert.Null(group.ClipboardFetch);
+        Assert.Equal(1, engine.FetchCancels);
+    }
+
+    [Fact]
+    public void SizesReadAsExplorerShowsThem()
+    {
+        Assert.Equal(Formatted(Localization.Strings.UnitBytes, "512"), ClipboardFetchViewModel.Size(512));
+        Assert.Equal(Formatted(Localization.Strings.UnitMegabytes, (1.5).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)),
+            ClipboardFetchViewModel.Size(1_572_864));
+    }
+
     private static string Formatted(string text, string value) =>
         string.Format(System.Globalization.CultureInfo.CurrentCulture, text, value);
 
@@ -102,6 +146,38 @@ public sealed class GroupViewModelTests
     }
 
     [Fact]
+    public async Task AComputerIsBlockedFromItsCodeOrTheMemberListAndUnblocked()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        engine.Raise(new EngineEvent(EngineEventKind.PairingCode, Code: 7, Connection: 9, DeviceId: _laptop, Name: "Laptop"));
+        await group.Pairing!.BlockCommand.ExecuteAsync(null);
+        Assert.Null(group.Pairing);
+        Assert.Equal([_laptop], engine.BlockedIds);
+        Assert.Empty(engine.Answers);
+
+        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false));
+        engine.Members.Add(new GroupMember(_other, "Other PC", Platform.Windows, IsSelf: false, IsConnected: true));
+        await group.RefreshAsync();
+        await group.BlockCommand.ExecuteAsync(group.Members[0]);
+        Assert.Equal([_laptop], engine.BlockedIds);
+        await group.BlockCommand.ExecuteAsync(group.Members[1]);
+        Assert.Equal([_laptop, _other], engine.BlockedIds);
+
+        engine.Blocked.Add(new BlockedComputer(_laptop, "Laptop", Platform.MacOS));
+        engine.Raise(new EngineEvent(EngineEventKind.GroupChanged));
+        await Task.Yield();
+        Assert.True(group.HasBlocked);
+        BlockedItem blocked = Assert.Single(group.Blocked);
+        await group.UnblockCommand.ExecuteAsync(blocked);
+        Assert.Equal([_laptop], engine.Unblocked);
+
+        engine.Raise(new EngineEvent(EngineEventKind.PairingCode, Code: 8, Connection: 10, DeviceId: _laptop, Name: "Laptop"));
+        engine.Raise(new EngineEvent(EngineEventKind.PairingFailed, Reason: CoreResult.NotTrusted, Connection: 10));
+        Assert.Equal(Localization.Strings.PairingFailedRefused, group.Pairing?.Detail);
+    }
+
+    [Fact]
     public void CodesKeepLeadingZeros() => Assert.Equal("000 042", PairingViewModel.Display(42));
 
     private sealed class FakeEngine : IGroupEngine
@@ -114,12 +190,16 @@ public sealed class GroupViewModelTests
         public List<string> Paired { get; } = [];
         public List<(ulong Connection, bool Accepted)> Answers { get; } = [];
         public List<string> Revoked { get; } = [];
+        public List<BlockedComputer> Blocked { get; } = [];
+        public List<string> BlockedIds { get; } = [];
+        public List<string> Unblocked { get; } = [];
 
         public void Raise(EngineEvent received) => EventReceived?.Invoke(received);
 
         public Task<EngineInfo?> GetInfoAsync() => Task.FromResult(Info);
         public Task<IReadOnlyList<GroupMember>> GetMembersAsync() => Task.FromResult<IReadOnlyList<GroupMember>>([.. Members]);
         public Task<IReadOnlyList<NearbyComputer>> GetNearbyAsync() => Task.FromResult<IReadOnlyList<NearbyComputer>>([.. Nearby]);
+        public Task<IReadOnlyList<BlockedComputer>> GetBlockedAsync() => Task.FromResult<IReadOnlyList<BlockedComputer>>([.. Blocked]);
 
         public Task<(CoreResult Result, ulong Connection)> PairAsync(string deviceId)
         {
@@ -139,6 +219,26 @@ public sealed class GroupViewModelTests
             return Task.FromResult(CoreResult.Ok);
         }
 
+        public Task<CoreResult> BlockAsync(string deviceId)
+        {
+            BlockedIds.Add(deviceId);
+            return Task.FromResult(CoreResult.Ok);
+        }
+
+        public Task<CoreResult> UnblockAsync(string deviceId)
+        {
+            Unblocked.Add(deviceId);
+            return Task.FromResult(CoreResult.Ok);
+        }
+
         public Task<CoreResult> LeaveGroupAsync() => Task.FromResult(CoreResult.Ok);
+
+        public int FetchCancels { get; private set; }
+
+        public Task CancelClipboardFetchAsync()
+        {
+            FetchCancels++;
+            return Task.CompletedTask;
+        }
     }
 }

@@ -12,6 +12,7 @@ Windows can take over and inject mouse and keyboard input wherever a user can cl
 - [ ] Pipe protocol in `windows/shared` (portable, tested on macOS): per-session pipe, ACL, client image-path check, versioned validated command set.
 - [ ] Monitor enumeration (pixels, DIP frames, scale, stable keys) and change notifications.
 - [ ] Developer console tool: capture, then replay on the same PC.
+- [ ] Announce `OSDROP_FEATURE_TAKES_CONTROL` in `windows/shared` (`kAvailableFeatures`) once injection works, so Macs start crossing into the PC.
 
 ## Acceptance Criteria
 - [ ] Capture swallows input, and replay works over Notepad, Explorer, Task Manager and an elevated PowerShell.

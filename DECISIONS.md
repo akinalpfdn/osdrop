@@ -507,3 +507,93 @@ choices the plan leaves open are logged here.
 **Why:** The name travels only in Hello; a restart reuses the existing reconnect path and needs no protocol change.
 **Trade-offs:** Control, transfers and clipboard fetches in progress end when the name changes.
 **Revisit if:** Renaming becomes frequent.
+
+---
+
+## 2026-11-07 — A forwarded drag offer names its source
+**Chosen:** DragOffer carries the device ID of the computer the drag started on (zero without a drag); the group drops a forwarded offer whose source may not send files to this computer.
+**Alternatives:** The controller relays the contents itself; the target asks the controller where the drag came from.
+**Why:** When a third computer controls the source, the target must fetch from the source, and only the controller knows which computer that is. The protocol is unreleased, so the field is added in place.
+**Trade-offs:** 16 bytes more per offer; the largest offer holds slightly shorter names.
+**Revisit if:** Contents ever need to travel through the controller (computers that cannot reach each other).
+
+---
+
+## 2026-11-07 — The source keeps its drag held at the edge until the outcome
+**Chosen:** A drag waits at the edge it left with its button down (parked) until the computer it was dropped on reports the outcome: then the source releases the button over Osdrop's edge panel, which accepts the drop as a copy or refuses it so the drag slides back. A computer whose own drag was offered keeps the left button held when its controller leaves; the controller carries the drag on, and sends the cancellation itself when the cursor comes home another way than through an edge.
+**Alternatives:** Ending the source's drag at the crossing (accepted at the edge), so the outcome no longer matters to the source.
+**Why:** A drop that takes nothing must slide back (DEVPLAN Phase 2), and a drag carried back to its source must go on there as if it never left.
+**Trade-offs:** The source's button stays down while the drag is away; local input on the source, or losing its controller, slides the drag back. If the outcome is lost, the source's drag waits until one of those happens.
+**Revisit if:** Hardware tests show a source app that ends its drag on its own while the button is held elsewhere.
+
+---
+
+## 2026-11-07 — Drags from the controller come home as a drop target
+**Chosen:** When the cursor comes back to the controller through an edge with a drag from another computer, the controller becomes the target (it starts a drag under the cursor while the user still holds the button); coming home any other way cancels the drag.
+**Alternatives:** Cancel every drag that comes home.
+**Why:** "Any member can be the target" includes the computer whose mouse is in use; Universal Control works the same way.
+**Trade-offs:** The platform starts a drag while the physical button is already down; this is a hardware-test item on each platform.
+**Revisit if:** A platform cannot start a drag from that state.
+
+---
+
+## 2026-11-07 — Items of a dropped drag stay offered for a while
+**Chosen:** After a drop, the source keeps the items available until 16 newer drags have been dropped; a drag that ended any other way is withdrawn at once.
+**Alternatives:** Withdrawing when the target reports completion (no such message); a time limit.
+**Why:** The target fetches as long as the drop target asks for the files, and the source cannot tell when that ends; a count bounds what the sender keeps without cutting a slow copy short.
+**Trade-offs:** A 17th drop during a still running copy of the first one cuts that copy.
+**Revisit if:** The protocol gains a message for a finished fetch.
+
+---
+
+## 2026-11-07 — Promised files are taken at the edge when the drag is wanted
+**Chosen:** User decision: a drag of files that exist only once it is dropped (Photos, Mail attachments) is reported to core as promised; when a push at an edge wants it, the source drops it on a target of Osdrop's own at the cursor, receives the files into staging and offers them, and the drag goes on as files. Such a drag cannot slide back on the source.
+**Alternatives:** Not supporting such drags (drop on the desktop first); receiving every promised drag at its start.
+**Why:** Photos and Mail are common sources, and their files cannot be read before a drop; receiving only at the push keeps drags that stay on the Mac untouched.
+**Trade-offs:** The cursor waits at the edge while the files are received (Photos may download originals from iCloud first); a cancelled drop leaves the original where it was but the drag is already over.
+**Revisit if:** macOS offers promised content without a drop.
+
+---
+
+## 2026-11-07 — Transfers in the menu, both directions
+**Chosen:** User decision: the menu lists transfers in both directions with progress and a cancel button, and a notification tells when one ends or fails. Core's sender reports each member's fetch of an item (`SendProgress`: sending, done, stopped); cancelling a send withdraws the whole drag. Notifications go through Notification Center, which asks the user once, at the first transfer that ends.
+**Alternatives:** Finder's own progress on the receiving side only; cancelling a send for one member.
+**Why:** DEVPLAN asks for progress and cancel on both sides; the sender is the only place that sees what goes out, and a drag usually goes to one member, so withdrawing it is the cancel the user means.
+**Trade-offs:** A send cannot tell a member that stopped asking from one that failed: both show as not finished. Cancelling a send also stops other members fetching the same drag.
+**Revisit if:** Drags are commonly dropped on several computers at once.
+
+---
+
+## 2026-11-07 — Copied files on their way show themselves
+**Chosen:** User decision after the Mac ↔ PC run: while another computer's copied files are fetched, both computers show a small window in the screen's corner with their progress and a cancel button, a notification tells when they can be pasted, and the clipboard's notices (too large, out of reach) are notifications too. A paste before then still gives the clipboard's previous content.
+**Alternatives:** Pasting at paste time with Explorer's own progress (virtual files; needs Phase 4's machinery, and Finder takes no promises); clearing the old clipboard as soon as a copy is announced.
+**Why:** The fetch-first design (2026-11-04) left the user pasting the old content with no sign that files were coming. Clearing the old clipboard would break CL7 (a copy whose source is gone keeps the previous clipboard).
+**Trade-offs:** A paste during the fetch still gives the old content; the window only tells the user to wait.
+**Revisit if:** Phase 4 brings virtual files on the PC: Explorer could then paste while the files arrive.
+
+---
+
+## 2026-11-07 — The same copy again is not offered again
+**Chosen:** User decision: a computer does not announce a copy that is the same as the one it last announced (the same contents, and the same files by path, size and modification time) while no other computer's copy came in between; the others already have it, so nothing is fetched again.
+**Alternatives:** A cache on the receiving side that reuses files whose list (names, sizes, times) did not change.
+**Why:** Copying a file twice is common, and a large file was fetched again in full. Skipping the announcement needs no protocol or engine change.
+**Trade-offs:** A file changed without its size or modification time changing is not sent again. When something else was copied in between, the file is fetched again.
+**Revisit if:** Repeated fetches still show up in use; the receiving cache would cover them.
+
+---
+
+## 2026-11-08 — A removed computer pairs again with a code
+**Chosen:** User decision: a revoked device that has left the group gets a pairing code like any other computer, from either side; its new pairing has an epoch above its revocation. A revoked device that still claims the group is refused as before (NOT_TRUSTED).
+**Alternatives:** Only a member may start the new pairing; or a revoked device never comes back, and the group has to be formed again.
+**Why:** G4 on hardware: after removing the PC, the Mac refused it before any code, so it could never rejoin, although DEVPLAN says a revoked device comes back by pairing again. Refusing it gained nothing: a new key pairs as an unknown computer anyway, and both users still confirm the code.
+**Trade-offs:** Someone at a removed computer can show a pairing code on members again; it goes nowhere unless a member accepts it.
+**Revisit if:** Removed computers prompt members unwanted; a member-side block list would then be the answer.
+
+---
+
+## 2026-11-08 — Blocks are carried in the roster
+**Chosen:** User decision: a block is group-wide. The roster keeps each device's newest block entry (a version and blocked or unblocked, with its name for the list); a blocked device is no member and every member refuses it before any code. It is chosen at removal ("Remove and Block") and at an incoming code ("Block"), and undone from the blocked list on any member. A computer keeps its blocks, but one of itself, when it leaves the group, and brings them into the next group it joins.
+**Alternatives:** A block only on the computer that sets it (no protocol change, but the blocked computer can still prompt the other members); no list, only a wait after a refused code.
+**Why:** Letting removed computers pair again (same day) opened code spam; a block that every member honours stops it in one place. Versioned entries merge like the rest of the roster, so an unblock spreads and a member that missed it cannot undo it.
+**Trade-offs:** A new identity (Osdrop reinstalled, its key store cleared) is a new device and is not blocked. RosterState and the stored group state change format (version 2; version 1 is still read). Blocks a computer brings into another group apply there too.
+**Revisit if:** Users are blocked by new identities in practice; a pairing wait for refused codes would then help.

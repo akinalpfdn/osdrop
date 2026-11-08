@@ -11,6 +11,8 @@ namespace Osdrop.App.Engine;
 /// </summary>
 internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 {
+    private const int _listAttempts = 8;
+
     private readonly Dispatcher _dispatcher;
     private GCHandle _self;
     private nint _engine;
@@ -58,6 +60,9 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     public Task<IReadOnlyList<NearbyComputer>> GetNearbyAsync() =>
         Native.Run<IReadOnlyList<NearbyComputer>>(() => ReadNearby(_engine));
 
+    public Task<IReadOnlyList<BlockedComputer>> GetBlockedAsync() =>
+        Native.Run<IReadOnlyList<BlockedComputer>>(() => ReadBlocked(_engine));
+
     public Task<(CoreResult Result, ulong Connection)> PairAsync(string deviceId)
     {
         byte[] id = Convert.FromHexString(deviceId);
@@ -73,6 +78,18 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         return Native.Run(() => RevokeNative(_engine, id));
     }
 
+    public Task<CoreResult> BlockAsync(string deviceId)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => BlockNative(_engine, id, block: true));
+    }
+
+    public Task<CoreResult> UnblockAsync(string deviceId)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => BlockNative(_engine, id, block: false));
+    }
+
     public Task<CoreResult> LeaveGroupAsync() => Native.Run(() => NativeMethods.LeaveGroup(_engine));
 
     public Task ScreensChangedAsync() => Native.Run(() => NativeMethods.ScreensChanged(_engine));
@@ -81,6 +98,8 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         Native.Run(() => NativeMethods.CloseAll(_engine, sleeping ? (byte)1 : (byte)0));
 
     public Task ResumeAsync() => Native.Run(() => NativeMethods.Resume(_engine));
+
+    public Task CancelClipboardFetchAsync() => Native.Run(() => NativeMethods.CancelClipboardFetch(_engine));
 
     /// <summary>Stops the engine while the app exits: waits on the native worker, never on this thread.</summary>
     public void Shutdown()
@@ -115,58 +134,90 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         return new EngineInfo(Utf8.Hex(info.DeviceId, NativeSizes.DeviceId), group, info.ListenPort);
     }
 
-    private static unsafe List<GroupMember> ReadMembers(nint engine)
+    private unsafe delegate CoreResult ListReader<T>(T* items, nuint capacity, nuint* count)
+        where T : unmanaged;
+
+    /// <summary>
+    /// One of the engine's lists, counted and then read; read again when it grew in between, because the
+    /// engine keeps working on its own threads and a computer can join after the count.
+    /// </summary>
+    private static unsafe T[] ReadList<T>(ListReader<T> read)
+        where T : unmanaged
     {
-        nuint count = 0;
-        CoreResult counted = NativeMethods.Members(engine, null, 0, &count);
-        if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
+        for (int attempt = 0; attempt < _listAttempts; ++attempt)
         {
-            return [];
-        }
-        var members = new NativeMember[(int)count];
-        fixed (NativeMember* pointer = members)
-        {
-            if (NativeMethods.Members(engine, pointer, (nuint)members.Length, &count) != CoreResult.Ok)
+            nuint count = 0;
+            CoreResult counted = read(null, 0, &count);
+            if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
             {
                 return [];
             }
-            var list = new List<GroupMember>((int)count);
-            for (int i = 0; i < (int)count; ++i)
+            var items = new T[(int)count];
+            fixed (T* pointer = items)
+            {
+                CoreResult listed = read(pointer, (nuint)items.Length, &count);
+                if (listed == CoreResult.BufferTooSmall)
+                {
+                    continue;
+                }
+                return listed == CoreResult.Ok ? items[..(int)count] : [];
+            }
+        }
+        return [];
+    }
+
+    private static unsafe List<GroupMember> ReadMembers(nint engine)
+    {
+        NativeMember[] members = ReadList<NativeMember>(
+            (items, capacity, count) => NativeMethods.Members(engine, items, capacity, count));
+        var list = new List<GroupMember>(members.Length);
+        fixed (NativeMember* pointer = members)
+        {
+            for (int i = 0; i < members.Length; ++i)
             {
                 NativeMember* member = pointer + i;
                 list.Add(new GroupMember(
                     Utf8.Hex(member->DeviceId, NativeSizes.DeviceId), Utf8.Read(member->Name, NativeSizes.Name),
                     member->Platform, member->Self == 1, member->Connected == 1));
             }
-            return list;
         }
+        return list;
     }
 
     private static unsafe List<NearbyComputer> ReadNearby(nint engine)
     {
-        nuint count = 0;
-        CoreResult counted = NativeMethods.Nearby(engine, null, 0, &count);
-        if (counted is not (CoreResult.Ok or CoreResult.BufferTooSmall) || count == 0)
-        {
-            return [];
-        }
-        var computers = new NativeNearbyComputer[(int)count];
+        NativeNearbyComputer[] computers = ReadList<NativeNearbyComputer>(
+            (items, capacity, count) => NativeMethods.Nearby(engine, items, capacity, count));
+        var list = new List<NearbyComputer>(computers.Length);
         fixed (NativeNearbyComputer* pointer = computers)
         {
-            if (NativeMethods.Nearby(engine, pointer, (nuint)computers.Length, &count) != CoreResult.Ok)
-            {
-                return [];
-            }
-            var list = new List<NearbyComputer>((int)count);
-            for (int i = 0; i < (int)count; ++i)
+            for (int i = 0; i < computers.Length; ++i)
             {
                 NativeNearbyComputer* computer = pointer + i;
                 list.Add(new NearbyComputer(
                     Utf8.Hex(computer->DeviceId, NativeSizes.DeviceId), Utf8.Read(computer->Name, NativeSizes.Name),
                     computer->Platform, computer->InAnotherGroup == 1, computer->NeedsUpdate == 1));
             }
-            return list;
         }
+        return list;
+    }
+
+    private static unsafe List<BlockedComputer> ReadBlocked(nint engine)
+    {
+        NativeBlockedDevice[] devices = ReadList<NativeBlockedDevice>(
+            (items, capacity, count) => NativeMethods.Blocked(engine, items, capacity, count));
+        var list = new List<BlockedComputer>(devices.Length);
+        fixed (NativeBlockedDevice* pointer = devices)
+        {
+            for (int i = 0; i < devices.Length; ++i)
+            {
+                NativeBlockedDevice* device = pointer + i;
+                list.Add(new BlockedComputer(
+                    Utf8.Hex(device->DeviceId, NativeSizes.DeviceId), Utf8.Read(device->Name, NativeSizes.Name),
+                    device->Platform));
+            }
+        }
+        return list;
     }
 
     private static unsafe (CoreResult Result, ulong Connection) PairNative(nint engine, byte[] deviceId)
@@ -187,6 +238,14 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         }
     }
 
+    private static unsafe CoreResult BlockNative(nint engine, byte[] deviceId, bool block)
+    {
+        fixed (byte* id = deviceId)
+        {
+            return block ? NativeMethods.Block(engine, id) : NativeMethods.Unblock(engine, id);
+        }
+    }
+
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe void OnEvent(nint context, NativeEngineEvent* native)
     {
@@ -202,7 +261,7 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
             new SessionStats(
                 stats.RoundTripMicroseconds, stats.ClockOffsetMicroseconds, stats.DatagramsRejected,
                 stats.StaleMotionDropped),
-            native->Level, Utf8.Read(native->Message));
+            native->Level, Utf8.Read(native->Message), native->BytesDone, native->BytesTotal);
         self._dispatcher.BeginInvoke(() => self.EventReceived?.Invoke(received));
     }
 }

@@ -76,10 +76,11 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
   connection, which has its own TCP connection.
 - **Group state.** `Group` hands its state (group ID, roster, permissions) to the platform after
   every change as bytes the platform stores in its secure store and passes back at start. The
-  format: magic `ODGS`, a version byte (1), the group ID, the pairings (device ID, key, epoch,
-  platform, name), the revocations (device ID, epoch) and the permissions that differ from the
-  default; counts are u16 and integers little-endian, as on the wire. A newer version is refused,
-  so it is never overwritten.
+  format: magic `ODGS`, a version byte (2), the group ID, the pairings (device ID, key, epoch,
+  platform, name), the revocations (device ID, epoch), the permissions that differ from the
+  default and, from version 2, the blocks (device ID, version, flags, platform, name); counts are
+  u16 and integers little-endian, as on the wire. Version 1 states are still read; a newer
+  version is refused, so it is never overwritten.
 - **Layout state.** `Layout` hands the platform its state after every change: magic `ODLY`, a
   version byte (1), the group ID, the layout document as an encoded LayoutState message and each
   member's last ScreenReport, each embedded with a u16 length so the wire checks apply. The
@@ -200,8 +201,8 @@ crossing, refusal and release; the platforms capture, inject, hide the cursor an
   crosses, it tells the platform to capture (with the keys held at that moment, which the
   platform releases locally), sends Enter with the held modifiers, then motion as datagrams and
   keys, buttons and scrolls with the cursor's position on the control connection. Crossing on or
-  back sends Leave. No crossing happens while a button is held or input is locked ("lock input
-  here"). The cursor comes home to where it left on the user's hotkey, a capture the platform
+  back sends Leave. No crossing happens while a button is held, unless it carries a drag of files,
+  or while input is locked ("lock input here"). The cursor comes home to where it left on the user's hotkey, a capture the platform
   lost, a Refuse, a LocalTakeover, or a computer that stops answering for 750 ms, leaves, or stops
   accepting control. As an endpoint it accepts one controller at a time (others get Refuse busy,
   as does a computer whose own input is away), refuses while the platform reports the screen
@@ -225,6 +226,38 @@ crossing, refusal and release; the platforms capture, inject, hide the cursor an
   notch everywhere. The Mac's table is `MacKeyMap`; the PC's, scan codes for the Phase 3 input
   process, is `key_codes` in `windows/shared`, with `wheel` for scrolling. The crossing settings
   and pointer speeds come from preferences (`input.` keys) until the Phase 16 settings window.
+
+## Drag and drop across computers
+
+Built in Phase 14 for `core` and the Mac; the PC's drag bridge comes with Phase 4. The protocol
+rules are in PROTOCOL.md, "Drag messages".
+
+- **Core** (`control/control_drag.cpp`, part of `Control`). As a source it offers each item of a
+  drag on this computer to the transfers when the platform reports the drag, and answers probes
+  from its controller once the items are measured. As a controller, a push against an edge with
+  only the left button held asks the computer under the cursor for its drag (or looks at its own);
+  a drag lets the push cross toward computers that take drags, and the controller forwards the
+  offer before the Enter that names it. As a target it reports the drag to the platform and holds
+  the left button for it in its ledger. The source keeps its button down while the drag is away,
+  until DragResult; every way control ends either carries the drag on (Leave) or cancels it, so a
+  drag never stays on a computer that no longer has the cursor. Dropped items stay offered until
+  16 newer drags have been dropped.
+- **macOS** (`Features/Drag`, `Services/Drag`). `DragController` gets core's drag events from the
+  input controller, in order with the input around them. Drags on this Mac are noticed on the drag
+  pasteboard and reported with their file URLs. A drag of promised files (Photos, Mail
+  attachments) is reported as such; when another computer wants it, the Mac drops it on a target
+  at the cursor, receives the files into staging and reports them, and the drag goes on as files.
+  A drag that arrives starts from Phase 2's `PromiseDragStarter`; its promises are fulfilled by
+  `NetworkContentReader`, which receives each item beside the drop's destination and moves it
+  there whole, waiting through CoreBridge's `TransferWatch`, which follows transfers on core's
+  thread so a staged copy asked for on the main thread cannot wait for it. A drag that moves on is
+  cancelled with Escape. This Mac's own drag that waited at the edge ends over a small drop target
+  at the cursor that takes it as a copy or refuses it.
+- **Progress** — the receiving side follows each transfer by its ID; the sending side gets
+  `SendProgress` from core's sender for every member fetching an item, until every byte went out or
+  the member stopped. The menu lists both directions with their progress and a cancel button
+  (cancelling a send withdraws the drag); a notification tells when a transfer ends or fails.
+  Finder also shows the receiving copy's progress on the file.
 
 ## Group on the platforms
 
@@ -304,8 +337,8 @@ Built in Phase 2 (`macos/Osdrop/Services/Drag`):
   item, and injected movement carries it to the drop.
 - **Fulfil promises** — `PromisedItemWriter` writes each item into the folder the drop target names,
   under a free name, through a hidden partial file that is moved into place only when complete;
-  progress is published for Finder. Content comes from a `PromisedContentReading`: local files now,
-  the transfer engine in Phase 14. Items up to 64 MB are also offered as a staged file URL for
+  progress is published for Finder. Content comes from a `PromisedContentReading`: local files in
+  the developer loopback, the transfer engine for drags from other computers. Items up to 64 MB are also offered as a staged file URL for
   apps that take no promises.
 - **Threads** — AppKit runs some promise callbacks on background queues (file coordination for
   sandboxed targets, delivery of received promises). Those callbacks are nonisolated and tested

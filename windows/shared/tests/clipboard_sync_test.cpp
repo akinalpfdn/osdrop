@@ -13,6 +13,7 @@
 
 namespace {
 
+using osdrop::win::ClipboardFetch;
 using osdrop::win::ClipboardLimits;
 using osdrop::win::ClipboardNotice;
 using osdrop::win::ClipboardSync;
@@ -86,6 +87,9 @@ public:
         receives.emplace_back(id, folder, max_bytes);
         return OSDROP_OK;
     }
+    void cancel(std::uint64_t id) override { cancelled.push_back(id); }
+
+    std::vector<std::uint64_t> cancelled;
 
 private:
     std::uint64_t next_ = 1;
@@ -111,11 +115,13 @@ protected:
     FakeHost host;
     FakeMesh mesh;
     std::vector<std::tuple<ClipboardNotice, ClipDevice, std::string>> notices;
+    std::vector<std::optional<ClipboardFetch>> fetches;
     ClipboardSync sync{
         host,
         [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
             notices.emplace_back(notice, device, name);
         },
+        [this](const std::optional<ClipboardFetch>& fetch) { fetches.push_back(fetch); },
         ClipboardLimits{.text = 100, .image = 100, .files = 1000}};
 };
 
@@ -139,6 +145,23 @@ TEST_F(ClipboardSyncTest, CopiesAreReportedOnlyWhileAMemberIsConnectedAndWithinL
     sync.copied(
         {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("gone")}}, .files = {}});
     EXPECT_EQ(mesh.copies.size(), 1U);
+}
+
+TEST_F(ClipboardSyncTest, TheSameCopyAgainIsNotOfferedAgainUnlessAnotherCameBetween) {
+    connect();
+    const ClipData copy{.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("hi")}},
+                        .files = {"C:/Users/me/report.pdf"}};
+    sync.copied(copy);
+    sync.copied(copy);
+    EXPECT_EQ(mesh.copies.size(), 1U) << "the others have it already";
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("ho")}}, .files = {}});
+    EXPECT_EQ(mesh.copies.size(), 2U);
+
+    announce(30, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 2}});
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("ho")}}, .files = {}});
+    EXPECT_EQ(mesh.copies.size(), 3U) << "another computer's copy came between";
 }
 
 TEST_F(ClipboardSyncTest, AnotherComputersCopyIsWrittenOnceEverythingArrived) {
@@ -169,7 +192,47 @@ TEST_F(ClipboardSyncTest, AnotherComputersCopyIsWrittenOnceEverythingArrived) {
                                      {.format = OSDROP_CLIPBOARD_IMAGE, .bytes = {9, 9}}},
                         .files = {"C:/staging/1/report.pdf"}}));
     EXPECT_EQ(host.kept.back(), "C:/staging/1") << "the pasted files' folder stays";
-    EXPECT_TRUE(notices.empty());
+    ASSERT_EQ(notices.size(), 1U);
+    EXPECT_EQ(notices[0], std::tuple(ClipboardNotice::Ready, kMac, std::string("Mac")));
+}
+
+TEST_F(ClipboardSyncTest, CopiedFilesReportTheirProgressUntilTheyArrive) {
+    connect();
+    announce(7, {{.format = OSDROP_CLIPBOARD_FILES, .byte_count = 500}});
+    ASSERT_EQ(mesh.receives.size(), 1U);
+    const std::uint64_t files_id = std::get<0>(mesh.receives[0]);
+    ASSERT_EQ(fetches.size(), 1U);
+    EXPECT_EQ(fetches[0],
+              (ClipboardFetch{.device = kMac, .name = "Mac", .bytes_done = 0, .bytes_total = 500}));
+    sync.transfer_progress(files_id, 200);
+    sync.transfer_progress(files_id + 1, 300); // another transfer
+    host.drain();
+    ASSERT_EQ(fetches.size(), 2U);
+    EXPECT_EQ(fetches[1]->bytes_done, 200U);
+    sync.transfer_finished(files_id, OSDROP_OK, {"C:/staging/1/report.pdf"});
+    host.drain();
+    ASSERT_EQ(fetches.size(), 3U);
+    EXPECT_EQ(fetches[2], std::nullopt) << "no longer on their way";
+    EXPECT_EQ(host.written.size(), 1U);
+}
+
+TEST_F(ClipboardSyncTest, CancellingCopiedFilesKeepsTheClipboardAsItWas) {
+    connect();
+    announce(7, {{.format = OSDROP_CLIPBOARD_FILES, .byte_count = 500}});
+    const std::uint64_t files_id = std::get<0>(mesh.receives.at(0));
+    sync.cancel_fetch();
+    host.drain();
+    EXPECT_EQ(mesh.cancelled, std::vector<std::uint64_t>{files_id});
+    EXPECT_EQ(fetches.back(), std::nullopt);
+    sync.transfer_finished(files_id, OSDROP_ERROR_CANCELLED, {});
+    host.drain();
+    EXPECT_TRUE(host.written.empty());
+    EXPECT_TRUE(notices.empty()) << "the user cancelled it: nothing to tell";
+
+    // A newer copy replaces one on its way.
+    announce(8, {{.format = OSDROP_CLIPBOARD_FILES, .byte_count = 500}});
+    announce(9, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 5}});
+    EXPECT_EQ(fetches.back(), std::nullopt);
 }
 
 TEST_F(ClipboardSyncTest, CopiesTooLargeOrOutOfReachLeaveANotice) {

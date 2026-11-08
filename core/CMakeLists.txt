@@ -40,6 +40,7 @@ add_library(osdrop_core STATIC
     src/capi/version.cpp
     src/clipboard/clipboard.cpp
     src/control/control.cpp
+    src/control/control_drag.cpp
     src/control/held_inputs.cpp
     src/crypto/input_crypto.cpp
     src/crypto/noise.cpp

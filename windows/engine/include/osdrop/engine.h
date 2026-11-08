@@ -38,6 +38,10 @@ typedef enum osdrop_engine_event_kind {
     OSDROP_ENGINE_LOG = 10,              /* level, message */
     OSDROP_ENGINE_CLIPBOARD_UNAVAILABLE = 11, /* device_id, name: its copy could not be fetched */
     OSDROP_ENGINE_CLIPBOARD_TOO_LARGE = 12,   /* device_id, name: its copy is over the limits */
+    OSDROP_ENGINE_CLIPBOARD_FETCHING = 13,    /* device_id, name, bytes_done, bytes_total: its
+                                                 copied files on their way, as they come */
+    OSDROP_ENGINE_CLIPBOARD_FETCH_ENDED = 14, /* copied files are no longer on their way */
+    OSDROP_ENGINE_CLIPBOARD_READY = 15,       /* device_id, name: its copied files can be pasted */
     OSDROP_ENGINE_EVENT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_engine_event_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -54,6 +58,8 @@ typedef struct osdrop_engine_event {
     char name[OSDROP_TXT_VALUE_SIZE]; /* NUL-terminated UTF-8 */
     osdrop_session_stats stats;
     const char* message; /* LOG: NUL-terminated UTF-8, valid during the call; NULL otherwise */
+    uint64_t bytes_done;
+    uint64_t bytes_total;
 } osdrop_engine_event;
 
 /*
@@ -106,6 +112,14 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_confirm_pairing(osdrop_engine* eng
                                                               uint8_t accepted);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_revoke(osdrop_engine* engine,
                                                      const uint8_t* device_id);
+/* As osdrop_mesh_block, osdrop_mesh_unblock and osdrop_mesh_blocked; GROUP_CHANGED follows. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_block(osdrop_engine* engine,
+                                                    const uint8_t* device_id);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_unblock(osdrop_engine* engine,
+                                                      const uint8_t* device_id);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_blocked(osdrop_engine* engine,
+                                                      osdrop_blocked_device* out, size_t capacity,
+                                                      size_t* out_count);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_leave_group(osdrop_engine* engine);
 /* The displays changed: the engine reads and reports them again. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_screens_changed(osdrop_engine* engine);
@@ -113,6 +127,8 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_screens_changed(osdrop_engine* eng
 OSDROP_ENGINE_API osdrop_result osdrop_engine_close_all(osdrop_engine* engine, uint8_t sleeping);
 /* After waking: browses again, so members are found and dialled again. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_resume(osdrop_engine* engine);
+/* Stops fetching copied files from another computer; the clipboard keeps what it had. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -25,6 +25,10 @@ public sealed partial class GroupViewModel : ObservableObject
 
     public ObservableCollection<MemberItem> Members { get; } = [];
     public ObservableCollection<NearbyItem> Nearby { get; } = [];
+    public ObservableCollection<BlockedItem> Blocked { get; } = [];
+
+    [ObservableProperty]
+    public partial bool HasBlocked { get; set; }
 
     [ObservableProperty]
     public partial PairingViewModel? Pairing { get; set; }
@@ -39,6 +43,13 @@ public sealed partial class GroupViewModel : ObservableObject
     public partial string? ClipboardNotice { get; set; }
 
     public bool HasClipboardNotice => ClipboardNotice is not null;
+
+    /// <summary>Copied files on their way from another computer; null when none are.</summary>
+    [ObservableProperty]
+    public partial ClipboardFetchViewModel? ClipboardFetch { get; set; }
+
+    /// <summary>A notification to show: its title and its text.</summary>
+    public event Action<string, string>? NotificationRequested;
 
     [ObservableProperty]
     public partial string DeviceId { get; set; } = string.Empty;
@@ -89,6 +100,29 @@ public sealed partial class GroupViewModel : ObservableObject
         await RefreshMembersAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Removes the member and blocks it everywhere in the group.</summary>
+    [RelayCommand]
+    private async Task BlockAsync(MemberItem? member)
+    {
+        if (member is null || member.IsSelf)
+        {
+            return;
+        }
+        _ = await _engine.BlockAsync(member.DeviceId).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task UnblockAsync(BlockedItem? computer)
+    {
+        if (computer is null)
+        {
+            return;
+        }
+        _ = await _engine.UnblockAsync(computer.DeviceId).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
     [RelayCommand]
     private async Task LeaveAsync()
     {
@@ -101,6 +135,13 @@ public sealed partial class GroupViewModel : ObservableObject
 
     [RelayCommand]
     private void DismissClipboardNotice() => ClipboardNotice = null;
+
+    /// <summary>Stops fetching copied files; the clipboard keeps what it had.</summary>
+    internal void CancelClipboardFetch()
+    {
+        ClipboardFetch = null;
+        _ = _engine.CancelClipboardFetchAsync();
+    }
 
     /// <summary>The user's answer to the code both computers show.</summary>
     internal async Task AnswerAsync(bool accepted)
@@ -115,6 +156,20 @@ public sealed partial class GroupViewModel : ObservableObject
         {
             Pairing = new PairingViewModel(this, PairingStage.Failed, shown.PeerName, failure: PairingViewModel.Explain(result));
         }
+    }
+
+    /// <summary>Refuses the computer whose code is shown and blocks it everywhere in the group.</summary>
+    internal async Task BlockPairingAsync()
+    {
+        if (Pairing is not { Stage: PairingStage.Confirm } || _pairingPeer is not string peer)
+        {
+            return;
+        }
+        Pairing = null;
+        _pairingPeer = null;
+        _pairingConnection = null;
+        _ = await _engine.BlockAsync(peer).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
     }
 
     /// <summary>Closes the pairing window; a code still on screen is rejected.</summary>
@@ -181,17 +236,33 @@ public sealed partial class GroupViewModel : ObservableObject
                 break;
             case EngineEventKind.ClipboardUnavailable:
                 ClipboardNotice = Describe(Localization.Strings.ClipboardUnavailable, received.Name);
+                NotificationRequested?.Invoke(Localization.Strings.ClipboardNoticeTitle, ClipboardNotice);
                 break;
             case EngineEventKind.ClipboardTooLarge:
                 ClipboardNotice = Describe(Localization.Strings.ClipboardTooLarge, received.Name);
+                NotificationRequested?.Invoke(Localization.Strings.ClipboardNoticeTitle, ClipboardNotice);
+                break;
+            case EngineEventKind.ClipboardFetching:
+                ClipboardFetch = new ClipboardFetchViewModel(
+                    this, NameOrOther(received.Name), received.BytesDone, received.BytesTotal);
+                break;
+            case EngineEventKind.ClipboardFetchEnded:
+                ClipboardFetch = null;
+                break;
+            case EngineEventKind.ClipboardReady:
+                NotificationRequested?.Invoke(
+                    Localization.Strings.ClipboardReadyTitle, Describe(Localization.Strings.ClipboardReady, received.Name));
                 break;
             default:
                 break;
         }
     }
 
-    private static string Describe(string text, string name) => string.Format(
-        CultureInfo.CurrentCulture, text, string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name);
+    private static string Describe(string text, string name) =>
+        string.Format(CultureInfo.CurrentCulture, text, NameOrOther(name));
+
+    private static string NameOrOther(string name) =>
+        string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name;
 
     private MemberItem? Find(string deviceId) => Members.FirstOrDefault(member => member.DeviceId == deviceId);
 
@@ -210,6 +281,13 @@ public sealed partial class GroupViewModel : ObservableObject
         {
             Members.Add(new MemberItem(member));
         }
+        IReadOnlyList<BlockedComputer> blocked = await _engine.GetBlockedAsync().ConfigureAwait(true);
+        Blocked.Clear();
+        foreach (BlockedComputer computer in blocked)
+        {
+            Blocked.Add(new BlockedItem(computer));
+        }
+        HasBlocked = Blocked.Count > 0;
     }
 
     private async Task RefreshNearbyAsync()

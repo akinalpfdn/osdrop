@@ -1,4 +1,5 @@
 import CoreBridge
+import CryptoKit
 import Foundation
 
 /// The largest copy of each kind the shared clipboard moves; larger ones stay where they are.
@@ -61,5 +62,30 @@ enum RemoteCopy {
         data[PasteboardTypes.png] = received[.image]
         data[PasteboardTypes.tiff] = tiff
         return PasteboardContent(data: data, fileURLs: files)
+    }
+}
+
+/// What makes two copies on this Mac the same: their contents' digests, and each file's path,
+/// size and modification date. Copying the same thing again is not offered again.
+struct CopySignature: Equatable, Sendable {
+    struct FileStamp: Equatable, Sendable {
+        let path: String
+        let size: Int?
+        let modified: Date?
+    }
+
+    let contents: [ClipboardFormat: SHA256.Digest]
+    let tiff: SHA256.Digest?
+    let files: [FileStamp]
+
+    init(_ copy: LocalCopy) {
+        contents = Dictionary(copy.contents.map { ($0.format, SHA256.hash(data: $0.data)) }) { first, _ in first }
+        tiff = copy.tiff.map { SHA256.hash(data: $0) }
+        files = copy.files.map { url in
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+            return FileStamp(
+                path: url.standardizedFileURL.path(percentEncoded: false), size: values?.fileSize,
+                modified: values?.contentModificationDate)
+        }
     }
 }

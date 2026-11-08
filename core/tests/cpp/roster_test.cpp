@@ -1,6 +1,6 @@
 // The roster's merge rules (docs/PROTOCOL.md, "Group membership"), including property tests:
-// replicas that apply random pairings and revocations and merge in random orders always converge,
-// and a revocation is never undone by a stale replica.
+// replicas that apply random pairings, revocations, blocks and unblocks and merge in random orders
+// always converge, and a revocation or a block is never undone by a stale replica.
 #include "crypto/noise.hpp"
 #include "group/group_state.hpp"
 #include "group/roster.hpp"
@@ -16,6 +16,7 @@ namespace {
 
 namespace crypto = osdrop::crypto;
 namespace protocol = osdrop::protocol;
+using osdrop::group::Block;
 using osdrop::group::DeviceId;
 using osdrop::group::Member;
 using osdrop::group::Roster;
@@ -65,7 +66,8 @@ TEST(Roster, EntriesWhoseIdIsNotTheKeysAreRefused) {
                                              .epoch = 1,
                                              .platform = protocol::Platform::MacOS,
                                              .name = "Forged"}},
-                                .revocations = {}};
+                                .revocations = {},
+                                .blocks = {}};
     EXPECT_FALSE(Roster::from_message(state).has_value());
 }
 
@@ -81,6 +83,54 @@ TEST(Roster, AStaleReplicaCannotBringARevokedDeviceBack) {
     EXPECT_TRUE(stale.merge(up_to_date));
     EXPECT_FALSE(stale.is_member(member(2).device_id));
     EXPECT_EQ(stale, up_to_date);
+}
+
+TEST(Roster, ABlockedDeviceIsNoMemberUntilUnblockedAndPairedAgain) {
+    Roster roster;
+    const Member pc = member(1);
+    roster.add(pc);
+    roster.revoke(pc.device_id, 1);
+    roster.block(pc.device_id, protocol::Platform::Windows, "PC");
+    EXPECT_TRUE(roster.is_blocked(pc.device_id));
+    EXPECT_TRUE(roster.add(member(1, 2)));
+    EXPECT_FALSE(roster.is_member(pc.device_id)) << "a block holds over any pairing";
+    EXPECT_EQ(roster.size(), 0U);
+
+    roster.unblock(pc.device_id);
+    EXPECT_FALSE(roster.is_blocked(pc.device_id));
+    EXPECT_EQ(roster.blocks().at(pc.device_id).version, 2U) << "kept, so the unblock spreads";
+    EXPECT_TRUE(roster.is_member(pc.device_id));
+}
+
+TEST(Roster, TheNewestBlockEntryHoldsAndABlockWinsATie) {
+    const DeviceId pc = member(1).device_id;
+    Roster blocked;
+    blocked.block(pc, protocol::Platform::Windows, "PC");
+    Roster unblocked = blocked;
+    unblocked.unblock(pc);
+
+    Roster stale = blocked;
+    EXPECT_TRUE(stale.merge(unblocked));
+    EXPECT_FALSE(stale.is_blocked(pc)) << "the newer unblock holds";
+    EXPECT_FALSE(unblocked.merge(blocked)) << "an older block cannot come back";
+
+    // Two members change the same entry at once: one unblocks, the other blocks again.
+    Roster again = blocked;
+    again.set_block(pc, Block{.version = 2,
+                              .blocked = true,
+                              .platform = protocol::Platform::Windows,
+                              .name = "PC"});
+    Roster a = unblocked;
+    a.merge(again);
+    Roster b = again;
+    b.merge(unblocked);
+    EXPECT_EQ(a, b);
+    EXPECT_TRUE(a.is_blocked(pc));
+    EXPECT_FALSE(a.set_block(pc, Block{.version = 0,
+                                       .blocked = false,
+                                       .platform = protocol::Platform::Windows,
+                                       .name = "PC"}))
+        << "version 0 is never stored";
 }
 
 TEST(Roster, NamesOfTheSamePairingConvergeToOneChoice) {
@@ -109,9 +159,10 @@ TEST(Roster, MessagesSplitToFitAndRebuildTheSameRoster) {
         device.at(1) = static_cast<std::uint8_t>(i >> 8U);
         device.at(15) = 0xEE;
         roster.revoke(device, 3);
+        roster.block(device, protocol::Platform::Windows, "Blocked");
     }
     const auto messages = roster.to_messages(protocol::Id{7});
-    ASSERT_EQ(messages.size(), 2U); // 100 members need 2, 340 revocations need 2
+    ASSERT_EQ(messages.size(), 2U); // 100 members, 340 revocations and 300 blocks need 2 each
     Roster rebuilt;
     for (const auto& message : messages) {
         ASSERT_TRUE(protocol::encode_control(message).has_value()) << "fits the message rules";
@@ -123,9 +174,9 @@ TEST(Roster, MessagesSplitToFitAndRebuildTheSameRoster) {
     EXPECT_EQ(rebuilt.size(), 60U);
 }
 
-// Several replicas apply random pairings and revocations and merge with random partners in
-// random order; once everyone has merged with everyone, all are equal, and membership agrees with
-// a reference computed from every operation at once.
+// Several replicas apply random pairings, revocations, blocks and unblocks and merge with random
+// partners in random order; once everyone has merged with everyone, all are equal, and membership
+// agrees with a reference computed from every operation at once.
 TEST(Roster, ReplicasConvergeForEveryOrderOfOperationsAndMerges) {
     for (std::uint32_t seed = 1; seed <= 200; ++seed) {
         SCOPED_TRACE(seed);
@@ -137,7 +188,7 @@ TEST(Roster, ReplicasConvergeForEveryOrderOfOperationsAndMerges) {
         for (int step = 0; step < 60; ++step) {
             const std::size_t replica = random() % kReplicas;
             const auto device = static_cast<std::uint8_t>(random() % kDevices);
-            switch (random() % 3) {
+            switch (random() % 5) {
             case 0: { // pair (again) with the next epoch this replica knows of
                 const Member entry =
                     member(device, replicas[replica].next_epoch(member(device).device_id));
@@ -151,6 +202,20 @@ TEST(Roster, ReplicasConvergeForEveryOrderOfOperationsAndMerges) {
                     reference.revoke(current->device_id, current->epoch);
                 }
                 break;
+            case 2:   // block
+            case 3: { // unblock what this replica sees as blocked
+                const DeviceId id = member(device).device_id;
+                if (random() % 2 == 0) {
+                    replicas[replica].block(id, protocol::Platform::Windows, "Blocked");
+                } else {
+                    replicas[replica].unblock(id);
+                }
+                if (const auto it = replicas[replica].blocks().find(id);
+                    it != replicas[replica].blocks().end()) {
+                    reference.set_block(id, it->second);
+                }
+                break;
+            }
             default: { // gossip between two replicas
                 const std::size_t other = random() % kReplicas;
                 replicas[replica].merge(replicas[other]);
@@ -183,6 +248,9 @@ TEST(GroupState, RoundTripsThroughItsEncoding) {
     state.roster.add(member(2, 3, "Çalışma PC"));
     state.roster.revoke(member(3).device_id, 2);
     state.permissions[member(2).device_id] = {.control = false, .files = true, .clipboard = false};
+    state.roster.block(member(3).device_id, protocol::Platform::Windows, "Eski PC");
+    state.roster.block(member(4).device_id, protocol::Platform::MacOS, "Laptop");
+    state.roster.unblock(member(4).device_id);
     const auto bytes = osdrop::group::encode_state(state);
     const auto decoded = osdrop::group::decode_state(bytes);
     ASSERT_TRUE(decoded.has_value());
@@ -206,7 +274,7 @@ TEST(GroupState, DamagedOrNewerStatesAreRefused) {
     };
 
     auto newer = good;
-    newer[4] = 2;
+    newer[4] = osdrop::group::kGroupStateVersion + 1;
     EXPECT_EQ(decode(newer), Error::UnsupportedVersion) << "kept, never overwritten";
     auto foreign = good;
     foreign[0] = 'X';
@@ -218,6 +286,21 @@ TEST(GroupState, DamagedOrNewerStatesAreRefused) {
     auto forged = good;
     forged[4 + 1 + 16 + 2] ^= 1U; // the member's device ID no longer matches its key
     EXPECT_EQ(decode(forged), Error::ValueOutOfRange);
+}
+
+TEST(GroupState, AVersion1StateIsStillRead) {
+    osdrop::group::GroupState state;
+    state.group_id = protocol::Id{1};
+    state.roster.add(member(1));
+    state.roster.add(member(2));
+    state.permissions[member(2).device_id] = {.control = false, .files = true, .clipboard = true};
+    auto bytes = osdrop::group::encode_state(state);
+    ASSERT_EQ(bytes[4], 2U);
+    bytes[4] = 1;                   // a state from before blocks:
+    bytes.resize(bytes.size() - 2); // no block section
+    const auto decoded = osdrop::group::decode_state(bytes);
+    ASSERT_TRUE(decoded.has_value());
+    EXPECT_EQ(decoded.value(), state);
 }
 
 TEST(GroupState, PermissionsDecideTheOfferedFeatures) {

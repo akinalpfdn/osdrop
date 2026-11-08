@@ -26,6 +26,9 @@ protocol InputInjecting: AnyObject {
     /// Puts the cursor at `point` without an input event (the cursor came back from another
     /// computer).
     func placeCursor(at point: CGPoint)
+    /// Ends a drag that waits at `point` with the left button down, whoever pressed it: a small
+    /// dragged movement there, so the drop target under it is entered, then the release.
+    func releaseDrag(at point: CGPoint)
 }
 
 /// Posts events into the system. Separate from building them so tests can observe the events.

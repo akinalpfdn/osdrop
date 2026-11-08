@@ -116,7 +116,7 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x28 | LocalTakeover | endpoint → controller: the endpoint's own user took over |
 | 0x30 | DragProbe | controller → computer under the cursor: is a drag in progress there? |
 | 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
-| 0x32 | DragResult | drop target → source and controller |
+| 0x32 | DragResult | drop target → source and controller; controller → source when no target ends it |
 | 0x40 | ClipboardAnnounce | the sender's clipboard changed |
 
 ### 0x01 Hello
@@ -205,16 +205,18 @@ No body.
 
 ### 0x10 RosterState
 
-The sender's view of the group: for each device it knows of, the newest pairing and the newest
-revocation. Receivers merge it as described in "Group membership".
+The sender's view of the group: for each device it knows of, the newest pairing, the newest
+revocation and the newest block entry. Receivers merge it as described in "Group membership".
 
 | Field | Type | Values |
 |-------|------|--------|
 | group_id | bytes[16] | not all zeros |
 | member_count | u8 | 1–64 |
 | revocation_count | u8 | 0–255 |
+| block_count | u8 | 0–255 |
 | members | member × member_count | |
 | revocations | revocation × revocation_count | |
+| blocks | block × block_count | |
 
 member:
 
@@ -234,7 +236,19 @@ revocation:
 | device_id | bytes[16] | |
 | epoch | u32 | 1 or more |
 
-No two members share (device_id, epoch); neither do two revocations. Whether `device_id` matches
+block:
+
+| Field | Type | Values |
+|-------|------|--------|
+| device_id | bytes[16] | |
+| version | u32 | 1 or more; each block or unblock of the same device has a higher version |
+| flags | u8 | bit 0: blocked (0: unblocked); other bits reserved |
+| platform | u8 | 1 macOS, 2 Windows |
+| reserved | u8 | 0 |
+| name | string | 1–64 bytes, as the device was named when it was blocked |
+
+No two members share (device_id, epoch); neither do two revocations, and no two blocks share a
+device_id. Whether `device_id` matches
 `public_key` is checked by the group logic, not the codec: one mismatch discards the whole message.
 A roster too large for one message is split into several, each with at least one member.
 
@@ -414,12 +428,41 @@ content movement as it is, whatever their own scroll direction setting.
 
 ### Drag messages
 
-A drag starts on its **source** computer and may cross to a **target**. The controller asks the
-computer under the cursor whether a drag is in progress when the cursor reaches a crossing edge
-with a button held (DragProbe); the answer describes the items. The controller passes the offer to
-the target in Enter (`drag_id`) and forwards the DragOffer. When the drop ends, the target reports
-the outcome to the source (and to the controller when it is another computer). Contents travel on
-transfer streams.
+A drag of files and folders starts on its **source** computer, with the left button (0) held,
+and the **controller** carries it to a **target**. Contents travel on transfer streams: object kind
+1, `object_id` = drag_id, `item_index` = the item's place in the DragOffer.
+
+- **Probe.** While a button is held every edge is a wall. When the cursor pushes against an edge
+  that has a neighbour, with only the left button held, the controller asks the computer under the
+  cursor whether a drag is in progress there: DragProbe, or nothing when that is itself. A computer
+  answers with a DragOffer carrying the probe's ID: drag_id 0 when it has no drag, or when the
+  prober does not control it now. The answer may wait until the items are measured, and for a
+  drag of files that exist only once it is dropped (promised files, as from Photos) until the
+  source has taken them at the edge; that drag then ends on the source and never slides back. The
+  controller probes again while the push goes on, one probe at a time.
+- **Crossing.** With a drag, the edges stop being walls toward computers that take drags
+  (Capabilities bit 2) and toward the source; the push goes on and the cursor crosses. The
+  controller sends the target the DragOffer (probe_id 0, the same drag_id, source and items), then
+  Enter with the drag_id. An Enter whose drag_id has no forwarded DragOffer from the same
+  controller before it is refused (Refuse 3).
+- **Parking.** The source keeps the left button held when the entry of a controller it offered the
+  drag to ends: the drag waits at the edge for its outcome.
+- **Target.** If the target is the source, its parked drag goes on. Otherwise it starts a drag of
+  the items at the entry point, pressing the left button there, and fetches the items from the
+  source when the drop asks for them. The release of the left button drops the drag; the target
+  sends DragResult to the source and to the controller, those that are not itself. When the
+  controller's entry ends (Leave), the target ends its drag without a drop and sends nothing: the
+  controller carries the drag on. When the target ends the control itself (its own mouse or
+  keyboard, a lock screen, a permission), it sends DragResult 2.
+- **Home.** When the cursor comes back to the controller, a drag the controller started goes on.
+  A drag from another computer makes the controller its target when the cursor came back through
+  an edge; otherwise (the hotkey, a refusal, a lost computer) the controller sends DragResult 2 to
+  the source.
+- **End.** The controller stops carrying the drag when the left button goes up or a DragResult
+  for it arrives. The source ends its parked drag at the DragResult: as a copy for 1, sliding back
+  for 2 and 3. It slides it back on its own when it loses the controller or its own mouse or
+  keyboard is used. After a drop it keeps the items available for the transfers; a drag that
+  ended any other way is withdrawn.
 
 #### 0x30 DragProbe
 
@@ -435,6 +478,7 @@ transfer streams.
 |-------|------|--------|
 | probe_id | u32 | the DragProbe answered, or 0 when forwarded to a target (drag_id is then not 0) |
 | drag_id | u32 | 0 when no drag is in progress, otherwise unique per source |
+| source | device_id | the computer the drag started on; zero when drag_id is 0, otherwise not zero |
 | item_count | u16 | 0 when drag_id is 0, otherwise 1–1024; the message must still fit in 65536 bytes |
 | items | item × item_count | |
 
@@ -453,7 +497,9 @@ item:
 | Field | Type | Values |
 |-------|------|--------|
 | drag_id | u32 | not 0 |
-| outcome | u8 | 1 dropped (the source ends its drag as a copy), 2 cancelled (the source's drag slides back), 3 failed |
+| outcome | u8 | 1 dropped (the source ends its drag as a copy), 2 cancelled (the source's drag slides back), 3 failed (the target could not start the drag) |
+
+Sent by the target, and by the controller when the drag ends without one (see above).
 
 ### 0x40 ClipboardAnnounce
 
@@ -759,6 +805,13 @@ entries for the same epoch carry the same key (the device ID is its fingerprint)
 whose name, then platform, sorts first. Merges therefore give the same roster in every order, and
 a roster from a member that was offline cannot undo a revocation.
 
+A member can also block a device: the roster keeps each device's newest block entry, and a blocked
+device is no member whatever its pairings, and is refused before any code. Blocking a member
+revokes it too. Unblocking writes an entry with a higher version, so it spreads like the block
+did. Merging keeps the entry with the higher version; at the same version a block wins over an
+unblock, then the name and platform that sort first. A computer keeps its blocks when it leaves the
+group, except one of itself, and brings them into the next group it joins.
+
 ### Rosters between members
 
 - A member sends its whole roster to each member whose session is established, and again to every
@@ -779,13 +832,16 @@ After the handshake, each side decides about the peer in this order:
 
 | The peer | Decision |
 |----------|----------|
+| A device blocked here | Error NOT_TRUSTED |
 | A member | Trusted: PairingConfirm *accepted* at once |
-| A device revoked here | Error NOT_TRUSTED |
-| In this computer's group, but not in its roster yet | Error NOT_TRUSTED; dialled again once a roster names it |
+| In this computer's group, but not a member: not in its roster yet, or revoked without having heard of it | Error NOT_TRUSTED; dialled again once a roster names it |
 | In another group, while this computer is in one | Error IN_ANOTHER_GROUP |
 | Anyone else while a pairing code is shown here | Error PEER_BUSY |
 | In no group, while this computer's group has 8 members | Error GROUP_FULL |
 | Anyone else | Pairing code |
+
+A revoked device that has left the group (it does when it learns of its revocation) is in no
+group, so it gets a pairing code like any other computer, from whichever side starts the pairing.
 
 Once both users have accepted:
 
@@ -813,7 +869,7 @@ bit 3), and the receiving side refuses requests that ignore that:
 | Denied | Refused |
 |--------|---------|
 | control | Enter gets Refuse 3 (not permitted); KeyEvent, ButtonEvent, ScrollEvent, ReleaseAll and PointerMotion are dropped |
-| files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped |
+| files | An Enter carrying a drag gets Refuse 3; a forwarded DragOffer (probe_id 0) is dropped, also when its source is a member that may not send files |
 | clipboard | ClipboardAnnounce is dropped; a ManifestRequest or ContentRequest for the clipboard gets TransferError NOT_PERMITTED |
 
 ## Arrangement

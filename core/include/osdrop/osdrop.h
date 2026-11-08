@@ -248,6 +248,13 @@ typedef struct osdrop_member {
     uint8_t connected; /* 1 while a session with it is established */
 } osdrop_member;
 
+/* A device blocked from the group: every member refuses it before any pairing code. */
+typedef struct osdrop_blocked_device {
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    osdrop_platform platform;
+    char name[OSDROP_TXT_VALUE_SIZE]; /* NUL-terminated UTF-8, as it was when it was blocked */
+} osdrop_blocked_device;
+
 typedef struct osdrop_session_stats {
     uint32_t rtt_us;
     int64_t clock_offset_us; /* the peer's clock minus this computer's */
@@ -327,6 +334,29 @@ typedef struct osdrop_input {
     uint8_t scroll_phase; /* 0 none, 1 may begin, 2 began, 3 changed, 4 ended, 5 cancelled */
     uint8_t momentum;     /* 0 none, 1 began, 2 changed, 3 ended */
 } osdrop_input;
+
+/* NOLINTBEGIN(cppcoreguidelines-use-enum-class,performance-enum-size) */
+typedef enum osdrop_drag_outcome {
+    OSDROP_DRAG_DROPPED = 1,   /* the drop took the items */
+    OSDROP_DRAG_CANCELLED = 2, /* nothing took them: Escape, or a place that takes nothing */
+    OSDROP_DRAG_FAILED = 3,    /* the drag could not start */
+    OSDROP_DRAG_OUTCOME_MAX_ENUM = 0x7FFFFFFF
+} osdrop_drag_outcome;
+/* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
+
+/* A file or folder of a drag that arrives here (docs/PROTOCOL.md, "0x31 DragOffer"). */
+typedef struct osdrop_drag_item {
+    uint8_t is_folder;        /* 0 or 1 */
+    uint64_t byte_count;      /* the file's size, or the total of the files in the folder */
+    const char* content_type; /* NUL-terminated Uniform Type Identifier */
+    const char* name;         /* NUL-terminated UTF-8, NFC */
+} osdrop_drag_item;
+
+/* A file or folder of a drag on this computer. */
+typedef struct osdrop_dragged_item {
+    const char* path;         /* NUL-terminated, absolute */
+    const char* content_type; /* NUL-terminated Uniform Type Identifier; replaced when invalid */
+} osdrop_dragged_item;
 
 typedef struct osdrop_transfer_progress {
     uint64_t transfer_id;
@@ -417,6 +447,31 @@ typedef struct osdrop_mesh_callbacks {
     /* While this computer is controlled: motion latency from the controller's capture to here. */
     void (*input_latency)(void* context, const uint8_t* controller_id, uint32_t samples,
                           uint32_t median_us, uint32_t p99_us);
+    /*
+     * A drag came here with the cursor: start a drag of `items` at `x`, `y`, pressing the left
+     * button there. Fetch each item from `source_id` with osdrop_mesh_receive (OBJECT_DRAG,
+     * object_id `drag_id`, item_index its place in `items`) when the drop asks for it, and report
+     * how the drag ended with osdrop_mesh_drop_finished.
+     */
+    void (*drag_arrived)(void* context, const uint8_t* source_id, uint32_t drag_id, int32_t x,
+                         int32_t y, const osdrop_drag_item* items, size_t count);
+    /* The drag `drag_id` left this computer, or cannot go on: end it without a drop. A held left
+     * button is released afterwards. */
+    void (*drag_withdrawn)(void* context, uint32_t drag_id);
+    /* This computer's drag `drag_id` waits at the edge where it left: end it by releasing the left
+     * button there, as a copy for DROPPED, sliding back otherwise. */
+    void (*drag_ended)(void* context, uint32_t drag_id, osdrop_drag_outcome outcome);
+    /* This computer's drag of promised files is wanted on another computer: take its files at
+     * the edge (the drag ends there) and report them with osdrop_mesh_drag_started, or no items
+     * when they do not come. */
+    void (*drag_wanted)(void* context);
+    /*
+     * The member `device_id` fetches `item`, which this computer offered: about every 100 ms
+     * while its files' content goes out, and once at the end. `state`: 1 sending, 2 done (every
+     * byte went out), 3 stopped (the member stopped asking, or the item was withdrawn).
+     */
+    void (*send_progress)(void* context, const uint8_t* device_id, const osdrop_object_ref* item,
+                          uint64_t bytes_sent, uint64_t bytes_total, uint8_t state);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -480,6 +535,18 @@ osdrop_result osdrop_mesh_members(osdrop_mesh* mesh, osdrop_member* out, size_t 
 osdrop_result osdrop_mesh_revoke(osdrop_mesh* mesh, const uint8_t* device_id);
 /* Leaves the group: members learn it, sessions end, then group_changed and left_group. */
 osdrop_result osdrop_mesh_leave_group(osdrop_mesh* mesh);
+/*
+ * Blocks: osdrop_mesh_block blocks a device everywhere in the group, so every member refuses it
+ * before any pairing code. A member is removed as by osdrop_mesh_revoke; a computer whose pairing
+ * code is shown here is refused. They also work in no group, and blocks outlive leaving a group.
+ * INVALID_ARGUMENT for this computer itself, for a device nothing here names (not a member, not
+ * blocked before, no code shown), and for unblocking a device that is not blocked. group_changed
+ * follows; osdrop_mesh_blocked lists the blocked devices like osdrop_mesh_members.
+ */
+osdrop_result osdrop_mesh_block(osdrop_mesh* mesh, const uint8_t* device_id);
+osdrop_result osdrop_mesh_unblock(osdrop_mesh* mesh, const uint8_t* device_id);
+osdrop_result osdrop_mesh_blocked(osdrop_mesh* mesh, osdrop_blocked_device* out, size_t capacity,
+                                  size_t* out_count);
 /* What this computer accepts from one member; the member is told at once. */
 osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* device_id,
                                           const osdrop_permissions* permissions);
@@ -644,6 +711,23 @@ osdrop_result osdrop_mesh_set_pointer_speed(osdrop_mesh* mesh, const uint8_t* de
                                             uint32_t permille);
 /* Caps Lock on this computer (0 or 1), reported whenever it changes while the cursor is home. */
 osdrop_result osdrop_mesh_set_caps_lock(osdrop_mesh* mesh, uint8_t on);
+
+/*
+ * A drag began on this computer with these files and folders, or the files of a wanted drag of
+ * promised files arrived: they go wherever the cursor carries the drag (docs/PROTOCOL.md, "Drag
+ * messages"). `count` 0 when the drag carries nothing that can travel. Writes the drag's ID, 0
+ * without items. INVALID_ARGUMENT for more than 1024 items or a relative path.
+ */
+osdrop_result osdrop_mesh_drag_started(osdrop_mesh* mesh, const osdrop_dragged_item* items,
+                                       size_t count, uint32_t* out_drag_id);
+/* A drag began on this computer with promised files, which exist only once the drag is dropped
+ * (Photos): drag_wanted asks for them when another computer wants the drag. */
+osdrop_result osdrop_mesh_drag_promised(osdrop_mesh* mesh);
+/* This computer's drag ended, however it ended. */
+osdrop_result osdrop_mesh_drag_stopped(osdrop_mesh* mesh);
+/* The drag started for drag_arrived ended. */
+osdrop_result osdrop_mesh_drop_finished(osdrop_mesh* mesh, uint32_t drag_id,
+                                        osdrop_drag_outcome outcome);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.

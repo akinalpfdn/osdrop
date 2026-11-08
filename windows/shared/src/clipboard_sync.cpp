@@ -1,6 +1,9 @@
 #include <osdrop/win/clipboard_sync.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace osdrop::win {
@@ -14,6 +17,30 @@ std::uint64_t ClipboardLimits::limit(osdrop_clipboard_format format) const {
     default:
         return text;
     }
+}
+
+CopySignature CopySignature::of(const ClipData& data) {
+    CopySignature signature;
+    for (const ClipContent& content : data.contents) {
+        const std::string_view bytes(reinterpret_cast<const char*>(content.bytes.data()), // NOLINT
+                                     content.bytes.size());
+        signature.contents.push_back({.format = content.format,
+                                      .size = content.bytes.size(),
+                                      .hash = std::hash<std::string_view>{}(bytes)});
+    }
+    for (const std::string& file : data.files) {
+        const std::filesystem::path path(std::u8string(file.begin(), file.end()));
+        std::error_code error;
+        const bool regular = std::filesystem::is_regular_file(path, error);
+        const std::uintmax_t size = regular ? std::filesystem::file_size(path, error) : 0;
+        const auto modified = std::filesystem::last_write_time(path, error);
+        signature.files.push_back(
+            {.path = file,
+             .size = error ? 0 : size,
+             .modified =
+                 error ? 0 : static_cast<std::int64_t>(modified.time_since_epoch().count())});
+    }
+    return signature;
 }
 
 osdrop_result CoreClipboardMesh::copied(const ClipData& data) {
@@ -45,8 +72,13 @@ osdrop_result CoreClipboardMesh::receive(const ClipDevice& device, const osdrop_
     return osdrop_mesh_receive(mesh_, device.data(), &item, folder.c_str(), max_bytes, &id);
 }
 
-ClipboardSync::ClipboardSync(ClipboardHost& host, Notify notify, ClipboardLimits limits)
-    : host_(host), notify_(std::move(notify)), limits_(limits) {}
+void CoreClipboardMesh::cancel(std::uint64_t id) {
+    static_cast<void>(osdrop_mesh_cancel_transfer(mesh_, id)); // an unknown ID already ended
+}
+
+ClipboardSync::ClipboardSync(ClipboardHost& host, Notify notify, Progress progress,
+                             ClipboardLimits limits)
+    : host_(host), notify_(std::move(notify)), progress_(std::move(progress)), limits_(limits) {}
 
 void ClipboardSync::attach(ClipboardMesh& mesh) {
     host_.post([this, &mesh] { mesh_ = &mesh; });
@@ -59,9 +91,36 @@ void ClipboardSync::copied(ClipData data) {
     std::erase_if(data.contents, [&](const ClipContent& content) {
         return content.bytes.size() > limits_.limit(content.format);
     });
-    incoming_.reset(); // this copy is newer than the one being fetched
-    if (!data.contents.empty() || !data.files.empty()) {
-        static_cast<void>(mesh_->copied(data));
+    CopySignature signature = CopySignature::of(data);
+    if (signature == last_offered_) {
+        return; // the same copy again: the others have it already
+    }
+    drop_incoming(); // this copy is newer than the one being fetched
+    if (data.contents.empty() && data.files.empty()) {
+        last_offered_.reset();
+        return;
+    }
+    last_offered_ =
+        mesh_->copied(data) == OSDROP_OK ? std::optional(std::move(signature)) : std::nullopt;
+}
+
+void ClipboardSync::cancel_fetch() {
+    host_.post([this] {
+        if (!incoming_ || !incoming_->fetch || mesh_ == nullptr) {
+            return;
+        }
+        for (const auto& [id, format] : incoming_->pending) {
+            mesh_->cancel(id); // its end arrives for a copy no longer waited for
+        }
+        drop_incoming();
+    });
+}
+
+void ClipboardSync::drop_incoming() {
+    const bool fetching = incoming_ && incoming_->fetch;
+    incoming_.reset();
+    if (fetching && progress_) {
+        progress_(std::nullopt);
     }
 }
 
@@ -75,8 +134,10 @@ void ClipboardSync::peer_disconnected(const ClipDevice& device) {
 
 void ClipboardSync::clipboard_changed(const ClipDevice& device, std::uint64_t clip_id,
                                       std::vector<osdrop_announced_format> formats) {
-    host_.post(
-        [this, device, clip_id, formats = std::move(formats)] { begin(device, clip_id, formats); });
+    host_.post([this, device, clip_id, formats = std::move(formats)] {
+        last_offered_.reset(); // a copy here, even the same one, is newer than this
+        begin(device, clip_id, formats);
+    });
 }
 
 void ClipboardSync::content_received(std::uint64_t id, osdrop_result result,
@@ -93,11 +154,28 @@ void ClipboardSync::transfer_finished(std::uint64_t id, osdrop_result result,
     });
 }
 
+void ClipboardSync::transfer_progress(std::uint64_t id, std::uint64_t bytes_done) {
+    host_.post([this, id, bytes_done] {
+        if (!incoming_ || !incoming_->fetch) {
+            return;
+        }
+        const auto pending = incoming_->pending.find(id);
+        if (pending == incoming_->pending.end() || pending->second != OSDROP_CLIPBOARD_FILES) {
+            return;
+        }
+        incoming_->fetch->bytes_done = bytes_done;
+        if (progress_) {
+            progress_(incoming_->fetch);
+        }
+    });
+}
+
 void ClipboardSync::begin(const ClipDevice& device, std::uint64_t clip_id,
                           const std::vector<osdrop_announced_format>& formats) {
     if (mesh_ == nullptr) {
         return;
     }
+    drop_incoming(); // a newer copy
     incoming_ = Incoming{.device = device,
                          .clip_id = clip_id,
                          .requests = 0,
@@ -105,7 +183,8 @@ void ClipboardSync::begin(const ClipDevice& device, std::uint64_t clip_id,
                          .pending = {},
                          .received = {},
                          .folder = std::nullopt,
-                         .too_large = false};
+                         .too_large = false,
+                         .fetch = std::nullopt};
     std::vector<osdrop_clipboard_format> wanted;
     for (const osdrop_announced_format& format : formats) {
         if (format.byte_count > limits_.limit(format.format)) {
@@ -127,6 +206,18 @@ void ClipboardSync::begin(const ClipDevice& device, std::uint64_t clip_id,
         }
         incoming_.reset();
         return;
+    }
+    for (const auto& format : formats) {
+        if (format.format == OSDROP_CLIPBOARD_FILES &&
+            std::ranges::find(wanted, OSDROP_CLIPBOARD_FILES) != wanted.end()) {
+            incoming_->fetch = ClipboardFetch{.device = device,
+                                              .name = name_of(device),
+                                              .bytes_done = 0,
+                                              .bytes_total = format.byte_count};
+        }
+    }
+    if (incoming_->fetch && progress_) {
+        progress_(incoming_->fetch);
     }
     for (const osdrop_clipboard_format format : wanted) {
         request(format);
@@ -184,6 +275,9 @@ void ClipboardSync::finish() {
     }
     const Incoming copy = std::move(*incoming_);
     incoming_.reset();
+    if (copy.fetch && progress_) {
+        progress_(std::nullopt);
+    }
     if (copy.received.contents.empty() && copy.received.files.empty()) {
         host_.clear_staging(std::nullopt);
         notify_(copy.too_large ? ClipboardNotice::TooLarge : ClipboardNotice::Unavailable,
@@ -194,6 +288,9 @@ void ClipboardSync::finish() {
     host_.clear_staging(copy.received.files.empty() ? std::nullopt : copy.folder);
     if (copy.too_large) {
         notify_(ClipboardNotice::TooLarge, copy.device, name_of(copy.device));
+    }
+    if (!copy.received.files.empty()) {
+        notify_(ClipboardNotice::Ready, copy.device, name_of(copy.device));
     }
 }
 

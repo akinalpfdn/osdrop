@@ -25,6 +25,8 @@
 
   <sys:Double x:Key="Osdrop.Width.GroupWindow">380</sys:Double>
   <sys:Double x:Key="Osdrop.Width.PairingWindow">340</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.FetchWindow">320</sys:Double>
+  <sys:Double x:Key="Osdrop.Height.ProgressBar">8</sys:Double>
   <sys:Double x:Key="Osdrop.Width.MeshWindow">520</sys:Double>
   <sys:Double x:Key="Osdrop.Width.Button">88</sys:Double>
   <Thickness x:Key="Osdrop.Thickness.WindowPadding">20</Thickness>

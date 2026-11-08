@@ -15,6 +15,7 @@ public partial class App : Application
     private EngineHost? _engine;
     private GroupViewModel? _group;
     private PairingWindowPresenter? _pairingWindow;
+    private ClipboardFetchWindowPresenter? _clipboardFetchWindow;
     private GroupWindow? _groupWindow;
     private MeshWindow? _meshWindow;
     private string? _startFailure;
@@ -54,6 +55,8 @@ public partial class App : Application
         _engine = engine;
         _group = new GroupViewModel(engine);
         _pairingWindow = new PairingWindowPresenter(_group);
+        _clipboardFetchWindow = new ClipboardFetchWindowPresenter(_group);
+        _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         await _group.RefreshAsync().ConfigureAwait(true);

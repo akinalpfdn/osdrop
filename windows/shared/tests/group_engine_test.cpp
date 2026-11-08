@@ -133,8 +133,11 @@ public:
         change([&] { codes_.emplace_back(connection, code); });
     }
     void pairing_failed(std::uint64_t /*connection*/, osdrop_result /*reason*/) override {}
-    void peer_connected(const osdrop_peer& /*peer*/) override {
-        change([&] { ++connected_; });
+    void peer_connected(const osdrop_peer& /*peer*/, std::uint32_t features) override {
+        change([&] {
+            ++connected_;
+            features_ = features;
+        });
     }
     void peer_disconnected(const DeviceIdBytes& /*device*/, osdrop_result /*reason*/) override {}
     void peer_responsive(const DeviceIdBytes& /*device*/, bool /*responsive*/) override {}
@@ -142,6 +145,7 @@ public:
     void log(osdrop_log_level /*level*/, const char* /*message*/) override {}
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
                           const std::string& /*name*/) override {}
+    void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);
@@ -156,6 +160,10 @@ public:
         return connected_;
     }
     int connected_unlocked() const { return connected_; }
+    std::uint32_t features() {
+        const std::scoped_lock lock(mutex_);
+        return features_;
+    }
     std::size_t codes_unlocked() const { return codes_.size(); }
 
 private:
@@ -173,6 +181,7 @@ private:
     int group_changes_ = 0;
     int nearby_changes_ = 0;
     int connected_ = 0;
+    std::uint32_t features_ = 0;
     std::vector<osdrop_result> left_;
     std::vector<std::pair<std::uint64_t, std::uint32_t>> codes_;
 };
@@ -319,6 +328,8 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->confirm_pairing(connection.value(), true), OSDROP_OK);
     EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
     ASSERT_TRUE(pc->events.wait_for([&] { return pc->events.connected_unlocked() == 1; }));
+    EXPECT_EQ(pc->events.features(), OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
+        << "no control or drags before the input process and the drag bridge exist";
     ASSERT_TRUE(wait_until([&] {
         return pc->engine->info().has_group && laptop.engine->info().has_group &&
                pc->engine->members().value().size() == 2;
@@ -339,6 +350,29 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->info().group_id, group);
 }
 
+TEST(GroupEngine, AComputerBlockedAtItsCodeIsListedAndNotOfferedUntilUnblocked) {
+    Computer pc(6, "PC");
+    Computer laptop(7, "Laptop");
+    pc.discovery.report(*laptop.discovery.resolved());
+    laptop.discovery.report(*pc.discovery.resolved());
+    ASSERT_EQ(pc.engine->nearby().size(), 1U);
+
+    const auto laptop_id = laptop.engine->info().device_id;
+    ASSERT_TRUE(laptop.engine->pair(pc.engine->info().device_id).has_value());
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.codes_unlocked() > 0; }));
+    EXPECT_EQ(pc.engine->block(laptop_id), OSDROP_OK);
+    const auto blocked = pc.engine->blocked();
+    ASSERT_TRUE(blocked.has_value());
+    ASSERT_EQ(blocked.value().size(), 1U);
+    EXPECT_EQ(std::string(blocked.value().front().name), "Laptop");
+    EXPECT_TRUE(pc.engine->nearby().empty()) << "a blocked computer is not offered";
+
+    EXPECT_EQ(pc.engine->unblock(laptop_id), OSDROP_OK);
+    EXPECT_TRUE(pc.engine->blocked().value().empty());
+    EXPECT_EQ(pc.engine->nearby().size(), 1U);
+    EXPECT_EQ(pc.engine->unblock(laptop_id), OSDROP_ERROR_INVALID_ARGUMENT);
+}
+
 TEST(GroupEngine, StoredStatesAreCheckedBeforeStarting) {
     {
         Computer damaged_layout(4, "PC");
@@ -351,7 +385,7 @@ TEST(GroupEngine, StoredStatesAreCheckedBeforeStarting) {
     FakeDiscovery discovery;
     RecordingEvents events;
     std::uint64_t random = 5;
-    store.put(StoredItem::GroupState, {'O', 'D', 'G', 'S', 2});
+    store.put(StoredItem::GroupState, {'O', 'D', 'G', 'S', 3});
     const auto newer = GroupEngine::create(
         {.device_name = "PC", .random = osdrop_random_source{.fill = fill, .context = &random}},
         store, discovery, events);

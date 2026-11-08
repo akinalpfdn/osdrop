@@ -35,6 +35,8 @@ enum Theme {
         static let menuWidth: CGFloat = 320
         static let developerWindowWidth: CGFloat = 520
         static let pairingWindowWidth: CGFloat = 340
+        /// The window showing copied files on their way from another computer.
+        static let fetchWindowWidth: CGFloat = 300
         static let settingsWidth: CGFloat = 560
         static let settingsHeight: CGFloat = 520
         static let onboardingWidth: CGFloat = 420
@@ -58,6 +60,8 @@ enum Theme {
         static let iconSize: CGFloat = 64
         /// How far each further item is shifted in a drag image.
         static let stackOffset: CGFloat = 6
+        /// The drop target that ends this Mac's drag where it waited at the edge.
+        static let releaseSize: CGFloat = 64
     }
 
     /// The arrangement editor: every member's monitors to scale.
@@ -103,5 +107,8 @@ enum Theme {
         static let clipboard = "doc.on.clipboard"
         static let advanced = "wrench.and.screwdriver"
         static let quit = "power"
+        static let sending = "arrow.up.circle"
+        static let receiving = "arrow.down.circle"
+        static let cancel = "xmark.circle.fill"
     }
 }
