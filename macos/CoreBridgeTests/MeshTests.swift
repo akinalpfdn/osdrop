@@ -7,12 +7,12 @@ import Testing
 @Suite("Mesh through CoreBridge")
 struct MeshTests {
     /// Collects events until `condition` holds or 5 s pass.
-    private actor Recorder {
-        private(set) var events: [MeshEvent] = []
+    private actor Recorder<Event: Sendable> {
+        private(set) var events: [Event] = []
 
-        func record(_ event: MeshEvent) { events.append(event) }
+        func record(_ event: Event) { events.append(event) }
 
-        func wait(for condition: @Sendable ([MeshEvent]) -> Bool) async -> Bool {
+        func wait(for condition: @Sendable ([Event]) -> Bool) async -> Bool {
             for _ in 0..<500 {
                 if condition(events) { return true }
                 // A cancelled sleep only ends the wait early; the test checks the condition anyway.
@@ -22,10 +22,14 @@ struct MeshTests {
         }
     }
 
-    private static func listen(to mesh: Mesh) -> Recorder {
-        let recorder = Recorder()
-        Task { [events = mesh.events] in
-            for await event in events {
+    private static func listen(to mesh: Mesh) -> Recorder<MeshEvent> {
+        record(mesh.events)
+    }
+
+    private static func record<Event: Sendable>(_ stream: AsyncStream<Event>) -> Recorder<Event> {
+        let recorder = Recorder<Event>()
+        Task {
+            for await event in stream {
                 await recorder.record(event)
             }
         }
@@ -181,6 +185,75 @@ struct MeshTests {
             await otherEvents.wait { events in
                 events.contains { if case .contentReceived(id, .success(text)) = $0 { true } else { false } }
             })
+    }
+
+    @Test("Pushing through an edge moves the input to another member")
+    func movesInput() async throws {
+        let mac = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Mac"))
+        let other = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Other Mac"))
+        let macEvents = Self.listen(to: mac)
+        let macControl = Self.record(mac.control)
+        let otherControl = Self.record(other.control)
+        let connection = try other.pair(host: "127.0.0.1", port: mac.listenPort)
+        #expect(await macEvents.wait { Self.code(in: $0) != nil })
+        let macCode = try #require(Self.code(in: await macEvents.events))
+        try other.confirmPairing(connection, accepted: true)
+        try mac.confirmPairing(macCode.connection, accepted: true)
+        #expect(
+            await macEvents.wait { events in
+                events.contains { if case .peerConnected = $0 { true } else { false } }
+            })
+        try mac.setScreens([Self.monitor(width: 1000, height: 800)])
+        try other.setScreens([Self.monitor(width: 1000, height: 800)])
+        var placed = false
+        for _ in 0..<300 where !placed {
+            placed = try mac.layout().count == 2 && mac.layout().allSatisfy { $0.placement != nil }
+            if !placed { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        #expect(placed)
+        try mac.setLayout([
+            Placement(deviceID: mac.deviceID, x: 0, y: 0, isDetached: false),
+            Placement(deviceID: other.deviceID, x: 16_000, y: 0, isDetached: false),
+        ])
+
+        // A push against the Mac's right edge for over a second.
+        for _ in 0..<70 where await macControl.events.isEmpty {
+            try mac.input(
+                .pointer(position: CoordPoint(x: 999 * 16, y: 400 * 16), delta: CoordPoint(x: 64, y: 0)),
+                ageMicroseconds: 0)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(
+            await macControl.wait { events in
+                events.contains { if case .captureBegan(other.deviceID, []) = $0 { true } else { false } }
+            })
+        #expect(
+            await otherControl.wait { events in
+                events.contains(.controlled(by: mac.deviceID))
+                    && events.contains(
+                        .inject(.pointer(position: CoordPoint(x: 0, y: 400 * 16), delta: CoordPoint(x: 0, y: 0))))
+            })
+        try mac.input(.key(page: 7, usage: 4, action: 1), ageMicroseconds: 0)
+        #expect(await otherControl.wait { $0.contains(.inject(.key(page: 7, usage: 4, action: 1))) })
+
+        try mac.returnHome(inputLost: false)
+        #expect(
+            await macControl.wait { events in
+                events.contains {
+                    if case .captureEnded(other.deviceID, let cursor, .hotkey) = $0 {
+                        cursor.x == 999 * 16
+                    } else {
+                        false
+                    }
+                }
+            })
+        #expect(
+            await otherControl.wait { events in
+                events.contains(.inject(.key(page: 7, usage: 4, action: 2))) && events.last == .controlled(by: nil)
+            })
+        #expect(throws: CoreError.invalidArgument) {
+            try mac.input(.key(page: 7, usage: 0, action: 1), ageMicroseconds: 0)
+        }
     }
 
     @Test("Commands and stored states are checked")

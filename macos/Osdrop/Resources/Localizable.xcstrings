@@ -86,6 +86,142 @@
         }
       }
     },
+    "control.controlledBy %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is controlling this computer."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bu bilgisayarı kontrol ediyor."
+          }
+        }
+      }
+    },
+    "control.hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push the cursor against an edge to move to the computer beside it. ⌃⌥⌘⎋ brings it back."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yanındaki bilgisayara geçmek için imleci bir kenara doğru itin. ⌃⌥⌘⎋ geri getirir."
+          }
+        }
+      }
+    },
+    "control.locked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The cursor stays on the computer it is on. ⌃⌥⌘L lets it cross again."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İmleç bulunduğu bilgisayarda kalıyor. ⌃⌥⌘L yeniden geçmesine izin verir."
+          }
+        }
+      }
+    },
+    "control.lost %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ stopped answering, so the cursor came back."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ yanıt vermeyi bıraktı, imleç geri geldi."
+          }
+        }
+      }
+    },
+    "control.refused.asleep %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is asleep."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ uykuda."
+          }
+        }
+      }
+    },
+    "control.refused.busy %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is in use by another computer."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ başka bir bilgisayar tarafından kullanılıyor."
+          }
+        }
+      }
+    },
+    "control.refused.locked %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is locked."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kilitli."
+          }
+        }
+      }
+    },
+    "control.refused.notPermitted %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ does not accept control from this computer."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bu bilgisayardan kontrolü kabul etmiyor."
+          }
+        }
+      }
+    },
     "developer.accessibility.granted" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -898,6 +1034,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Grup: %@"
+          }
+        }
+      }
+    },
+    "developer.mesh.latency %@ %@ %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Input latency: median %@ ms, p99 %@ ms (%lld samples)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Girdi gecikmesi: ortanca %@ ms, p99 %@ ms (%lld örnek)"
           }
         }
       }

@@ -22,6 +22,9 @@ struct GroupMenuSection: View {
             if let clipboard = controller.clipboard, let notice = clipboard.notice {
                 ClipboardBanner(clipboard: clipboard, notice: notice)
             }
+            if let input = controller.input {
+                ControlStatus(input: input, controller: controller)
+            }
             if controller.isRunning {
                 members
                 nearby
@@ -166,6 +169,47 @@ private struct RemovedBanner: View {
             Button("group.dismiss") { controller.dismissRemoval() }
         }
         .font(Theme.Typography.caption)
+    }
+}
+
+/// Input control: who controls this Mac, the lock, and why the cursor came back.
+private struct ControlStatus: View {
+    let input: InputController
+    let controller: GroupController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.small) {
+            if let by = input.controller {
+                Label("control.controlledBy \(controller.name(of: by))", systemImage: Theme.Symbol.controlled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if input.isLocked {
+                Label("control.locked", systemImage: Theme.Symbol.locked)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let notice = input.notice {
+                Label(message(notice), systemImage: Theme.Symbol.warning)
+                    .foregroundStyle(Theme.Colors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("clipboard.dismiss") { input.dismissNotice() }
+            }
+            if input.isWatching, controller.members.contains(where: { !$0.isSelf && $0.isConnected }) {
+                Text("control.hint")
+                    .foregroundStyle(Theme.Colors.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .font(Theme.Typography.caption)
+    }
+
+    private func message(_ notice: ControlNotice) -> LocalizedStringKey {
+        switch notice {
+        case .refused(let name, .locked): "control.refused.locked \(name)"
+        case .refused(let name, .asleep): "control.refused.asleep \(name)"
+        case .refused(let name, .notPermitted): "control.refused.notPermitted \(name)"
+        case .refused(let name, .busy): "control.refused.busy \(name)"
+        case .lost(let name): "control.lost \(name)"
+        }
     }
 }
 

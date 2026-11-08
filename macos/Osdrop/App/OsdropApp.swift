@@ -29,7 +29,7 @@ struct OsdropApp: App {
         MenuBarExtra {
             MenuContentView(accessibility: dependencies.accessibility, group: dependencies.group)
         } label: {
-            Label("app.name", image: Theme.Artwork.menuBar)
+            MenuBarLabel(group: dependencies.group)
         }
         .menuBarExtraStyle(.window)
 
@@ -44,5 +44,18 @@ struct OsdropApp: App {
             }
             .windowResizability(.contentSize)
         #endif
+    }
+}
+
+/// The menu bar icon; another one while another computer controls this Mac (DEVPLAN Phase 11).
+private struct MenuBarLabel: View {
+    let group: GroupController
+
+    var body: some View {
+        if group.input?.controller != nil {
+            Label("app.name", systemImage: Theme.Symbol.controlled)
+        } else {
+            Label("app.name", image: Theme.Artwork.menuBar)
+        }
     }
 }

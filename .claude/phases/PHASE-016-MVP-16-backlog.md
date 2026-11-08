@@ -1,5 +1,6 @@
 # Phase 016 (MVP-16) — Shared clipboard
-Status: ACTIVE
+Status: BACKLOG — code done (PR #13, draft); TESTING CL1–CL8 wait for two computers (the second
+Mac, the PC)
 
 DEVPLAN reference: Phase 15. Depends on: Phase 13
 

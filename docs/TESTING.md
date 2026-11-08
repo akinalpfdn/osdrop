@@ -55,6 +55,17 @@ fetch from a computer that left ends at once. The Mac's `ClipboardController` an
 `ClipboardSync` run against a pasteboard and a mesh in memory (concealed copies are never read,
 results that arrive early, newer copies, notices), and two PC engines share a copy over loopback.
 
+The input control tests move the cursor through a row of three simulated computers and back, with
+held modifiers carried over and everything released on every way out (hotkey, pushing back,
+ReleaseAll, local takeover, a lost endpoint or controller, a locked screen, a withdrawn
+permission); refusals (locked, busy, not permitted) send the cursor home; a held button or the
+lock keeps it where it is; cursor reports move the virtual cursor; motion latency is measured
+through the clock offset. A scripted run of 1000 crossings with keys and buttons held, ended in
+turns by the hotkey, local takeover and pushing back, leaves nothing pressed on any computer
+(DEVPLAN Phase 11). Through the C API and CoreBridge, a push against an edge on loopback moves the
+input to another member and the hotkey brings it back. The Mac's `InputController` runs against
+an event tap, an injector and a mesh in memory.
+
 ### Protocol fixtures and fuzzing
 
 `protocol/fixtures/` holds valid and malformed samples of every message, written by an independent
@@ -184,6 +195,30 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL6 | Over the limit | Copy more than 512 MB of files | The other computer keeps its clipboard and shows that the copy is too large |
 | CL7 | Source gone | Copy on one computer, quit Osdrop there at once, paste on another | The paste is immediate (the old clipboard) and a notice says the copy could not be fetched |
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
+
+### Cursor and keyboard (Phase 11)
+
+Run with Osdrop on every computer, members of one group, with Accessibility granted. A push lasts
+about a second before the cursor crosses. The rows marked PC need the PC; Mac ↔ Mac needs the
+second Mac. Before each run, say which computer's mouse and keyboard will be used.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| I1 | Every direction | With three computers side by side, push the cursor through each shared edge both ways; push against an outer edge | It crosses each shared edge, enters at the same height, and stops at outer edges |
+| I2 | Typing and clicks | On the other computer, type in a text field, double-click a word, drag-select, scroll, right-click | All of it lands where the cursor is; the double click selects the word |
+| I3 | Held modifiers | Hold Shift on the controller, cross, type letters, release Shift, type again | Capitals while Shift is held, then lower case; Shift is not stuck on either computer |
+| I4 | Hotkeys | While on another computer press ⌃⌥⌘⎋; then press ⌃⌥⌘L at home and push against the edge; press ⌃⌥⌘L again | The cursor comes back where it left; while locked it does not cross |
+| I5 | Local takeover | While another computer controls this one, move this computer's own mouse | Control ends at once; the controller's cursor reappears where it left; the menu bar icon returns to normal |
+| I6 | Network unplugged | While controlling another computer, unplug its network (or turn its Wi-Fi off) | Within a second the cursor is back on the controller; nothing stays pressed on the other computer when it returns |
+| I7 | Refusals | Lock the other computer's screen, then push into it; deny control in its permissions, then push | The cursor stays home; the menu says it is locked; with control denied the edge is a wall |
+| I8 | Being controlled | While controlled, look at the controlled Mac's menu bar and menu | Another icon, and the menu names the controller |
+| I9 | Latency | Developer… › Mesh on the controlled computer while moving the cursor on it for 10 s: wired gigabit, then 5 GHz Wi-Fi | Wired: median under 8 ms, p99 under 20 ms; Wi-Fi: median under 15 ms |
+
+Latency is measured on the controlled computer for every motion datagram: the arrival time minus
+the controller's capture time, which core converts to the controlled computer's clock with the
+session clock offset (the offset of the fastest of the last eight pings). The capture time is when
+the event tap received the event, so the time inside the controller's input system is not
+included. The developer view shows the median and the 99th percentile of the last 1000 datagrams.
 
 ### Runs
 
