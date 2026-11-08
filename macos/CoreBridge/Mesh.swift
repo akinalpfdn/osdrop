@@ -158,6 +158,23 @@ public final class Mesh: Sendable {
         try check(handle.withPointer { osdrop_mesh_leave_group($0) })
     }
 
+    /// Blocks a device everywhere in the group: a member is removed, a computer whose code is
+    /// shown here is refused, and no member shows it a code again until it is unblocked.
+    public func block(_ device: DeviceID) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_block($0, device.bytes) })
+    }
+
+    public func unblock(_ device: DeviceID) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_unblock($0, device.bytes) })
+    }
+
+    public func blocked() throws(CoreError) -> [BlockedDevice] {
+        try Self.readList(of: osdrop_blocked_device()) { buffer, capacity, count in
+            handle.withPointer { osdrop_mesh_blocked($0, buffer, capacity, count) }
+        }
+        .map(BlockedDevice.init)
+    }
+
     public func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) throws(CoreError) {
         var raw = permissions.raw
         try check(handle.withPointer { osdrop_mesh_set_permissions($0, device.bytes, &raw) })

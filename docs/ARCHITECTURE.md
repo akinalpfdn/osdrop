@@ -76,10 +76,11 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
   connection, which has its own TCP connection.
 - **Group state.** `Group` hands its state (group ID, roster, permissions) to the platform after
   every change as bytes the platform stores in its secure store and passes back at start. The
-  format: magic `ODGS`, a version byte (1), the group ID, the pairings (device ID, key, epoch,
-  platform, name), the revocations (device ID, epoch) and the permissions that differ from the
-  default; counts are u16 and integers little-endian, as on the wire. A newer version is refused,
-  so it is never overwritten.
+  format: magic `ODGS`, a version byte (2), the group ID, the pairings (device ID, key, epoch,
+  platform, name), the revocations (device ID, epoch), the permissions that differ from the
+  default and, from version 2, the blocks (device ID, version, flags, platform, name); counts are
+  u16 and integers little-endian, as on the wire. Version 1 states are still read; a newer
+  version is refused, so it is never overwritten.
 - **Layout state.** `Layout` hands the platform its state after every change: magic `ODLY`, a
   version byte (1), the group ID, the layout document as an encoded LayoutState message and each
   member's last ScreenReport, each embedded with a u16 length so the wire checks apply. The

@@ -72,6 +72,7 @@ public sealed partial class PairingViewModel
         CoreResult.PeerBusy => Localization.Strings.PairingFailedBusy,
         CoreResult.GroupFull => Localization.Strings.PairingFailedGroupFull,
         CoreResult.InAnotherGroup => Localization.Strings.PairingFailedInAnotherGroup,
+        CoreResult.NotTrusted => Localization.Strings.PairingFailedRefused,
         CoreResult.TimedOut => Localization.Strings.PairingFailedTimedOut,
         _ => Localization.Strings.PairingFailedUnreachable,
     };
@@ -81,6 +82,9 @@ public sealed partial class PairingViewModel
 
     [RelayCommand]
     private Task RejectAsync() => _owner.AnswerAsync(accepted: false);
+
+    [RelayCommand]
+    private Task BlockAsync() => _owner.BlockPairingAsync();
 
     [RelayCommand]
     private void Close() => _owner.ClosePairing();

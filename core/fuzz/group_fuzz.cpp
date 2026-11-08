@@ -1,7 +1,8 @@
 // Fuzz entry point for the group: the stored group state and RosterState from members. Properties
 // checked on any input (run under ASan/UBSan): nothing crashes or reads out of bounds; a decoded
 // state encodes canonically and decodes back to itself; and a roster from the network merges into
-// a known one the same way in either order, and merging it twice changes nothing.
+// a known one the same way in either order, merging it twice changes nothing, and neither a
+// revocation nor a block is undone by anything but a newer entry.
 #include "crypto/noise.hpp"
 #include "group/group_state.hpp"
 #include "group/roster.hpp"
@@ -48,7 +49,7 @@ osdrop::group::DeviceId revoked_device() {
     return osdrop::crypto::device_id(key_of(kRevokedEpoch));
 }
 
-/// A roster with two members and one revoked computer, for merging into.
+/// A roster with two members and one revoked and blocked computer, for merging into.
 Roster known_roster() {
     Roster roster;
     for (std::uint8_t seed = 1; seed <= kRevokedEpoch; ++seed) {
@@ -59,6 +60,7 @@ Roster known_roster() {
                           .name = "Member"});
     }
     roster.revoke(revoked_device(), kRevokedEpoch);
+    roster.block(revoked_device(), osdrop::protocol::Platform::Windows, "Blocked");
     return roster;
 }
 
@@ -85,6 +87,9 @@ void fuzz_roster(std::span<const std::uint8_t> input) {
     // The revoked pairing stays revoked; only a newer pairing brings that computer back.
     const auto revoked = known_then_received.member(revoked_device());
     check(!revoked || revoked->epoch > kRevokedEpoch);
+    // The block holds unless a newer entry unblocked it.
+    const auto& block = known_then_received.blocks().at(revoked_device());
+    check(block.blocked || block.version > 1);
 }
 
 } // namespace

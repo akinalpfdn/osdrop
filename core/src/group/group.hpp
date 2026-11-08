@@ -46,6 +46,14 @@ struct GroupConfig {
     std::string device_name; ///< this computer's roster entry when it creates or is added
 };
 
+/// A device blocked from the group, as the platform lists it.
+struct BlockedDevice {
+    DeviceId device_id{};
+    protocol::Platform platform = protocol::Platform::MacOS;
+    std::string name;
+    bool operator==(const BlockedDevice&) const = default;
+};
+
 /// One member as the platform lists it.
 struct MemberStatus {
     Member member;
@@ -71,11 +79,17 @@ public:
 
     [[nodiscard]] const GroupState& state() const { return state_; }
     [[nodiscard]] std::vector<MemberStatus> members() const;
+    [[nodiscard]] std::vector<BlockedDevice> blocked() const;
 
     // --- Commands, on the mesh's thread ---
     /// Removes a member from the group everywhere; it is told it was revoked.
     [[nodiscard]] Status<Error> revoke(const DeviceId& device, TimePoint now);
-    /// Leaves the group: members learn it, sessions end, the state is cleared.
+    /// Blocks a device everywhere in the group: every member refuses it before any code. A
+    /// member is removed as by revoke(); a computer showing a pairing code here is refused. Works
+    /// in no group too, and blocks outlive leaving one.
+    [[nodiscard]] Status<Error> block(const DeviceId& device, TimePoint now);
+    [[nodiscard]] Status<Error> unblock(const DeviceId& device, TimePoint now);
+    /// Leaves the group: members learn it, sessions end, the state is cleared but for blocks.
     [[nodiscard]] Status<Error> leave(TimePoint now);
     [[nodiscard]] Status<Error> set_permissions(const DeviceId& device,
                                                 const Permissions& permissions, TimePoint now);
@@ -115,6 +129,11 @@ private:
         protocol::Hello hello;
         protocol::Capabilities capabilities;
     };
+    struct Prompt {
+        DeviceId device{};
+        protocol::Platform platform = protocol::Platform::MacOS;
+        std::string name;
+    };
 
     void receive_roster(const DeviceId& device, const protocol::RosterState& message);
     void adopt(const DeviceId& device, const protocol::RosterState& message);
@@ -142,7 +161,7 @@ private:
     std::map<DeviceId, Joining> joining_;  ///< paired in this run, not yet members on both sides
     std::map<DeviceId, Session> sessions_; ///< established sessions
     std::set<DeviceId> announced_;         ///< members whose connection `next` was told about
-    std::map<mesh::ConnectionId, DeviceId> pairing_prompts_; ///< codes shown, not answered yet
+    std::map<mesh::ConnectionId, Prompt> pairing_prompts_; ///< codes shown, not answered yet
 };
 
 } // namespace osdrop::group

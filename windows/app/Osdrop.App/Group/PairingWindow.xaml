@@ -21,7 +21,11 @@
     <TextBlock Text="{Binding Detail}" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
                Visibility="{Binding HasDetail, Converter={StaticResource Osdrop.Converter.Visible}}"
                Style="{StaticResource Osdrop.Text.Body}" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="{StaticResource Osdrop.Thickness.SectionGap}">
+    <DockPanel Margin="{StaticResource Osdrop.Thickness.SectionGap}">
+      <Button DockPanel.Dock="Left" Content="{x:Static res:Strings.PairingBlock}" Command="{Binding BlockCommand}"
+              Visibility="{Binding CanAnswer, Converter={StaticResource Osdrop.Converter.Visible}}"
+              Style="{StaticResource Osdrop.Button}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
       <Button Content="{x:Static res:Strings.PairingReject}" Command="{Binding RejectCommand}" IsCancel="True"
               Visibility="{Binding CanAnswer, Converter={StaticResource Osdrop.Converter.Visible}}"
               Margin="{StaticResource Osdrop.Thickness.ButtonGap}" Style="{StaticResource Osdrop.Button}" />
@@ -32,5 +36,6 @@
               Visibility="{Binding CanClose, Converter={StaticResource Osdrop.Converter.Visible}}"
               Style="{StaticResource Osdrop.Button}" />
     </StackPanel>
+    </DockPanel>
   </StackPanel>
 </Window>

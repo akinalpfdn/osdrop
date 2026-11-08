@@ -198,4 +198,22 @@
   <data name="UnitGigabytes" xml:space="preserve">
     <value>{0} GB</value>
   </data>
+  <data name="GroupBlock" xml:space="preserve">
+    <value>Çıkar ve engelle</value>
+  </data>
+  <data name="GroupBlocked" xml:space="preserve">
+    <value>Engellenen bilgisayarlar</value>
+  </data>
+  <data name="GroupBlockedHint" xml:space="preserve">
+    <value>Gruptaki hiçbir bilgisayarla eşleşemezler. Yeniden eşleşmek için engeli kaldırın.</value>
+  </data>
+  <data name="GroupUnblock" xml:space="preserve">
+    <value>Engeli kaldır</value>
+  </data>
+  <data name="PairingBlock" xml:space="preserve">
+    <value>Engelle</value>
+  </data>
+  <data name="PairingFailedRefused" xml:space="preserve">
+    <value>Bu bilgisayarla eşleşmeyi kabul etmiyor.</value>
+  </data>
 </root>

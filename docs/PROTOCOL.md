@@ -205,16 +205,18 @@ No body.
 
 ### 0x10 RosterState
 
-The sender's view of the group: for each device it knows of, the newest pairing and the newest
-revocation. Receivers merge it as described in "Group membership".
+The sender's view of the group: for each device it knows of, the newest pairing, the newest
+revocation and the newest block entry. Receivers merge it as described in "Group membership".
 
 | Field | Type | Values |
 |-------|------|--------|
 | group_id | bytes[16] | not all zeros |
 | member_count | u8 | 1–64 |
 | revocation_count | u8 | 0–255 |
+| block_count | u8 | 0–255 |
 | members | member × member_count | |
 | revocations | revocation × revocation_count | |
+| blocks | block × block_count | |
 
 member:
 
@@ -234,7 +236,19 @@ revocation:
 | device_id | bytes[16] | |
 | epoch | u32 | 1 or more |
 
-No two members share (device_id, epoch); neither do two revocations. Whether `device_id` matches
+block:
+
+| Field | Type | Values |
+|-------|------|--------|
+| device_id | bytes[16] | |
+| version | u32 | 1 or more; each block or unblock of the same device has a higher version |
+| flags | u8 | bit 0: blocked (0: unblocked); other bits reserved |
+| platform | u8 | 1 macOS, 2 Windows |
+| reserved | u8 | 0 |
+| name | string | 1–64 bytes, as the device was named when it was blocked |
+
+No two members share (device_id, epoch); neither do two revocations, and no two blocks share a
+device_id. Whether `device_id` matches
 `public_key` is checked by the group logic, not the codec: one mismatch discards the whole message.
 A roster too large for one message is split into several, each with at least one member.
 
@@ -791,6 +805,13 @@ entries for the same epoch carry the same key (the device ID is its fingerprint)
 whose name, then platform, sorts first. Merges therefore give the same roster in every order, and
 a roster from a member that was offline cannot undo a revocation.
 
+A member can also block a device: the roster keeps each device's newest block entry, and a blocked
+device is no member whatever its pairings, and is refused before any code. Blocking a member
+revokes it too. Unblocking writes an entry with a higher version, so it spreads like the block
+did. Merging keeps the entry with the higher version; at the same version a block wins over an
+unblock, then the name and platform that sort first. A computer keeps its blocks when it leaves the
+group, except one of itself, and brings them into the next group it joins.
+
 ### Rosters between members
 
 - A member sends its whole roster to each member whose session is established, and again to every
@@ -811,6 +832,7 @@ After the handshake, each side decides about the peer in this order:
 
 | The peer | Decision |
 |----------|----------|
+| A device blocked here | Error NOT_TRUSTED |
 | A member | Trusted: PairingConfirm *accepted* at once |
 | In this computer's group, but not a member: not in its roster yet, or revoked without having heard of it | Error NOT_TRUSTED; dialled again once a roster names it |
 | In another group, while this computer is in one | Error IN_ANOTHER_GROUP |

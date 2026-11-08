@@ -25,6 +25,10 @@ public sealed partial class GroupViewModel : ObservableObject
 
     public ObservableCollection<MemberItem> Members { get; } = [];
     public ObservableCollection<NearbyItem> Nearby { get; } = [];
+    public ObservableCollection<BlockedItem> Blocked { get; } = [];
+
+    [ObservableProperty]
+    public partial bool HasBlocked { get; set; }
 
     [ObservableProperty]
     public partial PairingViewModel? Pairing { get; set; }
@@ -96,6 +100,29 @@ public sealed partial class GroupViewModel : ObservableObject
         await RefreshMembersAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Removes the member and blocks it everywhere in the group.</summary>
+    [RelayCommand]
+    private async Task BlockAsync(MemberItem? member)
+    {
+        if (member is null || member.IsSelf)
+        {
+            return;
+        }
+        _ = await _engine.BlockAsync(member.DeviceId).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task UnblockAsync(BlockedItem? computer)
+    {
+        if (computer is null)
+        {
+            return;
+        }
+        _ = await _engine.UnblockAsync(computer.DeviceId).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
+    }
+
     [RelayCommand]
     private async Task LeaveAsync()
     {
@@ -129,6 +156,20 @@ public sealed partial class GroupViewModel : ObservableObject
         {
             Pairing = new PairingViewModel(this, PairingStage.Failed, shown.PeerName, failure: PairingViewModel.Explain(result));
         }
+    }
+
+    /// <summary>Refuses the computer whose code is shown and blocks it everywhere in the group.</summary>
+    internal async Task BlockPairingAsync()
+    {
+        if (Pairing is not { Stage: PairingStage.Confirm } || _pairingPeer is not string peer)
+        {
+            return;
+        }
+        Pairing = null;
+        _pairingPeer = null;
+        _pairingConnection = null;
+        _ = await _engine.BlockAsync(peer).ConfigureAwait(true);
+        await RefreshAsync().ConfigureAwait(true);
     }
 
     /// <summary>Closes the pairing window; a code still on screen is rejected.</summary>
@@ -240,6 +281,13 @@ public sealed partial class GroupViewModel : ObservableObject
         {
             Members.Add(new MemberItem(member));
         }
+        IReadOnlyList<BlockedComputer> blocked = await _engine.GetBlockedAsync().ConfigureAwait(true);
+        Blocked.Clear();
+        foreach (BlockedComputer computer in blocked)
+        {
+            Blocked.Add(new BlockedItem(computer));
+        }
+        HasBlocked = Blocked.Count > 0;
     }
 
     private async Task RefreshNearbyAsync()

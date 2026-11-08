@@ -59,6 +59,9 @@ protocol MeshDriving: ControlDriving, TransferDriving {
     func members() async throws(CoreError) -> [GroupMember]
     func revoke(_ device: DeviceID) async throws(CoreError)
     func leaveGroup() async throws(CoreError)
+    func block(_ device: DeviceID) async throws(CoreError)
+    func unblock(_ device: DeviceID) async throws(CoreError)
+    func blocked() async throws(CoreError) -> [BlockedDevice]
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError)
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError)
     func layout() async throws(CoreError) -> [LayoutComputer]
@@ -110,6 +113,12 @@ actor CoreMesh: MeshDriving {
     func revoke(_ device: DeviceID) throws(CoreError) { try mesh.revoke(device) }
 
     func leaveGroup() throws(CoreError) { try mesh.leaveGroup() }
+
+    func block(_ device: DeviceID) throws(CoreError) { try mesh.block(device) }
+
+    func unblock(_ device: DeviceID) throws(CoreError) { try mesh.unblock(device) }
+
+    func blocked() throws(CoreError) -> [BlockedDevice] { try mesh.blocked() }
 
     func setScreens(_ monitors: [ScreenMonitor]) throws(CoreError) { try mesh.setScreens(monitors) }
 

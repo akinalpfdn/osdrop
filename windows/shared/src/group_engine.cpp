@@ -396,11 +396,23 @@ Expected<std::vector<osdrop_member>, osdrop_result> GroupEngine::members() const
         });
 }
 
+Expected<std::vector<osdrop_blocked_device>, osdrop_result> GroupEngine::blocked() const {
+    return read_list<osdrop_blocked_device>(
+        [this](osdrop_blocked_device* out, std::size_t capacity, std::size_t* count) {
+            return osdrop_mesh_blocked(mesh_, out, capacity, count);
+        });
+}
+
 std::vector<NearbyComputer> GroupEngine::nearby() const {
-    std::set<DeviceIdBytes> member_ids;
+    std::set<DeviceIdBytes> member_ids; // members and blocked computers are not offered
     if (const auto list = members()) {
         for (const osdrop_member& member : list.value()) {
             member_ids.insert(bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(member.device_id)));
+        }
+    }
+    if (const auto list = blocked()) {
+        for (const osdrop_blocked_device& device : list.value()) {
+            member_ids.insert(bytes_of<OSDROP_DEVICE_ID_SIZE>(std::data(device.device_id)));
         }
     }
     std::vector<NearbyComputer> result;
@@ -455,6 +467,14 @@ osdrop_result GroupEngine::confirm_pairing(std::uint64_t connection, bool accept
 
 osdrop_result GroupEngine::revoke(const DeviceIdBytes& device) {
     return osdrop_mesh_revoke(mesh_, device.data());
+}
+
+osdrop_result GroupEngine::block(const DeviceIdBytes& device) {
+    return osdrop_mesh_block(mesh_, device.data()); // group_changed and nearby_changed follow
+}
+
+osdrop_result GroupEngine::unblock(const DeviceIdBytes& device) {
+    return osdrop_mesh_unblock(mesh_, device.data());
 }
 
 osdrop_result GroupEngine::leave_group() {

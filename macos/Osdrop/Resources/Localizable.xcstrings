@@ -2024,6 +2024,23 @@
         }
       }
     },
+    "group.member.block" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove and block"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çıkar ve engelle"
+          }
+        }
+      }
+    },
     "group.member.connected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2738,6 +2755,23 @@
         }
       }
     },
+    "pairing.block" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Block"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engelle"
+          }
+        }
+      }
+    },
     "pairing.close" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2870,6 +2904,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "İki bilgisayar farklı gruplarda. Önce birinin grubundan ayrılması gerekiyor."
+          }
+        }
+      }
+    },
+    "pairing.failed.refused" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It does not accept pairing with this computer."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu bilgisayarla eşleşmeyi kabul etmiyor."
           }
         }
       }
@@ -3214,6 +3265,57 @@
         }
       }
     },
+    "settings.devices.block" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove and Block"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çıkar ve engelle"
+          }
+        }
+      }
+    },
+    "settings.devices.blocked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blocked computers"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engellenen bilgisayarlar"
+          }
+        }
+      }
+    },
+    "settings.devices.blocked.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "They cannot pair with any computer in the group. Unblock one to pair with it again."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruptaki hiçbir bilgisayarla eşleşemezler. Yeniden eşleşmek için engeli kaldırın."
+          }
+        }
+      }
+    },
     "settings.devices.members" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3312,6 +3414,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bu bilgisayar"
+          }
+        }
+      }
+    },
+    "settings.devices.unblock" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unblock"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engeli kaldır"
           }
         }
       }

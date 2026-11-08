@@ -94,6 +94,35 @@ struct GroupControllerTests {
         #expect(PairingFailure(.connectionClosed) == .unreachable)
     }
 
+    @Test("A computer is blocked from its code or the member list, hidden nearby and unblocked")
+    func blocksAndUnblocks() async throws {
+        let controller = fixture.start()
+        fixture.mesh.send(.pairingCode(connection: 9, code: 7, peer: GroupFixture.peer(GroupFixture.pc, name: "PC")))
+        try await waitUntil { controller.pairing == .confirm(connection: 9, code: 7, name: "PC") }
+        controller.blockPairing()
+        #expect(controller.pairing == nil)
+        try await waitUntil { fixture.mesh.calls.contains(.block(GroupFixture.pc)) }
+
+        let laptop = GroupFixture.member(GroupFixture.laptop)
+        controller.block(laptop)
+        try await waitUntil { fixture.mesh.calls.contains(.block(GroupFixture.laptop)) }
+        controller.block(GroupFixture.member(fixture.mesh.deviceID, isSelf: true))
+
+        let blockedPC = BlockedDevice(deviceID: GroupFixture.pc, platform: .windows, name: "PC")
+        fixture.mesh.setBlocked([blockedPC])
+        fixture.discovery.found(GroupFixture.device(GroupFixture.pc, name: "PC"))
+        fixture.discovery.found(GroupFixture.device(GroupFixture.laptop, name: "Laptop"))
+        fixture.mesh.send(.groupChanged(state: [1], groupID: GroupFixture.group))
+        try await waitUntil {
+            controller.blocked == [blockedPC] && controller.nearby.map(\.id) == [GroupFixture.laptop]
+        }
+
+        controller.unblock(blockedPC)
+        try await waitUntil { fixture.mesh.calls.contains(.unblock(GroupFixture.pc)) }
+        #expect(!fixture.mesh.calls.contains(.block(fixture.mesh.deviceID)), "never this computer")
+        #expect(PairingFailure(.notTrusted) == .refused)
+    }
+
     @Test("Group changes are stored and advertised; the arrangement is stored")
     func changesAreStored() async throws {
         let controller = fixture.start()
@@ -234,6 +263,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
         case confirm(UInt64, accepted: Bool)
         case setScreens(Int)
         case revoke(DeviceID)
+        case block(DeviceID)
+        case unblock(DeviceID)
         case leave
         case permissions(MemberPermissions, DeviceID)
         case setLayout([Placement])
@@ -264,6 +295,7 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     private let lock = NSLock()
     private var group: GroupID?
     private var memberList: [GroupMember] = []
+    private var blockedList: [BlockedDevice] = []
     private var computers: [LayoutComputer] = []
     private var recorded: [Call] = []
     private var discoveredIDs: [DeviceID] = []
@@ -280,6 +312,7 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func send(_ event: MeshEvent) { continuation.yield(event) }
     func setGroup(_ id: GroupID?) { lock.withLock { group = id } }
     func setMembers(_ members: [GroupMember]) { lock.withLock { memberList = members } }
+    func setBlocked(_ devices: [BlockedDevice]) { lock.withLock { blockedList = devices } }
 
     func groupID() async throws(CoreError) -> GroupID? { lock.withLock { group } }
     func peerDiscovered(_ device: DeviceID, group: GroupID?, host: String, port: UInt16) async throws(CoreError) {
@@ -296,6 +329,9 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func members() async throws(CoreError) -> [GroupMember] { lock.withLock { memberList } }
     func revoke(_ device: DeviceID) async throws(CoreError) { lock.withLock { recorded.append(.revoke(device)) } }
     func leaveGroup() async throws(CoreError) { lock.withLock { recorded.append(.leave) } }
+    func block(_ device: DeviceID) async throws(CoreError) { lock.withLock { recorded.append(.block(device)) } }
+    func unblock(_ device: DeviceID) async throws(CoreError) { lock.withLock { recorded.append(.unblock(device)) } }
+    func blocked() async throws(CoreError) -> [BlockedDevice] { lock.withLock { blockedList } }
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }

@@ -68,3 +68,18 @@ public sealed class NearbyItem
     public bool HasNote => Note.Length > 0;
     public bool CanPair { get; }
 }
+
+/// <summary>A computer no member pairs with until one unblocks it.</summary>
+public sealed class BlockedItem
+{
+    internal BlockedItem(BlockedComputer computer)
+    {
+        DeviceId = computer.DeviceId;
+        Name = computer.Name;
+        IsWindows = computer.Platform == Platform.Windows;
+    }
+
+    public string DeviceId { get; }
+    public string Name { get; }
+    public bool IsWindows { get; }
+}

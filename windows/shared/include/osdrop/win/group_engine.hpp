@@ -152,11 +152,16 @@ public:
     // Commands: from any thread, never from inside an EngineEvents callback.
     [[nodiscard]] EngineInfo info() const;
     [[nodiscard]] Expected<std::vector<osdrop_member>, osdrop_result> members() const;
+    [[nodiscard]] Expected<std::vector<osdrop_blocked_device>, osdrop_result> blocked() const;
+    /// Computers nearby that are neither members nor blocked.
     [[nodiscard]] std::vector<NearbyComputer> nearby() const;
     /// Dials a nearby computer to pair; the result identifies the pairing's events.
     [[nodiscard]] Expected<std::uint64_t, osdrop_result> pair(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result confirm_pairing(std::uint64_t connection, bool accepted);
     [[nodiscard]] osdrop_result revoke(const DeviceIdBytes& device);
+    /// As osdrop_mesh_block and osdrop_mesh_unblock.
+    [[nodiscard]] osdrop_result block(const DeviceIdBytes& device);
+    [[nodiscard]] osdrop_result unblock(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result leave_group();
     [[nodiscard]] osdrop_result set_screens(std::span<const osdrop_monitor> monitors);
     /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.

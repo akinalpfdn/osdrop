@@ -16,6 +16,8 @@ namespace {
 //   revocation_count u16, revocation × count: device_id[16] epoch u32
 //   permission_count u16, permission × count: device_id[16] flags u8 (bit 0 control, 1 files,
 //   2 clipboard)
+//   from version 2: block_count u16, block × count: device_id[16] version u32 flags u8 (bit 0
+//   blocked) platform u8 name
 constexpr std::array<std::uint8_t, 4> kMagic{'O', 'D', 'G', 'S'};
 constexpr std::uint8_t kControl = 1U << 0U;
 constexpr std::uint8_t kFiles = 1U << 1U;
@@ -67,6 +69,35 @@ Section read_revocations(protocol::Reader& reader, GroupState& state) {
         }
         if (state.roster.revocations().contains(device) || !state.roster.revoke(device, epoch)) {
             return Section::failure(Error::ValueOutOfRange);
+        }
+    }
+    return Section::ok();
+}
+
+Section read_blocks(protocol::Reader& reader, GroupState& state) {
+    std::uint16_t count = 0;
+    if (!reader.u16(count)) {
+        return Section::failure(Error::Truncated);
+    }
+    for (std::uint16_t i = 0; i < count; ++i) {
+        DeviceId device{};
+        Block block;
+        std::uint8_t flags = 0;
+        std::uint8_t platform = 0;
+        if (!protocol::read_array(reader, device) || !reader.u32(block.version) ||
+            !reader.u8(flags) || !reader.u8(platform) ||
+            !protocol::read_string(reader, block.name)) {
+            return Section::failure(Error::Truncated);
+        }
+        block.blocked = (flags & protocol::kBlockBlocked) != 0;
+        block.platform = static_cast<protocol::Platform>(platform);
+        if ((flags & static_cast<std::uint8_t>(~protocol::kBlockBlocked)) != 0 || platform < 1 ||
+            platform > 2 || state.roster.blocks().contains(device) ||
+            !state.roster.set_block(device, block)) {
+            return Section::failure(Error::ValueOutOfRange);
+        }
+        if (const auto name = protocol::check_string(block.name); !name) {
+            return Section::failure(name.error());
         }
     }
     return Section::ok();
@@ -158,6 +189,10 @@ std::vector<std::uint8_t> encode_state(const GroupState& state) {
     }
     size += state.roster.revocations().size() * (protocol::kIdSize + 4);
     size += state.permissions.size() * (protocol::kIdSize + 1);
+    size += 2;
+    for (const auto& [device, block] : state.roster.blocks()) {
+        size += protocol::kIdSize + 4 + 1 + 1 + 1 + block.name.size();
+    }
 
     std::vector<std::uint8_t> bytes(size);
     protocol::Writer writer(bytes);
@@ -182,6 +217,14 @@ std::vector<std::uint8_t> encode_state(const GroupState& state) {
         writer.bytes(device);
         writer.u8(flags_of(permissions));
     }
+    writer.u16(static_cast<std::uint16_t>(state.roster.blocks().size()));
+    for (const auto& [device, block] : state.roster.blocks()) {
+        writer.bytes(device);
+        writer.u32(block.version);
+        writer.u8(block.blocked ? protocol::kBlockBlocked : 0);
+        writer.u8(static_cast<std::uint8_t>(block.platform));
+        protocol::write_string(writer, block.name);
+    }
     bytes.resize(writer.size());
     return bytes;
 }
@@ -196,7 +239,7 @@ Expected<GroupState, Error> decode_state(std::span<const std::uint8_t> bytes) {
     if (magic != kMagic) {
         return Decoded::failure(Error::BadMagic);
     }
-    if (version != kGroupStateVersion) {
+    if (version == 0 || version > kGroupStateVersion) {
         return Decoded::failure(Error::UnsupportedVersion);
     }
     GroupState state;
@@ -205,6 +248,11 @@ Expected<GroupState, Error> decode_state(std::span<const std::uint8_t> bytes) {
     }
     for (const auto read : {read_pairings, read_revocations, read_permissions}) {
         if (const auto section = read(reader, state); !section) {
+            return Decoded::failure(section.error());
+        }
+    }
+    if (version >= 2) {
+        if (const auto section = read_blocks(reader, state); !section) {
             return Decoded::failure(section.error());
         }
     }

@@ -144,10 +144,28 @@ private struct DeviceSettings: View {
                     Note("group.empty")
                 }
                 ForEach(others) { member in
-                    MemberSettings(viewModel: viewModel, member: member) { group.revoke(member) }
+                    MemberSettings(
+                        viewModel: viewModel, member: member, revoke: { group.revoke(member) },
+                        block: { group.block(member) })
                 }
                 if !group.members.isEmpty {
                     Button("group.leave", role: .destructive) { group.leaveGroup() }
+                }
+            }
+            if !group.blocked.isEmpty {
+                Section("settings.devices.blocked") {
+                    Note("settings.devices.blocked.description")
+                    ForEach(group.blocked) { device in
+                        LabeledContent {
+                            Button("settings.devices.unblock") { group.unblock(device) }
+                        } label: {
+                            Label {
+                                Text(verbatim: device.name)
+                            } icon: {
+                                Image(systemName: device.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+                            }
+                        }
+                    }
                 }
             }
             Section("group.nearby") {
@@ -173,6 +191,7 @@ private struct MemberSettings: View {
     let viewModel: SettingsViewModel
     let member: GroupMember
     let revoke: () -> Void
+    let block: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
@@ -187,6 +206,7 @@ private struct MemberSettings: View {
                     .foregroundStyle(Theme.Colors.secondary)
                 Spacer()
                 Button("settings.devices.remove", role: .destructive, action: revoke)
+                Button("settings.devices.block", role: .destructive, action: block)
             }
             permission(.control, "settings.devices.allowControl")
             permission(.files, "settings.devices.allowFiles")

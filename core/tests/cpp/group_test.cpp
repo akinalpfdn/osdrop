@@ -134,6 +134,97 @@ TEST(Group, TheMemberThatRemovedAComputerCanPairWithItAgain) {
     expect_full_mesh_of_members(network);
 }
 
+/// Dials `to` from `from` to pair and reports whether `to` showed a code.
+bool shows_code(SimulatedMeshNetwork& network, std::size_t from, std::size_t to,
+                Error* failure = nullptr) {
+    const std::size_t codes = network.node(to).group_observer.codes.size();
+    const auto connection =
+        network.node(from).mesh.pair_with(network.node(to).address, network.now);
+    network.run_for(milliseconds(50));
+    const auto& failures = network.node(from).group_observer.failures;
+    if (failure != nullptr && !failures.empty() && failures.back().first == connection) {
+        *failure = failures.back().second;
+    }
+    return network.node(to).group_observer.codes.size() > codes;
+}
+
+TEST(Group, ABlockedMemberIsRemovedAndRefusedBeforeAnyCodeEverywhere) {
+    SimulatedMeshNetwork network;
+    form_group(network, 3);
+    const auto blocked = network.node(2).mesh.device_id();
+    ASSERT_TRUE(network.node(0).group->block(blocked, network.now).has_value());
+    network.run_for(milliseconds(200));
+    ASSERT_FALSE(state(network, 2).in_group()) << "it was told and left";
+    for (const std::size_t i : {0U, 1U}) {
+        EXPECT_FALSE(knows(network, i, 2)) << "node " << i;
+        EXPECT_TRUE(state(network, i).roster.is_blocked(blocked)) << "node " << i;
+        Error failure = Error::Internal;
+        EXPECT_FALSE(shows_code(network, 2, i, &failure)) << "node " << i;
+        EXPECT_EQ(failure, Error::NotTrusted) << "node " << i;
+    }
+    const auto listed = network.node(1).group->blocked();
+    ASSERT_EQ(listed.size(), 1U);
+    EXPECT_EQ(listed.front().device_id, blocked);
+}
+
+TEST(Group, BlockingFromThePairingCodeRefusesItAndEveryMemberAfter) {
+    SimulatedMeshNetwork network;
+    build(network, 3);
+    pair(network, 1, 0);
+    rediscover(network);
+    network.run_for(milliseconds(4'000));
+    const auto stranger = network.node(2).mesh.device_id();
+    EXPECT_EQ(network.node(1).group->block(stranger, network.now).error(), Error::InvalidArgument)
+        << "nothing names it on computer 1";
+
+    network.node(2).mesh.pair_with(network.node(0).address, network.now);
+    network.run_for(milliseconds(50));
+    ASSERT_EQ(network.node(0).group_observer.codes.size(), 2U); // the stranger's code is shown
+    ASSERT_TRUE(network.node(0).group->block(stranger, network.now).has_value());
+    network.run_for(milliseconds(200));
+    EXPECT_FALSE(network.node(2).group_observer.failures.empty()) << "its pairing was refused";
+    EXPECT_FALSE(state(network, 2).in_group());
+    ASSERT_EQ(network.node(1).group->blocked().size(), 1U) << "the block reached computer 1";
+    EXPECT_FALSE(network.node(1).group->blocked().front().name.empty()) << "named from its Hello";
+    EXPECT_FALSE(shows_code(network, 2, 1));
+    EXPECT_FALSE(shows_code(network, 2, 0));
+}
+
+TEST(Group, UnblockingLetsTheComputerPairAgain) {
+    SimulatedMeshNetwork network;
+    form_group(network, 3);
+    const auto blocked = network.node(2).mesh.device_id();
+    ASSERT_TRUE(network.node(0).group->block(blocked, network.now).has_value());
+    network.run_for(milliseconds(200));
+    EXPECT_EQ(network.node(1).group->unblock(network.node(0).mesh.device_id(), network.now).error(),
+              Error::InvalidArgument)
+        << "not blocked";
+    ASSERT_TRUE(network.node(1).group->unblock(blocked, network.now).has_value());
+    network.run_for(milliseconds(200));
+    EXPECT_FALSE(state(network, 0).roster.is_blocked(blocked)) << "the unblock reached computer 0";
+
+    pair(network, 2, 0);
+    rediscover(network);
+    network.run_for(milliseconds(4'000));
+    expect_full_mesh_of_members(network);
+}
+
+TEST(Group, BlocksOutliveLeavingTheGroup) {
+    SimulatedMeshNetwork network;
+    form_group(network, 3);
+    const auto blocked = network.node(2).mesh.device_id();
+    ASSERT_TRUE(network.node(0).group->block(blocked, network.now).has_value());
+    network.run_for(milliseconds(200));
+    ASSERT_TRUE(network.node(1).group->leave(network.now).has_value());
+    network.run_for(milliseconds(200));
+    ASSERT_FALSE(state(network, 1).in_group());
+    EXPECT_TRUE(state(network, 1).roster.is_blocked(blocked));
+    EXPECT_FALSE(shows_code(network, 2, 1)) << "refused although computer 1 is in no group";
+    EXPECT_EQ(network.node(1).group->block(network.node(1).mesh.device_id(), network.now).error(),
+              Error::InvalidArgument)
+        << "never itself";
+}
+
 TEST(Group, LeavingTellsTheOthersAndClearsTheState) {
     SimulatedMeshNetwork network;
     form_group(network, 3);

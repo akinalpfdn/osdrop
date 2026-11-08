@@ -198,4 +198,22 @@
   <data name="UnitGigabytes" xml:space="preserve">
     <value>{0} GB</value>
   </data>
+  <data name="GroupBlock" xml:space="preserve">
+    <value>Remove and block</value>
+  </data>
+  <data name="GroupBlocked" xml:space="preserve">
+    <value>Blocked computers</value>
+  </data>
+  <data name="GroupBlockedHint" xml:space="preserve">
+    <value>They cannot pair with any computer in the group. Unblock one to pair with it again.</value>
+  </data>
+  <data name="GroupUnblock" xml:space="preserve">
+    <value>Unblock</value>
+  </data>
+  <data name="PairingBlock" xml:space="preserve">
+    <value>Block</value>
+  </data>
+  <data name="PairingFailedRefused" xml:space="preserve">
+    <value>It does not accept pairing with this computer.</value>
+  </data>
 </root>

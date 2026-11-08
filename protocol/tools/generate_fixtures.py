@@ -140,11 +140,19 @@ def revocation(device_id: bytes, epoch: int) -> bytes:
     return device_id + u32(epoch)
 
 
+def block(device_id: bytes, version: int, blocked: bool, platform: int, name: str | bytes, flags: int | None = None,
+          reserved: int = 0) -> bytes:
+    flag_byte = (1 if blocked else 0) if flags is None else flags
+    return device_id + u32(version) + u8(flag_byte) + u8(platform) + u8(reserved) + string(name)
+
+
 def roster(members: list[bytes], revocations: list[bytes] | None = None, group: bytes = GROUP,
-           member_count: int | None = None) -> bytes:
+           member_count: int | None = None, blocks: list[bytes] | None = None) -> bytes:
     revoked = revocations or []
+    blocked = blocks or []
     count = len(members) if member_count is None else member_count
-    return control(0x10, group + u8(count) + u8(len(revoked)) + b"".join(members) + b"".join(revoked))
+    return control(0x10, group + u8(count) + u8(len(revoked)) + u8(len(blocked)) + b"".join(members)
+                   + b"".join(revoked) + b"".join(blocked))
 
 
 def monitor(key: bytes, x: int, y: int, width: int, height: int, pixel_width: int, pixel_height: int,
@@ -235,6 +243,7 @@ def control_fixtures() -> list[Fixture]:
     roster_two = [member(MAC_ID, 1, 1, "MacBook Air"), member(PC_ID, 3, 2, "Akınalp'ın PC")]
     many_members = [member(pattern(i), 1, 1 + i % 2, f"Computer {i:02d} " + "x" * 50) for i in range(64)]
     many_revocations = [revocation(pattern(i + 100), 1 + i) for i in range(255)]
+    many_blocks = [block(pattern(i), 1 + i, i % 2 == 0, 1 + i % 2, f"Blocked {i:03d} " + "x" * 52) for i in range(255)]
     return [
         # Valid: every message type, with boundary values.
         Fixture("control/hello_macos.bin", "control", v, 0x01, "Hello from a Mac in no group", hello()),
@@ -269,8 +278,12 @@ def control_fixtures() -> list[Fixture]:
         Fixture("control/roster_repaired_member.bin", "control", v, 0x10,
                 "the same device at epochs 1 and 2, epoch 1 revoked",
                 roster([member(PC_ID, 1, 2, "PC"), member(PC_ID, 2, 2, "PC")], [revocation(PC_ID, 1)])),
-        Fixture("control/roster_largest.bin", "control", v, 0x10, "64 members and 255 revocations",
-                roster(many_members, many_revocations)),
+        Fixture("control/roster_blocks.bin", "control", v, 0x10,
+                "a member, a removed and blocked device, and an unblocked one",
+                roster([member(MAC_ID, 1, 1, "MacBook Air")], [revocation(PC_ID, 3)],
+                       blocks=[block(PC_ID, 1, True, 2, "Akınalp'ın PC"), block(LAPTOP_ID, 2, False, 1, "Laptop")])),
+        Fixture("control/roster_largest.bin", "control", v, 0x10, "64 members, 255 revocations and 255 blocks",
+                roster(many_members, many_revocations, blocks=many_blocks)),
         Fixture("control/screen_report_two.bin", "control", v, 0x11,
                 "built-in display and an external one on its left",
                 screen_report([built_in(), monitor(pattern(2), -2560 * 16, -240 * 16, 2560 * 16, 1440 * 16,
@@ -440,6 +453,21 @@ def control_fixtures() -> list[Fixture]:
                 "same revocation twice", roster(roster_two, [revocation(LAPTOP_ID, 1), revocation(LAPTOP_ID, 1)])),
         Fixture("malformed/roster_revocation_cut.bin", "control", e, TRUNCATED, "revocation epoch cut short",
                 roster(roster_two, [revocation(LAPTOP_ID, 1)])[:-2]),
+        Fixture("malformed/roster_block_version_0.bin", "control", e, VALUE_OUT_OF_RANGE, "block version 0",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 0, True, 1, "Laptop")])),
+        Fixture("malformed/roster_block_flags.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "block flags with a reserved bit set", roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop", flags=3)])),
+        Fixture("malformed/roster_block_platform_3.bin", "control", e, VALUE_OUT_OF_RANGE, "block platform 3",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 3, "Laptop")])),
+        Fixture("malformed/roster_block_reserved.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "block reserved byte is 1", roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop", reserved=1)])),
+        Fixture("malformed/roster_block_empty_name.bin", "control", e, INVALID_STRING, "block name empty",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "")])),
+        Fixture("malformed/roster_duplicate_block.bin", "control", e, VALUE_OUT_OF_RANGE,
+                "two blocks for the same device",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop"), block(LAPTOP_ID, 2, False, 1, "Laptop")])),
+        Fixture("malformed/roster_block_cut.bin", "control", e, TRUNCATED, "block name cut short",
+                roster(roster_two, blocks=[block(LAPTOP_ID, 1, True, 1, "Laptop")])[:-2]),
 
         # ScreenReport.
         Fixture("malformed/screen_none.bin", "control", e, VALUE_OUT_OF_RANGE, "monitor_count 0",

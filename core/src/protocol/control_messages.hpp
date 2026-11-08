@@ -184,11 +184,25 @@ struct Revocation {
     bool operator==(const Revocation&) const = default;
 };
 
+/// RosterBlock flags.
+inline constexpr std::uint8_t kBlockBlocked = 1U << 0U;
+
+/// A device blocked or unblocked; the entry with the higher version holds.
+struct RosterBlock {
+    Id device_id{};
+    std::uint32_t version = 1;
+    bool blocked = true;
+    Platform platform = Platform::MacOS;
+    std::string name;
+    bool operator==(const RosterBlock&) const = default;
+};
+
 struct RosterState {
     static constexpr ControlType kType = ControlType::RosterState;
     Id group_id{};
     std::vector<RosterMember> members;
     std::vector<Revocation> revocations;
+    std::vector<RosterBlock> blocks;
     bool operator==(const RosterState&) const = default;
 };
 

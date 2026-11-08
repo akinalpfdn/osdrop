@@ -45,7 +45,8 @@ struct GroupState {
     bool operator==(const GroupState&) const = default;
 };
 
-inline constexpr std::uint8_t kGroupStateVersion = 1;
+/// Version 2 adds blocks; version 1 states are still read.
+inline constexpr std::uint8_t kGroupStateVersion = 2;
 
 [[nodiscard]] std::vector<std::uint8_t> encode_state(const GroupState& state);
 /// UnsupportedVersion for a state written by a newer Osdrop: the platform must keep it rather

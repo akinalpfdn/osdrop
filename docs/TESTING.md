@@ -175,6 +175,7 @@ Macs; PC rows need two PCs.
 | G5 | Restart | Quit and start Osdrop on one member; then restart that computer | Members reconnect without a code or any action |
 | G6 | Different groups | Pair a computer of one group with one of another group | Refused before any code: the two are in different groups |
 | G7 | Local Network off (Mac) | Turn off Osdrop in System Settings › Local Network | The menu says Local Network access is needed; turning it on finds computers again |
+| G8 | Blocking | On a member, choose **Remove and Block** for another member; on that computer, pair again. Then pair a new computer and choose **Block** at its code; unblock both in Settings › Devices (PC: the Computers window) | Each blocked computer is refused at once, by every member and without a code; the blocked list names both; after unblocking, pairing shows a code again |
 
 ### File transfer (Phase 13)
 

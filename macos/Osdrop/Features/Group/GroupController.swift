@@ -41,12 +41,15 @@ enum PairingFailure: Equatable {
     case busy
     case groupFull
     case inAnotherGroup
+    /// It refuses this computer: blocked there.
+    case refused
     case timedOut
     case unreachable
 
     init(_ error: CoreError) {
         switch error {
         case .pairingRejected: self = .rejected
+        case .notTrusted: self = .refused
         case .peerBusy: self = .busy
         case .groupFull: self = .groupFull
         case .inAnotherGroup: self = .inAnotherGroup
@@ -85,6 +88,8 @@ final class GroupController {
     private(set) var groupID: GroupID?
     private(set) var listenPort: UInt16 = 0
     private(set) var members: [GroupMember] = []
+    /// Computers no member pairs with until one unblocks them.
+    private(set) var blocked: [BlockedDevice] = []
     private(set) var nearby: [NearbyComputer] = []
     private(set) var pairing: PairingState?
     private(set) var localNetwork: LocalNetworkAccess = .unknown
@@ -252,6 +257,45 @@ final class GroupController {
                 try await mesh.revoke(member.deviceID)
             } catch {
                 Log.group.error("Removing a member failed: \(String(describing: error), privacy: .public)")
+            }
+            await self?.refreshMembers()
+        }
+    }
+
+    /// Removes `member` and blocks it everywhere in the group.
+    func block(_ member: GroupMember) {
+        guard !member.isSelf else { return }
+        block(member.deviceID)
+    }
+
+    /// Refuses the computer whose code is shown and blocks it everywhere in the group.
+    func blockPairing() {
+        guard case .confirm = pairing, let device = pairingPeer else { return }
+        pairing = nil
+        pairingPeer = nil
+        pairingConnection = nil
+        block(device)
+    }
+
+    func unblock(_ device: BlockedDevice) {
+        guard let mesh else { return }
+        Task { [weak self] in
+            do throws(CoreError) {
+                try await mesh.unblock(device.deviceID)
+            } catch {
+                Log.group.error("Unblocking failed: \(String(describing: error), privacy: .public)")
+            }
+            await self?.refreshMembers()
+        }
+    }
+
+    private func block(_ device: DeviceID) {
+        guard let mesh else { return }
+        Task { [weak self] in
+            do throws(CoreError) {
+                try await mesh.block(device)
+            } catch {
+                Log.group.error("Blocking failed: \(String(describing: error), privacy: .public)")
             }
             await self?.refreshMembers()
         }
@@ -533,9 +577,9 @@ final class GroupController {
     }
 
     private func updateNearby() {
-        let memberIDs = Set(members.map(\.deviceID))
+        let hidden = Set(members.map(\.deviceID)).union(blocked.map(\.deviceID))
         nearby = discovered.values
-            .filter { !memberIDs.contains($0.advertisement.deviceID) }
+            .filter { !hidden.contains($0.advertisement.deviceID) }
             .map { device in
                 let other = device.advertisement.groupID
                 return NearbyComputer(
@@ -568,6 +612,7 @@ final class GroupController {
         guard let mesh else { return }
         do throws(CoreError) {
             members = try await mesh.members()
+            blocked = try await mesh.blocked()
             input?.setActive(members.contains { !$0.isSelf && $0.isConnected })
         } catch {
             Log.group.error("Listing members failed: \(String(describing: error), privacy: .public)")

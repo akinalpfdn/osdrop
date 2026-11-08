@@ -588,3 +588,12 @@ choices the plan leaves open are logged here.
 **Why:** G4 on hardware: after removing the PC, the Mac refused it before any code, so it could never rejoin, although DEVPLAN says a revoked device comes back by pairing again. Refusing it gained nothing: a new key pairs as an unknown computer anyway, and both users still confirm the code.
 **Trade-offs:** Someone at a removed computer can show a pairing code on members again; it goes nowhere unless a member accepts it.
 **Revisit if:** Removed computers prompt members unwanted; a member-side block list would then be the answer.
+
+---
+
+## 2026-11-08 — Blocks are carried in the roster
+**Chosen:** User decision: a block is group-wide. The roster keeps each device's newest block entry (a version and blocked or unblocked, with its name for the list); a blocked device is no member and every member refuses it before any code. It is chosen at removal ("Remove and Block") and at an incoming code ("Block"), and undone from the blocked list on any member. A computer keeps its blocks, but one of itself, when it leaves the group, and brings them into the next group it joins.
+**Alternatives:** A block only on the computer that sets it (no protocol change, but the blocked computer can still prompt the other members); no list, only a wait after a refused code.
+**Why:** Letting removed computers pair again (same day) opened code spam; a block that every member honours stops it in one place. Versioned entries merge like the rest of the roster, so an unblock spreads and a member that missed it cannot undo it.
+**Trade-offs:** A new identity (Osdrop reinstalled, its key store cleared) is a new device and is not blocked. RosterState and the stored group state change format (version 2; version 1 is still read). Blocks a computer brings into another group apply there too.
+**Revisit if:** Users are blocked by new identities in practice; a pairing wait for refused codes would then help.

@@ -44,9 +44,9 @@ struct GroupMenuSection: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             ForEach(controller.members) { member in
-                MemberRow(member: member, isResponsive: !controller.unresponsive.contains(member.deviceID)) {
-                    controller.revoke(member)
-                }
+                MemberRow(
+                    member: member, isResponsive: !controller.unresponsive.contains(member.deviceID),
+                    remove: { controller.revoke(member) }, block: { controller.block(member) })
             }
             Button("group.leave") { controller.leaveGroup() }
         }
@@ -73,6 +73,7 @@ private struct MemberRow: View {
     let member: GroupMember
     let isResponsive: Bool
     let remove: () -> Void
+    let block: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
@@ -91,10 +92,15 @@ private struct MemberRow: View {
             }
             Spacer()
             if !member.isSelf {
-                Button(action: remove) {
+                Menu {
+                    Button("group.member.remove", action: remove)
+                    Button("group.member.block", role: .destructive, action: block)
+                } label: {
                     Image(systemName: Theme.Symbol.remove)
                 }
-                .buttonStyle(.borderless)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .help(Text("group.member.remove"))
                 .accessibilityLabel(Text("group.member.remove"))
             }

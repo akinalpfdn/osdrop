@@ -70,7 +70,7 @@ Check validate(const Bye& m) {
 
 Check validate(const RosterState& m) {
     if (is_zero(m.group_id) || !in_range(m.members.size(), 1, kMaxMembers) ||
-        m.revocations.size() > kMaxRevocations) {
+        m.revocations.size() > kMaxRevocations || m.blocks.size() > kMaxBlocks) {
         return fail(Error::ValueOutOfRange);
     }
     std::set<std::pair<Id, std::uint32_t>> members;
@@ -88,6 +88,16 @@ Check validate(const RosterState& m) {
         if (revocation.epoch == 0 ||
             !revocations.emplace(revocation.device_id, revocation.epoch).second) {
             return fail(Error::ValueOutOfRange);
+        }
+    }
+    std::set<Id> blocks;
+    for (const RosterBlock& block : m.blocks) {
+        if (block.version == 0 || !enum_in(block.platform, 1, 2) ||
+            !blocks.insert(block.device_id).second) {
+            return fail(Error::ValueOutOfRange);
+        }
+        if (const Check name = check_string(block.name); !name) {
+            return name;
         }
     }
     return ok();
@@ -316,7 +326,9 @@ Decoded read_roster_state(BodyReader& b) {
     Reader& r = b.raw();
     std::uint8_t member_count = 0;
     std::uint8_t revocation_count = 0;
-    if (!read_array(r, m.group_id) || !r.u8(member_count) || !r.u8(revocation_count)) {
+    std::uint8_t block_count = 0;
+    if (!read_array(r, m.group_id) || !r.u8(member_count) || !r.u8(revocation_count) ||
+        !r.u8(block_count)) {
         return decode_failure(Error::Truncated);
     }
     if (!in_range(member_count, 1, kMaxMembers)) {
@@ -335,6 +347,16 @@ Decoded read_roster_state(BodyReader& b) {
         if (!read_array(r, revocation.device_id) || !r.u32(revocation.epoch)) {
             return decode_failure(Error::Truncated);
         }
+    }
+    m.blocks.resize(block_count);
+    for (RosterBlock& block : m.blocks) {
+        std::uint8_t flags = 0;
+        if (!read_array(r, block.device_id) || !r.u32(block.version) ||
+            !b.flags(kBlockBlocked, flags) || !b.enumeration(block.platform) || !b.reserved(1) ||
+            !read_string(r, block.name)) {
+            return decode_failure(Error::Truncated);
+        }
+        block.blocked = (flags & kBlockBlocked) != 0;
     }
     return finish(b, std::move(m));
 }
@@ -617,6 +639,7 @@ void write_body(Writer& w, const ControlMessage& message) {
                        w.bytes(m.group_id);
                        w.u8(static_cast<std::uint8_t>(m.members.size()));
                        w.u8(static_cast<std::uint8_t>(m.revocations.size()));
+                       w.u8(static_cast<std::uint8_t>(m.blocks.size()));
                        for (const RosterMember& member : m.members) {
                            w.bytes(member.device_id);
                            w.bytes(member.public_key);
@@ -628,6 +651,14 @@ void write_body(Writer& w, const ControlMessage& message) {
                        for (const Revocation& revocation : m.revocations) {
                            w.bytes(revocation.device_id);
                            w.u32(revocation.epoch);
+                       }
+                       for (const RosterBlock& block : m.blocks) {
+                           w.bytes(block.device_id);
+                           w.u32(block.version);
+                           w.u8(block.blocked ? kBlockBlocked : 0);
+                           write_enum(w, block.platform);
+                           write_reserved(w, 1);
+                           write_string(w, block.name);
                        }
                    },
                    [&](const ScreenReport& m) {

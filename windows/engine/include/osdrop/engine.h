@@ -112,6 +112,14 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_confirm_pairing(osdrop_engine* eng
                                                               uint8_t accepted);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_revoke(osdrop_engine* engine,
                                                      const uint8_t* device_id);
+/* As osdrop_mesh_block, osdrop_mesh_unblock and osdrop_mesh_blocked; GROUP_CHANGED follows. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_block(osdrop_engine* engine,
+                                                    const uint8_t* device_id);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_unblock(osdrop_engine* engine,
+                                                      const uint8_t* device_id);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_blocked(osdrop_engine* engine,
+                                                      osdrop_blocked_device* out, size_t capacity,
+                                                      size_t* out_count);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_leave_group(osdrop_engine* engine);
 /* The displays changed: the engine reads and reports them again. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_screens_changed(osdrop_engine* engine);

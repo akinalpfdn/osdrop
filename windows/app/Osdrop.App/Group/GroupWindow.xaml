@@ -34,11 +34,16 @@
       <ItemsControl.ItemTemplate>
         <DataTemplate DataType="{x:Type group:MemberItem}">
           <DockPanel Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+            <Button DockPanel.Dock="Right" Content="{x:Static res:Strings.GroupBlock}"
+                    Command="{Binding DataContext.BlockCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding}"
+                    Visibility="{Binding CanRemove, Converter={StaticResource Osdrop.Converter.Visible}}"
+                    Style="{StaticResource Osdrop.Button}" />
             <Button DockPanel.Dock="Right" Content="{x:Static res:Strings.GroupRemove}"
                     Command="{Binding DataContext.RevokeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                     CommandParameter="{Binding}"
                     Visibility="{Binding CanRemove, Converter={StaticResource Osdrop.Converter.Visible}}"
-                    Style="{StaticResource Osdrop.Button}" />
+                    Margin="{StaticResource Osdrop.Thickness.ButtonGap}" Style="{StaticResource Osdrop.Button}" />
             <StackPanel>
               <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
               <TextBlock Text="{Binding Status}" Style="{StaticResource Osdrop.Text.Caption}" />
@@ -50,6 +55,24 @@
     <Button Content="{x:Static res:Strings.GroupLeave}" Command="{Binding LeaveCommand}" HorizontalAlignment="Left"
             Visibility="{Binding IsInGroup, Converter={StaticResource Osdrop.Converter.Visible}}"
             Margin="{StaticResource Osdrop.Thickness.ItemGap}" Style="{StaticResource Osdrop.Button}" />
+
+    <StackPanel Visibility="{Binding HasBlocked, Converter={StaticResource Osdrop.Converter.Visible}}">
+      <TextBlock Text="{x:Static res:Strings.GroupBlocked}" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
+                 Style="{StaticResource Osdrop.Text.Title}" />
+      <TextBlock Text="{x:Static res:Strings.GroupBlockedHint}" Style="{StaticResource Osdrop.Text.Caption}" />
+      <ItemsControl ItemsSource="{Binding Blocked}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="{x:Type group:BlockedItem}">
+            <DockPanel Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <Button DockPanel.Dock="Right" Content="{x:Static res:Strings.GroupUnblock}"
+                      Command="{Binding DataContext.UnblockCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                      CommandParameter="{Binding}" Style="{StaticResource Osdrop.Button}" />
+              <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+            </DockPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
 
     <TextBlock Text="{x:Static res:Strings.GroupNearby}" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
                Style="{StaticResource Osdrop.Text.Title}" />

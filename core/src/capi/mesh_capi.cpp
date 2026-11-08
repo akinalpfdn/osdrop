@@ -209,6 +209,14 @@ osdrop_member describe(const group::MemberStatus& status) {
     return member;
 }
 
+osdrop_blocked_device describe(const group::BlockedDevice& blocked) {
+    osdrop_blocked_device device{
+        .device_id = {}, .platform = static_cast<osdrop_platform>(blocked.platform), .name = {}};
+    std::ranges::copy(blocked.device_id, std::begin(device.device_id));
+    write_name(blocked.name, device.name);
+    return device;
+}
+
 std::set<layout::DeviceId> members_of(const group::GroupState& state) {
     std::set<layout::DeviceId> members;
     for (const group::Member& member : state.roster.members()) {
@@ -915,6 +923,50 @@ osdrop_result osdrop_mesh_leave_group(osdrop_mesh* mesh) {
     static_cast<void>(mesh->node->run_and_wait(
         [&](mesh::Mesh& /*mesh*/, TimePoint now) { result = member_layer.leave(now); }));
     return to_result(result);
+}
+
+osdrop_result osdrop_mesh_block(osdrop_mesh* mesh, const uint8_t* device_id) {
+    if (mesh == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const protocol::Id device = read_id(device_id);
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    group::Group& member_layer = *mesh->group;
+    static_cast<void>(mesh->node->run_and_wait(
+        [&](mesh::Mesh& /*mesh*/, TimePoint now) { result = member_layer.block(device, now); }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_mesh_unblock(osdrop_mesh* mesh, const uint8_t* device_id) {
+    if (mesh == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const protocol::Id device = read_id(device_id);
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    group::Group& member_layer = *mesh->group;
+    static_cast<void>(mesh->node->run_and_wait(
+        [&](mesh::Mesh& /*mesh*/, TimePoint now) { result = member_layer.unblock(device, now); }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_mesh_blocked(osdrop_mesh* mesh, osdrop_blocked_device* out, size_t capacity,
+                                  size_t* out_count) {
+    if (mesh == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<group::BlockedDevice> blocked;
+    const group::Group& member_layer = *mesh->group;
+    if (!mesh->node->run_and_wait(
+            [&](mesh::Mesh& /*mesh*/, TimePoint /*now*/) { blocked = member_layer.blocked(); })) {
+        return OSDROP_ERROR_INTERNAL;
+    }
+    *out_count = blocked.size();
+    if (blocked.size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    std::ranges::transform(blocked, out,
+                           [](const group::BlockedDevice& device) { return describe(device); });
+    return OSDROP_OK;
 }
 
 osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* device_id,

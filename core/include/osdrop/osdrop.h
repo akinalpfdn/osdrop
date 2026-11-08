@@ -248,6 +248,13 @@ typedef struct osdrop_member {
     uint8_t connected; /* 1 while a session with it is established */
 } osdrop_member;
 
+/* A device blocked from the group: every member refuses it before any pairing code. */
+typedef struct osdrop_blocked_device {
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    osdrop_platform platform;
+    char name[OSDROP_TXT_VALUE_SIZE]; /* NUL-terminated UTF-8, as it was when it was blocked */
+} osdrop_blocked_device;
+
 typedef struct osdrop_session_stats {
     uint32_t rtt_us;
     int64_t clock_offset_us; /* the peer's clock minus this computer's */
@@ -528,6 +535,18 @@ osdrop_result osdrop_mesh_members(osdrop_mesh* mesh, osdrop_member* out, size_t 
 osdrop_result osdrop_mesh_revoke(osdrop_mesh* mesh, const uint8_t* device_id);
 /* Leaves the group: members learn it, sessions end, then group_changed and left_group. */
 osdrop_result osdrop_mesh_leave_group(osdrop_mesh* mesh);
+/*
+ * Blocks: osdrop_mesh_block blocks a device everywhere in the group, so every member refuses it
+ * before any pairing code. A member is removed as by osdrop_mesh_revoke; a computer whose pairing
+ * code is shown here is refused. They also work in no group, and blocks outlive leaving a group.
+ * INVALID_ARGUMENT for this computer itself, for a device nothing here names (not a member, not
+ * blocked before, no code shown), and for unblocking a device that is not blocked. group_changed
+ * follows; osdrop_mesh_blocked lists the blocked devices like osdrop_mesh_members.
+ */
+osdrop_result osdrop_mesh_block(osdrop_mesh* mesh, const uint8_t* device_id);
+osdrop_result osdrop_mesh_unblock(osdrop_mesh* mesh, const uint8_t* device_id);
+osdrop_result osdrop_mesh_blocked(osdrop_mesh* mesh, osdrop_blocked_device* out, size_t capacity,
+                                  size_t* out_count);
 /* What this computer accepts from one member; the member is told at once. */
 osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* device_id,
                                           const osdrop_permissions* permissions);

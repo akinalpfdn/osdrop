@@ -14,6 +14,18 @@ const Member& preferred(const Member& a, const Member& b) {
     return std::tie(a.name, a.platform) <= std::tie(b.name, b.platform) ? a : b;
 }
 
+/// Whether `a` replaces `b`: a higher version; at the same version a block over an unblock, then
+/// the name and platform that sort first, so every member keeps the same entry.
+bool replaces(const Block& a, const Block& b) {
+    if (a.version != b.version) {
+        return a.version > b.version;
+    }
+    if (a.blocked != b.blocked) {
+        return a.blocked;
+    }
+    return std::tie(a.name, a.platform) < std::tie(b.name, b.platform);
+}
+
 } // namespace
 
 bool Roster::add(const Member& member) {
@@ -55,6 +67,36 @@ bool Roster::revoke(const DeviceId& device, std::uint32_t epoch) {
     return false;
 }
 
+bool Roster::set_block(const DeviceId& device, const Block& block) {
+    if (block.version == 0) {
+        return false;
+    }
+    auto [it, inserted] = blocks_.emplace(device, block);
+    if (inserted) {
+        return true;
+    }
+    if (replaces(block, it->second)) {
+        it->second = block;
+        return true;
+    }
+    return false;
+}
+
+void Roster::block(const DeviceId& device, protocol::Platform platform, std::string name) {
+    const auto it = blocks_.find(device);
+    const std::uint32_t version = it == blocks_.end() ? 1 : it->second.version + 1;
+    blocks_[device] =
+        Block{.version = version, .blocked = true, .platform = platform, .name = std::move(name)};
+}
+
+void Roster::unblock(const DeviceId& device) {
+    const auto it = blocks_.find(device);
+    if (it != blocks_.end() && it->second.blocked) {
+        ++it->second.version;
+        it->second.blocked = false;
+    }
+}
+
 bool Roster::merge(const Roster& other) {
     bool changed = false;
     for (const auto& [device, member] : other.pairings_) {
@@ -63,12 +105,27 @@ bool Roster::merge(const Roster& other) {
     for (const auto& [device, epoch] : other.revocations_) {
         changed = revoke(device, epoch) || changed;
     }
+    for (const auto& [device, block] : other.blocks_) {
+        changed = set_block(device, block) || changed;
+    }
     return changed;
+}
+
+bool Roster::is_blocked(const DeviceId& device) const {
+    const auto it = blocks_.find(device);
+    return it != blocks_.end() && it->second.blocked;
+}
+
+Roster Roster::blocks_without(const DeviceId& except) const {
+    Roster kept;
+    kept.blocks_ = blocks_;
+    kept.blocks_.erase(except);
+    return kept;
 }
 
 bool Roster::is_member(const DeviceId& device) const {
     const auto pairing = pairings_.find(device);
-    if (pairing == pairings_.end()) {
+    if (pairing == pairings_.end() || is_blocked(device)) {
         return false;
     }
     const auto revocation = revocations_.find(device);
@@ -123,35 +180,40 @@ std::vector<protocol::RosterState> Roster::to_messages(const protocol::Id& group
     for (const auto& [device, epoch] : revocations_) {
         revoked.push_back({.device_id = device, .epoch = epoch});
     }
+    std::vector<protocol::RosterBlock> blocked;
+    blocked.reserve(blocks_.size());
+    for (const auto& [device, block] : blocks_) {
+        blocked.push_back({.device_id = device,
+                           .version = block.version,
+                           .blocked = block.blocked,
+                           .platform = block.platform,
+                           .name = block.name});
+    }
     if (members.empty()) {
         return {};
     }
     // Every message needs one member at least; the union of all of them is the roster.
-    const std::size_t member_chunks =
-        (members.size() + protocol::kMaxMembers - 1) / protocol::kMaxMembers;
-    const std::size_t revocation_chunks =
-        (revoked.size() + protocol::kMaxRevocations - 1) / protocol::kMaxRevocations;
-    const std::size_t count = std::max(member_chunks, revocation_chunks);
+    const auto chunks = [](std::size_t size, std::size_t limit) {
+        return (size + limit - 1) / limit;
+    };
+    const auto chunk = []<typename T>(const std::vector<T>& all, std::size_t index,
+                                      std::size_t limit) {
+        const std::size_t first = std::min(all.size(), index * limit);
+        const std::size_t last = std::min(all.size(), (index + 1) * limit);
+        return std::vector<T>(all.begin() + static_cast<std::ptrdiff_t>(first),
+                              all.begin() + static_cast<std::ptrdiff_t>(last));
+    };
+    const std::size_t count = std::max({chunks(members.size(), protocol::kMaxMembers),
+                                        chunks(revoked.size(), protocol::kMaxRevocations),
+                                        chunks(blocked.size(), protocol::kMaxBlocks)});
     std::vector<protocol::RosterState> messages;
     for (std::size_t i = 0; i < count; ++i) {
-        protocol::RosterState message{.group_id = group, .members = {}, .revocations = {}};
-        if (i < member_chunks) {
-            const auto first =
-                members.begin() + static_cast<std::ptrdiff_t>(i * protocol::kMaxMembers);
-            const auto last =
-                members.begin() + static_cast<std::ptrdiff_t>(
-                                      std::min(members.size(), (i + 1) * protocol::kMaxMembers));
-            message.members.assign(first, last);
-        } else {
+        protocol::RosterState message{.group_id = group,
+                                      .members = chunk(members, i, protocol::kMaxMembers),
+                                      .revocations = chunk(revoked, i, protocol::kMaxRevocations),
+                                      .blocks = chunk(blocked, i, protocol::kMaxBlocks)};
+        if (message.members.empty()) {
             message.members.push_back(members.front());
-        }
-        if (i < revocation_chunks) {
-            const auto first =
-                revoked.begin() + static_cast<std::ptrdiff_t>(i * protocol::kMaxRevocations);
-            const auto last = revoked.begin() +
-                              static_cast<std::ptrdiff_t>(
-                                  std::min(revoked.size(), (i + 1) * protocol::kMaxRevocations));
-            message.revocations.assign(first, last);
         }
         messages.push_back(std::move(message));
     }
@@ -173,6 +235,12 @@ Expected<Roster, Error> Roster::from_message(const protocol::RosterState& state)
     }
     for (const protocol::Revocation& revocation : state.revocations) {
         roster.revoke(revocation.device_id, revocation.epoch);
+    }
+    for (const protocol::RosterBlock& block : state.blocks) {
+        roster.set_block(block.device_id, Block{.version = block.version,
+                                                .blocked = block.blocked,
+                                                .platform = block.platform,
+                                                .name = block.name});
     }
     return roster;
 }

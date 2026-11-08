@@ -525,6 +525,37 @@ TEST(CapiMesh, ARejectedPairingIsReported) {
     EXPECT_EQ(pc.events.pairing_failures.front(), OSDROP_ERROR_PAIRING_REJECTED);
 }
 
+TEST(CapiMesh, AComputerBlockedAtItsCodeIsRefusedUntilUnblocked) {
+    CMesh mac(13, "Mac");
+    CMesh pc(14, "New PC");
+    uint64_t connection = 0;
+    ASSERT_EQ(osdrop_mesh_pair(pc.mesh, "127.0.0.1", mac.port, &connection), OSDROP_OK);
+    ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.codes.size() == 1; }));
+    ASSERT_EQ(osdrop_mesh_block(mac.mesh, pc.device_id.data()), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.pairing_failures.size() == 1; }));
+
+    std::array<osdrop_blocked_device, 2> blocked{};
+    size_t count = 0;
+    ASSERT_EQ(osdrop_mesh_blocked(mac.mesh, blocked.data(), blocked.size(), &count), OSDROP_OK);
+    ASSERT_EQ(count, 1U);
+    EXPECT_TRUE(std::ranges::equal(blocked[0].device_id, pc.device_id));
+    EXPECT_STREQ(blocked[0].name, "New PC");
+
+    ASSERT_EQ(osdrop_mesh_pair(pc.mesh, "127.0.0.1", mac.port, &connection), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.pairing_failures.size() == 2; }));
+    {
+        std::scoped_lock lock(mac.events.mutex, pc.events.mutex);
+        EXPECT_EQ(mac.events.codes.size(), 1U) << "no second code";
+        EXPECT_EQ(pc.events.pairing_failures.back(), OSDROP_ERROR_NOT_TRUSTED);
+    }
+
+    ASSERT_EQ(osdrop_mesh_unblock(mac.mesh, pc.device_id.data()), OSDROP_OK);
+    ASSERT_EQ(osdrop_mesh_blocked(mac.mesh, blocked.data(), blocked.size(), &count), OSDROP_OK);
+    EXPECT_EQ(count, 0U);
+    ASSERT_EQ(osdrop_mesh_pair(pc.mesh, "127.0.0.1", mac.port, &connection), OSDROP_OK);
+    EXPECT_TRUE(mac.events.wait_for([&] { return mac.events.codes.size() == 2; }));
+}
+
 TEST(CapiMesh, GroupCommandsCheckTheirArguments) {
     CMesh mac(11, "Mac");
     const osdrop_permissions all{.control = 1, .files = 1, .clipboard = 1};
@@ -550,6 +581,15 @@ TEST(CapiMesh, GroupCommandsCheckTheirArguments) {
               OSDROP_ERROR_BUFFER_TOO_SMALL);
     EXPECT_EQ(count, 2U);
     EXPECT_EQ(osdrop_mesh_members(mac.mesh, nullptr, 1, &count), OSDROP_ERROR_INVALID_ARGUMENT);
+
+    EXPECT_EQ(osdrop_mesh_block(mac.mesh, mac.device_id.data()), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_block(mac.mesh, stranger.data()), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_unblock(mac.mesh, pc.device_id.data()), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_block(mac.mesh, nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    ASSERT_EQ(osdrop_mesh_block(mac.mesh, pc.device_id.data()), OSDROP_OK);
+    EXPECT_TRUE(wait_until([&] { return mac.members().size() == 1; })) << "a member is removed";
+    EXPECT_EQ(osdrop_mesh_blocked(mac.mesh, nullptr, 0, &count), OSDROP_ERROR_BUFFER_TOO_SMALL);
+    EXPECT_EQ(count, 1U);
 }
 
 osdrop_monitor monitor(std::uint8_t key, osdrop_rect frame, osdrop_rect native, uint8_t primary) {
@@ -710,7 +750,7 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     config.group_state = foreign.data();
     config.group_state_size = foreign.size();
     EXPECT_EQ(create(config), OSDROP_ERROR_BAD_MAGIC);
-    const Bytes newer{'O', 'D', 'G', 'S', 2};
+    const Bytes newer{'O', 'D', 'G', 'S', 3};
     config.group_state = newer.data();
     config.group_state_size = newer.size();
     EXPECT_EQ(create(config), OSDROP_ERROR_UNSUPPORTED_VERSION) << "kept, never overwritten";

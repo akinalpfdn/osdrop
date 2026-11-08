@@ -369,6 +369,9 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func members() async throws(CoreError) -> [GroupMember] { [] }
     func revoke(_ device: DeviceID) async throws(CoreError) {}
     func leaveGroup() async throws(CoreError) {}
+    func block(_ device: DeviceID) async throws(CoreError) {}
+    func unblock(_ device: DeviceID) async throws(CoreError) {}
+    func blocked() async throws(CoreError) -> [BlockedDevice] { [] }
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {}
     func closeAll(sleeping: Bool) {}
 }

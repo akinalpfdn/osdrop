@@ -87,6 +87,28 @@ public struct MemberPermissions: Sendable, Equatable {
     }
 }
 
+/// A device blocked from the group: every member refuses it before any pairing code.
+public struct BlockedDevice: Sendable, Equatable, Identifiable {
+    public let deviceID: DeviceID
+    public let platform: PeerPlatform
+    /// As it was when it was blocked.
+    public let name: String
+
+    public var id: DeviceID { deviceID }
+
+    public init(deviceID: DeviceID, platform: PeerPlatform, name: String) {
+        self.deviceID = deviceID
+        self.platform = platform
+        self.name = name
+    }
+
+    init(_ device: osdrop_blocked_device) {
+        deviceID = DeviceID(field: device.device_id)
+        platform = PeerPlatform(device.platform)
+        name = CArray.string(of: device.name)
+    }
+}
+
 public struct GroupMember: Sendable, Equatable, Identifiable {
     public let deviceID: DeviceID
     public let publicKey: [UInt8]

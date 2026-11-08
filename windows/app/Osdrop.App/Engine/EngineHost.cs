@@ -60,6 +60,9 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     public Task<IReadOnlyList<NearbyComputer>> GetNearbyAsync() =>
         Native.Run<IReadOnlyList<NearbyComputer>>(() => ReadNearby(_engine));
 
+    public Task<IReadOnlyList<BlockedComputer>> GetBlockedAsync() =>
+        Native.Run<IReadOnlyList<BlockedComputer>>(() => ReadBlocked(_engine));
+
     public Task<(CoreResult Result, ulong Connection)> PairAsync(string deviceId)
     {
         byte[] id = Convert.FromHexString(deviceId);
@@ -73,6 +76,18 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     {
         byte[] id = Convert.FromHexString(deviceId);
         return Native.Run(() => RevokeNative(_engine, id));
+    }
+
+    public Task<CoreResult> BlockAsync(string deviceId)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => BlockNative(_engine, id, block: true));
+    }
+
+    public Task<CoreResult> UnblockAsync(string deviceId)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => BlockNative(_engine, id, block: false));
     }
 
     public Task<CoreResult> LeaveGroupAsync() => Native.Run(() => NativeMethods.LeaveGroup(_engine));
@@ -187,6 +202,24 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         return list;
     }
 
+    private static unsafe List<BlockedComputer> ReadBlocked(nint engine)
+    {
+        NativeBlockedDevice[] devices = ReadList<NativeBlockedDevice>(
+            (items, capacity, count) => NativeMethods.Blocked(engine, items, capacity, count));
+        var list = new List<BlockedComputer>(devices.Length);
+        fixed (NativeBlockedDevice* pointer = devices)
+        {
+            for (int i = 0; i < devices.Length; ++i)
+            {
+                NativeBlockedDevice* device = pointer + i;
+                list.Add(new BlockedComputer(
+                    Utf8.Hex(device->DeviceId, NativeSizes.DeviceId), Utf8.Read(device->Name, NativeSizes.Name),
+                    device->Platform));
+            }
+        }
+        return list;
+    }
+
     private static unsafe (CoreResult Result, ulong Connection) PairNative(nint engine, byte[] deviceId)
     {
         ulong connection = 0;
@@ -202,6 +235,14 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         fixed (byte* id = deviceId)
         {
             return NativeMethods.Revoke(engine, id);
+        }
+    }
+
+    private static unsafe CoreResult BlockNative(nint engine, byte[] deviceId, bool block)
+    {
+        fixed (byte* id = deviceId)
+        {
+            return block ? NativeMethods.Block(engine, id) : NativeMethods.Unblock(engine, id);
         }
     }
 

@@ -48,6 +48,15 @@ std::vector<ControlMessage> boundary_messages() {
     for (std::size_t i = 0; i < protocol::kMaxRevocations; ++i) {
         revocations.push_back({.device_id = id(7), .epoch = static_cast<std::uint32_t>(i + 1)});
     }
+    std::vector<protocol::RosterBlock> blocks;
+    for (std::size_t i = 0; i < protocol::kMaxBlocks; ++i) {
+        blocks.push_back(
+            {.device_id = id(static_cast<std::uint8_t>(i)),
+             .version = std::numeric_limits<std::uint32_t>::max() - static_cast<std::uint32_t>(i),
+             .blocked = i % 2 == 0,
+             .platform = protocol::Platform::Windows,
+             .name = std::string(protocol::kMaxStringBytes, 'b')});
+    }
     std::vector<protocol::Monitor> monitors;
     for (std::uint8_t i = 0; i < protocol::kMaxMonitors; ++i) {
         monitors.push_back({.key = id(i),
@@ -94,7 +103,8 @@ std::vector<ControlMessage> boundary_messages() {
         protocol::Heartbeat{},
         protocol::PeerError{.code = 0xFFFF},
         protocol::Bye{.reason = protocol::ByeReason::Duplicate},
-        protocol::RosterState{.group_id = token, .members = members, .revocations = revocations},
+        protocol::RosterState{
+            .group_id = token, .members = members, .revocations = revocations, .blocks = blocks},
         protocol::ScreenReport{.monitors = monitors},
         protocol::LayoutState{.revision = std::numeric_limits<std::uint64_t>::max(),
                               .author = token,
@@ -172,13 +182,21 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(encode_error(protocol::SessionSetup{.udp_port = 1, .transfer_token = id(1)}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::PeerError{.code = 0}), Error::ValueOutOfRange);
-    EXPECT_EQ(
-        encode_error(protocol::RosterState{.group_id = id(1), .members = {}, .revocations = {}}),
-        Error::ValueOutOfRange);
+    EXPECT_EQ(encode_error(protocol::RosterState{
+                  .group_id = id(1), .members = {}, .revocations = {}, .blocks = {}}),
+              Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::RosterState{
                   .group_id = id(1),
                   .members = {{.device_id = id(2), .name = "A"}, {.device_id = id(2), .name = "B"}},
-                  .revocations = {}}),
+                  .revocations = {},
+                  .blocks = {}}),
+              Error::ValueOutOfRange);
+    EXPECT_EQ(encode_error(protocol::RosterState{
+                  .group_id = id(1),
+                  .members = {{.device_id = id(2), .name = "A"}},
+                  .revocations = {},
+                  .blocks = {{.device_id = id(3), .version = 1, .name = "C"},
+                             {.device_id = id(3), .version = 2, .name = "C"}}}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::ScreenReport{.monitors = {{.key = id(1),
                                                                 .width = 16,

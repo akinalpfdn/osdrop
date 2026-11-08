@@ -336,6 +336,37 @@ osdrop_result osdrop_engine_revoke(osdrop_engine* engine, const uint8_t* device_
     return engine->group->revoke(read_id(device_id));
 }
 
+osdrop_result osdrop_engine_block(osdrop_engine* engine, const uint8_t* device_id) {
+    if (engine == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    return engine->group->block(read_id(device_id));
+}
+
+osdrop_result osdrop_engine_unblock(osdrop_engine* engine, const uint8_t* device_id) {
+    if (engine == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    return engine->group->unblock(read_id(device_id));
+}
+
+osdrop_result osdrop_engine_blocked(osdrop_engine* engine, osdrop_blocked_device* out,
+                                    size_t capacity, size_t* out_count) {
+    if (engine == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto blocked = engine->group->blocked();
+    if (!blocked) {
+        return blocked.error();
+    }
+    *out_count = blocked.value().size();
+    if (blocked.value().size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    std::ranges::copy(blocked.value(), out);
+    return OSDROP_OK;
+}
+
 osdrop_result osdrop_engine_leave_group(osdrop_engine* engine) {
     if (engine == nullptr) {
         return OSDROP_ERROR_INVALID_ARGUMENT;

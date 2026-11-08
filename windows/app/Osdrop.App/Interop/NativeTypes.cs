@@ -126,6 +126,15 @@ internal unsafe struct NativeNearbyComputer
     public fixed byte Name[NativeSizes.Name];
 }
 
+/// <summary>osdrop_blocked_device.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeBlockedDevice
+{
+    public fixed byte DeviceId[NativeSizes.DeviceId];
+    public Platform Platform;
+    public fixed byte Name[NativeSizes.Name];
+}
+
 /// <summary>osdrop_permissions.</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativePermissions

@@ -350,6 +350,29 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->info().group_id, group);
 }
 
+TEST(GroupEngine, AComputerBlockedAtItsCodeIsListedAndNotOfferedUntilUnblocked) {
+    Computer pc(6, "PC");
+    Computer laptop(7, "Laptop");
+    pc.discovery.report(*laptop.discovery.resolved());
+    laptop.discovery.report(*pc.discovery.resolved());
+    ASSERT_EQ(pc.engine->nearby().size(), 1U);
+
+    const auto laptop_id = laptop.engine->info().device_id;
+    ASSERT_TRUE(laptop.engine->pair(pc.engine->info().device_id).has_value());
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.codes_unlocked() > 0; }));
+    EXPECT_EQ(pc.engine->block(laptop_id), OSDROP_OK);
+    const auto blocked = pc.engine->blocked();
+    ASSERT_TRUE(blocked.has_value());
+    ASSERT_EQ(blocked.value().size(), 1U);
+    EXPECT_EQ(std::string(blocked.value().front().name), "Laptop");
+    EXPECT_TRUE(pc.engine->nearby().empty()) << "a blocked computer is not offered";
+
+    EXPECT_EQ(pc.engine->unblock(laptop_id), OSDROP_OK);
+    EXPECT_TRUE(pc.engine->blocked().value().empty());
+    EXPECT_EQ(pc.engine->nearby().size(), 1U);
+    EXPECT_EQ(pc.engine->unblock(laptop_id), OSDROP_ERROR_INVALID_ARGUMENT);
+}
+
 TEST(GroupEngine, StoredStatesAreCheckedBeforeStarting) {
     {
         Computer damaged_layout(4, "PC");
@@ -362,7 +385,7 @@ TEST(GroupEngine, StoredStatesAreCheckedBeforeStarting) {
     FakeDiscovery discovery;
     RecordingEvents events;
     std::uint64_t random = 5;
-    store.put(StoredItem::GroupState, {'O', 'D', 'G', 'S', 2});
+    store.put(StoredItem::GroupState, {'O', 'D', 'G', 'S', 3});
     const auto newer = GroupEngine::create(
         {.device_name = "PC", .random = osdrop_random_source{.fill = fill, .context = &random}},
         store, discovery, events);

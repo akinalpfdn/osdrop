@@ -4,7 +4,8 @@
 // (epoch) and its newest revocation. A device is a member while its newest pairing is newer than
 // its newest revocation. Rosters merge by keeping the newer of each, so every member converges
 // whatever the order of messages and whoever was offline, and a revocation is undone only by a
-// later pairing, never by a member that missed it.
+// later pairing, never by a member that missed it. Blocks work the same way: each device's newest
+// block entry holds, and a blocked device is no member whatever its pairings.
 
 #include "crypto/noise.hpp"
 #include "protocol/control_messages.hpp"
@@ -34,6 +35,16 @@ struct Member {
     bool operator==(const Member&) const = default;
 };
 
+/// A device blocked from the group, or unblocked again: an entry with a higher version replaces
+/// one with a lower version.
+struct Block {
+    std::uint32_t version = 1;
+    bool blocked = true;
+    protocol::Platform platform = protocol::Platform::MacOS;
+    std::string name;
+    bool operator==(const Block&) const = default;
+};
+
 class Roster {
 public:
     /// Adds a pairing. Returns whether the roster changed; false also for an entry whose device ID
@@ -41,10 +52,17 @@ public:
     bool add(const Member& member);
     /// Revokes a device's pairings up to `epoch`. Returns whether the roster changed.
     bool revoke(const DeviceId& device, std::uint32_t epoch);
+    /// Takes a device's block entry if it is newer than the one known. Returns whether the roster
+    /// changed.
+    bool set_block(const DeviceId& device, const Block& block);
+    /// Blocks a device, or unblocks it, with an entry newer than any known for it.
+    void block(const DeviceId& device, protocol::Platform platform, std::string name);
+    void unblock(const DeviceId& device);
     /// Merges another roster in; returns whether this one changed.
     bool merge(const Roster& other);
 
     [[nodiscard]] bool is_member(const DeviceId& device) const;
+    [[nodiscard]] bool is_blocked(const DeviceId& device) const;
     /// The device's pairing while it is a member.
     [[nodiscard]] std::optional<Member> member(const DeviceId& device) const;
     [[nodiscard]] std::vector<Member> members() const;
@@ -57,6 +75,10 @@ public:
     [[nodiscard]] const std::map<DeviceId, std::uint32_t>& revocations() const {
         return revocations_;
     }
+    /// Every block entry, blocked and unblocked alike.
+    [[nodiscard]] const std::map<DeviceId, Block>& blocks() const { return blocks_; }
+    /// A roster with only the block entries, without `except`'s.
+    [[nodiscard]] Roster blocks_without(const DeviceId& except) const;
 
     /// The roster as RosterState messages, split to fit the message's limits. Empty for an empty
     /// roster.
@@ -69,6 +91,7 @@ public:
 private:
     std::map<DeviceId, Member> pairings_;           // newest pairing per device
     std::map<DeviceId, std::uint32_t> revocations_; // newest revoked epoch per device
+    std::map<DeviceId, Block> blocks_;              // newest block entry per device
 };
 
 } // namespace osdrop::group

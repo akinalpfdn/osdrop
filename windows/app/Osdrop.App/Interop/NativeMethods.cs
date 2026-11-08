@@ -46,6 +46,19 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult Revoke(nint engine, byte* deviceId);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_block")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult Block(nint engine, byte* deviceId);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_unblock")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult Unblock(nint engine, byte* deviceId);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_blocked")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult Blocked(
+        nint engine, NativeBlockedDevice* devices, nuint capacity, nuint* count);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_leave_group")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult LeaveGroup(nint engine);

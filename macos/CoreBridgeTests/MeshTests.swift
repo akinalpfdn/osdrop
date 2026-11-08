@@ -277,6 +277,9 @@ struct MeshTests {
         #expect(throws: CoreError.invalidState) { try mesh.leaveGroup() }
         #expect(throws: CoreError.invalidArgument) { try mesh.setScreens([]) }
         #expect(try mesh.members().isEmpty)
+        #expect(throws: CoreError.invalidArgument) { try mesh.block(mesh.deviceID) }
+        #expect(throws: CoreError.invalidArgument) { try mesh.unblock(mesh.deviceID) }
+        #expect(try mesh.blocked().isEmpty)
         let item = TransferItem(kind: .drag, objectID: 1, index: 0)
         #expect(throws: CoreError.invalidArgument) { try mesh.offer(item, files: [], to: []) }
         #expect(throws: CoreError.notPermitted) {
