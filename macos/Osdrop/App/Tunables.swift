@@ -4,11 +4,6 @@ import Foundation
 /// The macOS app's tunable values. Protocol constants live in `core`, not here.
 enum Tunables {
     enum Input {
-        /// Escape, pressed with Control, Option and Command, ends a capture at once.
-        static let releaseChordKeyCode = kVK_Escape
-        /// L, pressed with Control, Option and Command, keeps the cursor on the computer it is on
-        /// until pressed again.
-        static let lockChordKeyCode = kVK_ANSI_L
         /// Written into the source user data of every event Osdrop posts ("OSDROP" in ASCII), so
         /// its own event tap never mistakes injected input for the user's.
         static let injectedEventTag: Int64 = 0x4F53_4452_4F50
@@ -32,6 +27,12 @@ enum Tunables {
     }
 
     enum Control {
+        /// This Mac's own pointer speed, in thousandths.
+        static let normalSpeed: UInt32 = 1_000
+        /// The pointer speeds Settings offers, as a share of this Mac's own.
+        static let speedRange = 0.25...4.0
+        /// The push times Settings offers, in seconds.
+        static let pushSecondsRange = 0.2...3.0
         /// How often Osdrop checks whether Accessibility was granted, until it can watch input.
         static let permissionCheckInterval: Duration = .seconds(1)
         /// How often a controlled Mac compares its cursor with where the controller put it.
@@ -39,6 +40,8 @@ enum Tunables {
         /// A cursor further than this (points) from where the controller put it was moved by an
         /// application, and the controller is told.
         static let cursorReportDistance = 1.0
+        /// After Osdrop sets Caps Lock, a Caps Lock event this soon is its echo, not the user's key.
+        static let capsEchoWindow: Duration = .milliseconds(300)
         /// How often Caps Lock is read while the cursor is home.
         static let capsCheckInterval: Duration = .milliseconds(250)
         /// Pointer speeds core takes, in thousandths of this Mac's own.
@@ -56,6 +59,26 @@ enum Tunables {
         static let promiseTimeout: Duration = .seconds(120)
     }
 
+    enum Logs {
+        /// Copy diagnostics includes this many of the newest log lines.
+        static let diagnosticsLines = 300
+        /// How far back an exported log reaches (the current run only: the store is per process).
+        static let exportWindow: TimeInterval = 24 * 60 * 60
+    }
+
+    enum Updates {
+        static let latestReleaseURL = URL(string: "https://api.github.com/repos/akinalpfdn/osdrop/releases/latest")
+        static let releasesPage = URL(string: "https://github.com/akinalpfdn/osdrop/releases")
+        /// The automatic check runs at most this often.
+        static let interval: TimeInterval = 24 * 60 * 60
+        static let timeout: TimeInterval = 15
+    }
+
+    enum Files {
+        /// The agent named in the quarantine mark of received files.
+        static let quarantineAgent = "Osdrop"
+    }
+
     enum Clipboard {
         /// macOS has no notification for pasteboard changes; its change count is read this often.
         static let pollInterval: Duration = .milliseconds(500)
@@ -65,6 +88,8 @@ enum Tunables {
         /// Files copied on another computer are fetched up to this total (user decision, Phase 15;
         /// a setting in Phase 16). Larger copies are moved by drag and drop.
         static let filesLimit: UInt64 = 512 * 1024 * 1024
+        /// The limits Settings offers for files copied on another computer.
+        static let filesLimitChoices: [UInt64] = [128, 512, 1024, 4096].map { $0 * 1024 * 1024 }
     }
 
     enum KeyStore {
@@ -78,17 +103,6 @@ enum Tunables {
     enum Settings {
         static let layoutStateKey = "layoutState"
         static let listenPortKey = "listenPort"
-
-        enum Input {
-            /// "shortcuts" (the default) or "positions".
-            static let modifierMapping = "input.modifierMapping"
-            static let positions = "positions"
-            static let pushMilliseconds = "input.pushMilliseconds"
-            static let immediate = "input.immediate"
-            static let crossingModifiers = "input.crossingModifiers"
-            /// Device ID in hex → thousandths of this Mac's speed.
-            static let pointerSpeeds = "input.pointerSpeeds"
-        }
     }
 
     enum Permissions {

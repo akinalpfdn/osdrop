@@ -117,6 +117,10 @@ final class EventTapCapture: InputCapturing {
         context.state.withLock { $0.lastHeartbeat = .now }
     }
 
+    func setHotkeys(_ hotkeys: CaptureHotkeys) {
+        context.state.withLock { $0.hotkeys = hotkeys }
+    }
+
     /// Runs on `transitions` only.
     private func apply(_ mode: CaptureMode, reason: CaptureReleaseReason) {
         guard context.state.withLock({ $0.mode }) != mode else { return }
@@ -227,6 +231,7 @@ private final class TapContext: @unchecked Sendable {
         var lastHeartbeat = ContinuousClock.now
         /// Consecutive watchdog checks that found the tap disabled.
         var tapDisabledChecks = 0
+        var hotkeys = CaptureHotkeys()
     }
 
     let state = Locked(State())
@@ -251,13 +256,14 @@ private final class TapContext: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        if TapPolicy.isLockChord(type: type, keyCode: keyCode, flags: event.flags) {
+        let hotkeys = state.withLock { $0.hotkeys }
+        if hotkeys.lockInput.matches(type: type, keyCode: keyCode, flags: event.flags) {
             if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
                 continuation.yield(.hotkey(.lockInput))
             }
             return nil
         }
-        let isReleaseChord = TapPolicy.isReleaseChord(type: type, keyCode: keyCode, flags: event.flags)
+        let isReleaseChord = hotkeys.returnHome.matches(type: type, keyCode: keyCode, flags: event.flags)
         let (mode, inputs) = state.withLock { state -> (CaptureMode, [InputEvent]) in
             // The release chord belongs to this Mac; it is never reported as input.
             if state.mode == .capture, isReleaseChord {

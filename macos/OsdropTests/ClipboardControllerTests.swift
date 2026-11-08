@@ -26,6 +26,22 @@ struct ClipboardControllerTests {
         #expect(fixture.mesh.copies.count == 1)
     }
 
+    @Test("Turning sharing off withdraws this Mac's copy")
+    func withdrawsWhenTurnedOff() async throws {
+        let fixture = ClipboardFixture()
+        fixture.pasteboard.copy([PasteboardTypes.text: Data("hi".utf8)])
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.copies.count == 1 }
+        try await Task.sleep(for: .milliseconds(50))  // the clip ID comes back on the main actor
+        fixture.enabled = false
+        fixture.shared = false  // what the group's closure says once sharing is off
+        fixture.controller.poll()
+        try await waitUntil { fixture.mesh.withdrawals == [1] }
+        fixture.controller.poll()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.mesh.withdrawals == [1], "withdrawn once")
+    }
+
     @Test("Concealed copies, and copies while nobody is connected, are never read")
     func keepsCopiesHome() async throws {
         let fixture = ClipboardFixture()
@@ -165,13 +181,14 @@ private final class ClipboardFixture {
     let staging = ClipboardStaging(
         root: FileManager.default.temporaryDirectory.appending(path: "osdrop-clipboard-tests-\(UUID())"))
     var shared = true
+    var enabled = true
     let controller: ClipboardController
 
     init(limits: ClipboardLimits = ClipboardLimits(text: 100, image: 100, files: 100)) {
         weak var box: ClipboardFixture?
         controller = ClipboardController(
-            mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: limits,
-            isShared: { box?.shared ?? false }, nameOf: { _ in "PC" })
+            mesh: mesh, pasteboard: pasteboard, staging: staging, converter: FakeImageConverter(), limits: { limits },
+            isEnabled: { box?.enabled ?? false }, isShared: { box?.shared ?? false }, nameOf: { _ in "PC" })
         box = self
     }
 
@@ -208,11 +225,22 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func setInputSettings(_ settings: InputSettings) {}
     func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {}
     func setCapsLock(_ on: Bool) {}
+    func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {}
+    func layout() async throws(CoreError) -> [LayoutComputer] { [] }
+    func setLayout(_ placements: [Placement]) async throws(CoreError) {}
+    func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError) {
+        lock.withLock { withdrawn.append(objectID) }
+    }
+    func cancelTransfer(_ id: UInt64) async { lock.withLock { cancelled.append(id) } }
+    var withdrawals: [UInt64] { lock.withLock { withdrawn } }
+    var cancellations: [UInt64] { lock.withLock { cancelled } }
     private let lock = NSLock()
     private var nextID: UInt64 = 1
     private var copied: [(contents: [ClipboardContent], files: [URL])] = []
     private var fetched: [Fetch] = []
     private var received: [Receive] = []
+    private var withdrawn: [UInt64] = []
+    private var cancelled: [UInt64] = []
     private var early: (@MainActor @Sendable (UInt64) -> Void)?
 
     /// Delivers each fetch's result before the fetch returns, as a fast network can.

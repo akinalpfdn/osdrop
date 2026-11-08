@@ -9,7 +9,8 @@ enum CaptureMode: Sendable, Equatable {
 
 enum CaptureReleaseReason: Sendable, Equatable {
     case requested
-    /// The user pressed the release chord (⌃⌥⌘⎋), which always works while input is captured.
+    /// The user pressed the return chord (⌃⌥⌘⎋ unless changed), which always works while input is
+    /// captured.
     case releaseChord
     /// The owner stopped confirming the capture (DEVPLAN, input safety invariants).
     case watchdog
@@ -64,6 +65,8 @@ protocol InputCapturing: AnyObject, Sendable {
     /// Confirms that capture should continue; without it, capture ends after
     /// `Tunables.Input.captureHeartbeatTimeout`.
     func heartbeat()
+    /// The chords the tap keeps for Osdrop.
+    func setHotkeys(_ hotkeys: CaptureHotkeys)
 }
 
 /// Whether the event tap lets an event through.
@@ -82,18 +85,4 @@ enum TapPolicy {
         return mode == .capture ? .swallow : .pass
     }
 
-    /// The release chord: Control, Option and Command held with Escape pressed.
-    static func isReleaseChord(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
-        isChord(Tunables.Input.releaseChordKeyCode, type: type, keyCode: keyCode, flags: flags)
-    }
-
-    /// The "lock input here" chord: Control, Option and Command held with L, in either mode.
-    static func isLockChord(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
-        isChord(Tunables.Input.lockChordKeyCode, type: type, keyCode: keyCode, flags: flags)
-    }
-
-    private static func isChord(_ chordKey: Int, type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
-        type == .keyDown && keyCode == Int64(chordKey)
-            && flags.contains([.maskControl, .maskAlternate, .maskCommand])
-    }
 }

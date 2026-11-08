@@ -10,13 +10,13 @@ import Testing
 @MainActor
 @Suite("Group controller")
 struct GroupControllerTests {
-    private let fixture = Fixture()
+    private let fixture = GroupFixture()
 
     @Test("Starting advertises this computer with its group and reports its screens")
     func startAdvertisesAndReports() async throws {
-        fixture.mesh.setGroup(Fixture.group)
+        fixture.mesh.setGroup(GroupFixture.group)
         let controller = fixture.start()
-        try await waitUntil { fixture.discovery.advertisements.last?.groupID == Fixture.group }
+        try await waitUntil { fixture.discovery.advertisements.last?.groupID == GroupFixture.group }
         let advertised = try #require(fixture.discovery.advertisements.last)
         #expect(advertised.deviceID == fixture.mesh.deviceID)
         #expect(advertised.name == "Test Mac")
@@ -29,48 +29,51 @@ struct GroupControllerTests {
     @Test("Discovered computers reach the mesh; members and this computer are not offered")
     func discoveryFeedsTheMesh() async throws {
         let controller = fixture.start()
-        fixture.mesh.setMembers([Fixture.member(fixture.mesh.deviceID, isSelf: true), Fixture.member(Fixture.pc)])
-        fixture.discovery.found(Fixture.device(fixture.mesh.deviceID, name: "Test Mac"))
-        fixture.discovery.found(Fixture.device(Fixture.laptop, name: "Laptop"))
-        fixture.discovery.found(Fixture.device(Fixture.pc, name: "PC", group: Fixture.group))
+        fixture.mesh.setMembers([
+            GroupFixture.member(fixture.mesh.deviceID, isSelf: true), GroupFixture.member(GroupFixture.pc),
+        ])
+        fixture.discovery.found(GroupFixture.device(fixture.mesh.deviceID, name: "Test Mac"))
+        fixture.discovery.found(GroupFixture.device(GroupFixture.laptop, name: "Laptop"))
+        fixture.discovery.found(GroupFixture.device(GroupFixture.pc, name: "PC", group: GroupFixture.group))
         try await waitUntil { controller.members.count == 2 && fixture.mesh.discovered.count == 2 }
-        #expect(fixture.mesh.discovered == [Fixture.laptop, Fixture.pc])
-        try await waitUntil { controller.nearby.map(\.id) == [Fixture.laptop] }
+        #expect(fixture.mesh.discovered == [GroupFixture.laptop, GroupFixture.pc])
+        try await waitUntil { controller.nearby.map(\.id) == [GroupFixture.laptop] }
 
-        fixture.discovery.lost(Fixture.laptop)
+        fixture.discovery.lost(GroupFixture.laptop)
         try await waitUntil { controller.nearby.isEmpty }
-        #expect(fixture.mesh.lost == [Fixture.laptop])
+        #expect(fixture.mesh.lost == [GroupFixture.laptop])
     }
 
     @Test("A pairing shows the code, sends the answer and ends when the computer connects")
     func pairingFlow() async throws {
         let controller = fixture.start()
-        fixture.discovery.found(Fixture.device(Fixture.laptop, name: "Laptop"))
+        fixture.discovery.found(GroupFixture.device(GroupFixture.laptop, name: "Laptop"))
         try await waitUntil { controller.nearby.count == 1 }
         controller.pair(with: try #require(controller.nearby.first))
         #expect(controller.pairing == .dialing(name: "Laptop"))
         try await waitUntil { fixture.mesh.calls.contains(.pair(host: "laptop.local.", port: 4242)) }
 
-        fixture.mesh.send(.pairingCode(connection: 5, code: 42_917, peer: Fixture.peer(Fixture.laptop, name: "Laptop")))
+        fixture.mesh.send(
+            .pairingCode(connection: 5, code: 42_917, peer: GroupFixture.peer(GroupFixture.laptop, name: "Laptop")))
         try await waitUntil { controller.pairing == .confirm(connection: 5, code: 42_917, name: "Laptop") }
         controller.answerPairing(accepted: true)
         #expect(controller.pairing == .waiting(code: 42_917, name: "Laptop"))
         try await waitUntil { fixture.mesh.calls.contains(.confirm(5, accepted: true)) }
 
-        fixture.mesh.send(.peerConnected(Fixture.peer(Fixture.laptop, name: "Laptop"), features: .all))
+        fixture.mesh.send(.peerConnected(GroupFixture.peer(GroupFixture.laptop, name: "Laptop"), features: .all))
         try await waitUntil { controller.pairing == nil }
     }
 
     @Test("A computer that asks to pair gets an answer; a refused pairing says why")
     func incomingAndRefusedPairings() async throws {
         let controller = fixture.start()
-        fixture.mesh.send(.pairingCode(connection: 9, code: 7, peer: Fixture.peer(Fixture.pc, name: "PC")))
+        fixture.mesh.send(.pairingCode(connection: 9, code: 7, peer: GroupFixture.peer(GroupFixture.pc, name: "PC")))
         try await waitUntil { controller.pairing == .confirm(connection: 9, code: 7, name: "PC") }
         controller.dismissPairing()
         #expect(controller.pairing == nil)
         try await waitUntil { fixture.mesh.calls.contains(.confirm(9, accepted: false)) }
 
-        fixture.mesh.send(.pairingCode(connection: 10, code: 8, peer: Fixture.peer(Fixture.pc, name: "PC")))
+        fixture.mesh.send(.pairingCode(connection: 10, code: 8, peer: GroupFixture.peer(GroupFixture.pc, name: "PC")))
         fixture.mesh.send(.pairingFailed(connection: 10, reason: .inAnotherGroup))
         try await waitUntil { controller.pairing == .failed(name: "PC", reason: .inAnotherGroup) }
         #expect(PairingFailure(.pairingRejected) == .rejected)
@@ -80,11 +83,11 @@ struct GroupControllerTests {
     @Test("Group changes are stored and advertised; the arrangement is stored")
     func changesAreStored() async throws {
         let controller = fixture.start()
-        fixture.mesh.send(.groupChanged(state: [1, 2, 3], groupID: Fixture.group))
+        fixture.mesh.send(.groupChanged(state: [1, 2, 3], groupID: GroupFixture.group))
         fixture.mesh.send(.layoutChanged(state: [9]))
-        try await waitUntil { fixture.discovery.advertisements.last?.groupID == Fixture.group }
+        try await waitUntil { fixture.discovery.advertisements.last?.groupID == GroupFixture.group }
         #expect(fixture.keyStore.storedGroup == [1, 2, 3])
-        #expect(controller.groupID == Fixture.group)
+        #expect(controller.groupID == GroupFixture.group)
         try await waitUntil { fixture.settings.layoutState() == [9] }
 
         fixture.mesh.send(.leftGroup(reason: .notTrusted))
@@ -118,6 +121,30 @@ struct GroupControllerTests {
         #expect(PairingCode.display(42_917) == "042 917")
     }
 
+    @Test("A name too long for the wire is cut, and renaming recovers a mesh that failed to start")
+    func renameKeepsTheMeshStartable() async throws {
+        let fixture = GroupFixture()
+        let names = Locked<[String]>([])
+        fixture.failure = { configuration in
+            names.withLock { $0.append(configuration.name) }
+            return nil
+        }
+        let controller = fixture.start()
+        controller.rename(to: String(repeating: "Çalışma ", count: 12))
+        let used = try #require(names.withLock { $0.last })
+        #expect(used.utf8.count <= DeviceName.maximumBytes)
+        #expect(controller.isRunning)
+
+        let failing = GroupFixture()
+        failing.failure = { _ in .invalidString }
+        let stopped = failing.start()
+        #expect(stopped.startFailure == .mesh)
+        failing.failure = { _ in nil }
+        stopped.rename(to: "Desk")
+        #expect(stopped.startFailure == nil)
+        #expect(stopped.isRunning)
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -129,7 +156,7 @@ struct GroupControllerTests {
 
 /// The fake services, wired as the app wires the real ones.
 @MainActor
-private final class Fixture {
+final class GroupFixture {
     nonisolated static let laptop = id(0x31)
     nonisolated static let pc = id(0x32)
     nonisolated static let group = GroupID(bytes: [UInt8](repeating: 0x47, count: 16))
@@ -140,18 +167,25 @@ private final class Fixture {
     let settings = MemorySettings()
     let screens = FakeScreens()
     /// Makes the mesh fail to start with this error for a configuration, or not (`nil`).
-    var failure: @Sendable (Mesh.Configuration) -> CoreError? = { _ in nil }
+    var failure: @Sendable (Mesh.Configuration) -> CoreError? {
+        get { failureBox.withLock { $0 } }
+        set { failureBox.withLock { $0 = newValue } }
+    }
+    /// Read at every start, so a test can change it between starts.
+    private let failureBox = Locked<@Sendable (Mesh.Configuration) -> CoreError?>({ _ in nil })
 
     func start() -> GroupController {
         let mesh = self.mesh
-        let failure = self.failure
+        let failure = failureBox
         let services = GroupServices(
             keyStore: keyStore, settings: settings, discovery: discovery, localNetwork: FakeLocalNetwork(),
             makeMesh: { configuration throws(CoreError) in
-                if let error = failure(configuration) { throw error }
+                if let error = failure.withLock({ $0 })(configuration) { throw error }
                 return mesh
             }, deviceName: "Test Mac", clipboard: .fake(), input: .fake())
-        let controller = GroupController(services: services, screens: screens)
+        let defaults = UserDefaults(suiteName: "osdrop-tests-\(UUID())") ?? .standard
+        let controller = GroupController(
+            services: services, screens: screens, settings: AppSettings(defaults: defaults))
         controller.start()
         return controller
     }
@@ -180,19 +214,21 @@ private final class Fixture {
     }
 }
 
-private final class FakeMesh: MeshDriving, @unchecked Sendable {
+final class FakeMesh: MeshDriving, @unchecked Sendable {
     enum Call: Equatable {
         case pair(host: String, port: UInt16)
         case confirm(UInt64, accepted: Bool)
         case setScreens(Int)
         case revoke(DeviceID)
         case leave
+        case permissions(MemberPermissions, DeviceID)
+        case setLayout([Placement])
     }
 
     static let port: UInt16 = 50_000
 
     let events: AsyncStream<MeshEvent>
-    let deviceID = Fixture.id(0x30)
+    let deviceID = GroupFixture.id(0x30)
     let listenPort = FakeMesh.port
 
     // Input control is not driven here.
@@ -209,6 +245,7 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
     private let lock = NSLock()
     private var group: GroupID?
     private var memberList: [GroupMember] = []
+    private var computers: [LayoutComputer] = []
     private var recorded: [Call] = []
     private var discoveredIDs: [DeviceID] = []
     private var lostIDs: [DeviceID] = []
@@ -244,6 +281,16 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }
     func closeAll(sleeping: Bool) {}
+    func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {
+        lock.withLock { recorded.append(.permissions(permissions, device)) }
+    }
+    func layout() async throws(CoreError) -> [LayoutComputer] { lock.withLock { computers } }
+    func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError) {}
+    func cancelTransfer(_ id: UInt64) async {}
+    func setComputers(_ layout: [LayoutComputer]) { lock.withLock { computers = layout } }
+    func setLayout(_ placements: [Placement]) async throws(CoreError) {
+        lock.withLock { recorded.append(.setLayout(placements)) }
+    }
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64 { 1 }
     func fetchContent(
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
@@ -257,7 +304,7 @@ private final class FakeMesh: MeshDriving, @unchecked Sendable {
     { 1 }
 }
 
-private final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {
+final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {
     private struct Registration: Advertising {
         func cancel() {}
     }
@@ -284,7 +331,7 @@ private final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {
     func lost(_ id: DeviceID) { lock.withLock { continuation }?.yield(.lost(label: id.hex)) }
 }
 
-private final class MemoryKeyStore: KeyStoring, @unchecked Sendable {
+final class MemoryKeyStore: KeyStoring, @unchecked Sendable {
     private let lock = NSLock()
     private let stored: DeviceIdentity?
     private var group: [UInt8]?
@@ -306,7 +353,7 @@ private final class MemoryKeyStore: KeyStoring, @unchecked Sendable {
     func saveGroupState(_ state: [UInt8]) throws(KeyStoreError) { storedGroup = state }
 }
 
-private final class MemorySettings: SettingsStoring, @unchecked Sendable {
+final class MemorySettings: SettingsStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var layout: [UInt8]?
     private var port: UInt16 = 0
@@ -317,14 +364,14 @@ private final class MemorySettings: SettingsStoring, @unchecked Sendable {
     func saveListenPort(_ port: UInt16) { lock.withLock { self.port = port } }
 }
 
-private struct FakeLocalNetwork: LocalNetworkChecking {
+struct FakeLocalNetwork: LocalNetworkChecking {
     func accessUpdates() -> AsyncStream<LocalNetworkAccess> {
         AsyncStream { $0.yield(.allowed) }
     }
 }
 
 @MainActor
-private final class FakeScreens: ScreenDescribing {
+final class FakeScreens: ScreenDescribing {
     var onChange: (() -> Void)?
 
     func screens() -> [ScreenDescription] {

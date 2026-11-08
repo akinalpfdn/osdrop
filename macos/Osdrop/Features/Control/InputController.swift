@@ -60,6 +60,10 @@ final class InputController {
     @ObservationIgnored private var cursorWatch: Task<Void, Never>?
     @ObservationIgnored private var screenLocked = false
     @ObservationIgnored private var capsLockReported: Bool?
+    /// Until this `DispatchTime` uptime, a Caps Lock event from the tap is taken for the echo of
+    /// Osdrop setting Caps Lock itself, not for the user's key: on a controlled Mac it would end
+    /// the control as local input.
+    @ObservationIgnored private let capsEchoUntil = Locked<UInt64>(0)
     @ObservationIgnored private var isActive = false
     @ObservationIgnored private var isPermitted = false
     @ObservationIgnored private var unavailable: ControlUnavailability??
@@ -73,10 +77,11 @@ final class InputController {
     }
 
     func start() {
-        mesh.setInputSettings(services.preferences.settings())
-        for (device, permille) in services.preferences.pointerSpeeds() {
+        mesh.setInputSettings(services.preferences.input)
+        for (device, permille) in services.preferences.pointerSpeeds {
             mesh.setPointerSpeed(permille, for: device)
         }
+        capture.setHotkeys(services.preferences.hotkeys)
         tasks.append(
             Task { [weak self, control = mesh.control] in
                 for await event in control {
@@ -87,11 +92,14 @@ final class InputController {
         // Off the main thread: every mouse movement goes to core, so a busy main thread never
         // delays the cursor on another computer.
         tasks.append(
-            Task.detached { [weak self, mesh, events = capture.events] in
+            Task.detached { [weak self, mesh, events = capture.events, capsEchoUntil] in
                 var forwarder = forwarder
                 for await event in events {
                     switch event {
                     case .input(let captured):
+                        if Self.isCapsEcho(captured, until: capsEchoUntil.withLock { $0 }) {
+                            continue
+                        }
                         if let input = forwarder.convert(captured) {
                             mesh.input(input, ageMicroseconds: Self.age(of: captured))
                         }
@@ -141,6 +149,19 @@ final class InputController {
         }
     }
 
+    /// A setting changed in Settings: it applies at once (a modifier mapping from the next crossing).
+    func apply(_ settings: InputSettings) {
+        mesh.setInputSettings(settings)
+    }
+
+    func setPointerSpeed(_ permille: UInt32, for device: DeviceID) {
+        mesh.setPointerSpeed(permille, for: device)
+    }
+
+    func setHotkeys(_ hotkeys: CaptureHotkeys) {
+        capture.setHotkeys(hotkeys)
+    }
+
     func screenLockChanged(_ locked: Bool) {
         screenLocked = locked
         updateAvailability()
@@ -171,6 +192,21 @@ final class InputController {
         isWatching = false
     }
 
+    private nonisolated static func isCapsEcho(_ captured: CapturedInput, until deadline: UInt64) -> Bool {
+        guard case .key(let key, _) = captured.event, key == .keyboard(ModifierKeys.capsLockUsage) else {
+            return false
+        }
+        return DispatchTime.now().uptimeNanoseconds < deadline
+    }
+
+    /// Sets Caps Lock on this Mac; the event macOS may post for it is not the user's.
+    private func setCapsLock(_ on: Bool) {
+        guard on != services.capsLock.isOn else { return }
+        let window = UInt64(Tunables.Control.capsEchoWindow.timeInterval * 1e9)
+        capsEchoUntil.withLock { $0 = DispatchTime.now().uptimeNanoseconds + window }
+        services.capsLock.set(on)
+    }
+
     private nonisolated static func age(of captured: CapturedInput) -> UInt64 {
         let now = DispatchTime.now().uptimeNanoseconds
         guard captured.tapTime != 0, now > captured.tapTime else { return 0 }
@@ -187,8 +223,13 @@ final class InputController {
     }
 
     private func toggleLock() {
-        isLocked.toggle()
-        mesh.lockInput(isLocked)
+        setLocked(!isLocked)
+    }
+
+    /// "Lock input here", from the hotkey or the menu.
+    func setLocked(_ locked: Bool) {
+        isLocked = locked
+        mesh.lockInput(locked)
     }
 
     /// Other computers are refused while this Mac's screen is locked or it cannot inject.
@@ -220,9 +261,7 @@ final class InputController {
             stopHeartbeat()
             capture.setMode(.observe)
             injector.placeCursor(at: ControlCoordinates.point(cursor))
-            if capsLock != services.capsLock.isOn {
-                services.capsLock.set(capsLock)
-            }
+            setCapsLock(capsLock)
             capsLockReported = capsLock
             capturingFor = nil
             switch reason {
@@ -239,9 +278,7 @@ final class InputController {
                 startCursorWatch()
             }
         case .inject(.capsLock(let on)):
-            if on != services.capsLock.isOn {
-                services.capsLock.set(on)
-            }
+            setCapsLock(on)
         case .inject(let input):
             Injection.apply(input, to: injector)
         case .inputLatency(let device, let samples, let median, let p99):
