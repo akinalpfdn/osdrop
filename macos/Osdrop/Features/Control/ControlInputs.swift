@@ -131,6 +131,8 @@ enum Injection {
                 injector.moveCursor(to: point)
             }
             injector.scroll(ControlScroll.delta(stroke))
+        case .capsLock:
+            break  // a state the input controller sets, not an event
         }
     }
 

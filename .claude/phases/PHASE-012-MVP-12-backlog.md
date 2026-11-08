@@ -1,5 +1,6 @@
 # Phase 012 (MVP-12) — Cursor and keyboard across computers
-Status: ACTIVE
+Status: BACKLOG — core and Mac done (PR #14, draft, CI green); TESTING I1–I9 wait for two
+computers, the Windows side for Phase 3
 
 DEVPLAN reference: Phase 11. Depends on: Phases 1, 3, 10
 

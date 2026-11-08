@@ -174,9 +174,9 @@ def layout(placements: list[bytes], count: int | None = None, revision: int = 12
                    + b"".join(placements))
 
 
-def enter(control_id: int = 7, x: int = 0, y: int = 4_800, modifiers: int = 0, drag_id: int = 0,
-          reserved: bytes = bytes(3)) -> bytes:
-    return control(0x20, u32(control_id) + coords(x, y) + u8(modifiers) + reserved + u32(drag_id))
+def enter(control_id: int = 7, x: int = 0, y: int = 4_800, modifiers: int = 0, locks: int = 0, drag_id: int = 0,
+          reserved: bytes = bytes(2)) -> bytes:
+    return control(0x20, u32(control_id) + coords(x, y) + u8(modifiers) + u8(locks) + reserved + u32(drag_id))
 
 
 def key_event(page: int = 7, usage: int = 0x04, action: int = 1, control_id: int = 7, reserved: int = 0) -> bytes:
@@ -286,6 +286,8 @@ def control_fixtures() -> list[Fixture]:
                 layout([placement(MAC_ID, 0, 0), placement(PC_ID, 1470 * 16, -100 * 16),
                         placement(LAPTOP_ID, -edge, edge, flags=1)])),
         Fixture("control/enter.bin", "control", v, 0x20, "Enter with Shift held", enter(modifiers=0b10)),
+        Fixture("control/enter_caps_lock.bin", "control", v, 0x20, "Enter with Caps Lock on",
+                enter(locks=1)),
         Fixture("control/enter_with_drag.bin", "control", v, 0x20, "Enter carrying a drag",
                 enter(control_id=0xFFFF_FFFF, x=-edge, y=edge, drag_id=9)),
         Fixture("control/leave_crossed_on.bin", "control", v, 0x21, "Leave: crossed on",
@@ -491,7 +493,9 @@ def control_fixtures() -> list[Fixture]:
         Fixture("malformed/enter_x_outside.bin", "control", e, VALUE_OUT_OF_RANGE, "x is the largest i32",
                 enter(x=2 ** 31 - 1)),
         Fixture("malformed/enter_reserved_set.bin", "control", e, VALUE_OUT_OF_RANGE, "reserved byte is 1",
-                enter(reserved=b"\x01\x00\x00")),
+                enter(reserved=b"\x01\x00")),
+        Fixture("malformed/enter_unknown_lock.bin", "control", e, VALUE_OUT_OF_RANGE, "a lock bit beyond Caps Lock",
+                enter(locks=0b10)),
         Fixture("malformed/leave_reason_0.bin", "control", e, VALUE_OUT_OF_RANGE, "reason 0",
                 control(0x21, u32(7) + u8(0))),
         Fixture("malformed/leave_reason_5.bin", "control", e, VALUE_OUT_OF_RANGE, "reason 5",

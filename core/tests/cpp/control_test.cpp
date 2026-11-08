@@ -38,6 +38,8 @@ constexpr std::uint16_t kKeyA = 0x04;
 constexpr std::uint16_t kKeyB = 0x05;
 constexpr std::uint16_t kLeftShift = 0xE1;
 constexpr std::uint16_t kLeftCommand = 0xE3;
+constexpr std::uint16_t kLeftControl = 0xE0;
+constexpr std::uint16_t kCapsLock = 0x39;
 
 layout::Screens one_monitor(std::uint8_t key) {
     const layout::Rect frame{.x = 0, .y = 0, .width = kWidth * kUnit, .height = kHeight * kUnit};
@@ -86,8 +88,8 @@ protected:
     /// as it pushes past an edge.
     void SetUp() override {
         network.capture_wire = false;
-        network.control_tunables.push.immediate = true;
-        form_group(network, 3);
+        network.control_tunables.settings.push.immediate = true;
+        form_group(network, 3, platforms);
         layout::Placements row;
         for (std::size_t i = 0; i < 3; ++i) {
             ASSERT_TRUE(
@@ -106,6 +108,29 @@ protected:
 
     SimulatedNode& node(std::size_t index) { return network.node(index); }
     layout::DeviceId id(std::size_t index) { return network.node(index).mesh.device_id(); }
+    /// The keys injected on a computer, in order.
+    std::vector<protocol::KeyEvent> keys_on(std::size_t index) {
+        std::vector<protocol::KeyEvent> keys;
+        for (const control::Injection& injection : node(index).control_observer.injected) {
+            if (const auto* key = std::get_if<protocol::KeyEvent>(&injection)) {
+                keys.push_back(*key);
+            }
+        }
+        return keys;
+    }
+    /// The Caps Lock states set on a computer, in order.
+    std::vector<bool> caps_on(std::size_t index) {
+        std::vector<bool> states;
+        for (const control::Injection& injection : node(index).control_observer.injected) {
+            if (const auto* caps = std::get_if<control::SetCapsLock>(&injection)) {
+                states.push_back(caps->on);
+            }
+        }
+        return states;
+    }
+    void settings(std::size_t on, const control::InputSettings& settings) {
+        command(on, [&](control::Control& c) { c.set_settings(settings); });
+    }
 
     /// Physical input on computer `on`, then the network runs for `after`.
     void input(std::size_t on, const control::Input& event, milliseconds after = milliseconds(20)) {
@@ -141,7 +166,17 @@ protected:
         network.run_for(after);
     }
 
+    std::vector<protocol::Platform> platforms; ///< a Mac each, unless a fixture says otherwise
     SimulatedMeshNetwork network;
+};
+
+/// The same row as a Mac, a PC and a Mac.
+class MixedInputControl : public InputControl {
+protected:
+    MixedInputControl() {
+        platforms = {protocol::Platform::MacOS, protocol::Platform::Windows,
+                     protocol::Platform::MacOS};
+    }
 };
 
 TEST_F(InputControl, TheCursorCrossesARowOfComputersAndComesBack) {
@@ -434,6 +469,101 @@ TEST_F(InputControl, AThousandCrossingsLeaveNoKeyOrButtonPressed) {
         EXPECT_EQ(node(endpoint).control_observer.controlled.back(), std::nullopt);
     }
     EXPECT_EQ(node(0).control_observer.began.size(), 1'000U);
+}
+
+TEST_F(MixedInputControl, ShortcutsKeepTheirPlaceBetweenAMacAndAPc) {
+    const HeldKey command{.page = protocol::kKeyboardPage, .usage = kLeftCommand};
+    const HeldKey control{.page = protocol::kKeyboardPage, .usage = kLeftControl};
+    key(0, kLeftCommand, KeyAction::Down);
+    cross_from_0(); // the Mac's ⌘ goes to the PC as Control
+    EXPECT_EQ(held_after(node(1).control_observer.injected).keys, std::set<HeldKey>{control});
+    key(0, kKeyA, KeyAction::Down);
+    key(0, kKeyA, KeyAction::Up);
+    key(0, kLeftControl, KeyAction::Down); // and the Mac's Control as the Windows key
+    EXPECT_EQ(keys_on(1).back().usage, kLeftCommand);
+    key(0, kLeftControl, KeyAction::Up);
+    key(0, kLeftCommand, KeyAction::Up);
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).keys.empty());
+
+    // Mac to Mac: keys as they are.
+    key(0, kLeftCommand, KeyAction::Down);
+    move(0, kWidth - 1, 400, 1100, 0);
+    ASSERT_EQ(node(2).control_observer.controlled.back(), id(0));
+    EXPECT_EQ(held_after(node(2).control_observer.injected).keys, std::set<HeldKey>{command});
+    key(0, kLeftCommand, KeyAction::Up);
+}
+
+TEST_F(MixedInputControl, KeysByPositionWhenChosen) {
+    control::InputSettings by_position;
+    by_position.modifier_mapping = control::ModifierMapping::Positions;
+    by_position.push.immediate = true;
+    settings(0, by_position);
+    key(0, kLeftCommand, KeyAction::Down);
+    cross_from_0();
+    EXPECT_EQ(held_after(node(1).control_observer.injected).keys,
+              (std::set<HeldKey>{{.page = protocol::kKeyboardPage, .usage = kLeftCommand}}));
+}
+
+TEST_F(MixedInputControl, AMappingChangedDuringControlWaitsForTheNextCrossing) {
+    key(0, kLeftCommand, KeyAction::Down);
+    cross_from_0();
+    control::InputSettings by_position;
+    by_position.modifier_mapping = control::ModifierMapping::Positions;
+    by_position.push.immediate = true;
+    settings(0, by_position);
+    key(0, kLeftCommand, KeyAction::Up);
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).keys.empty())
+        << "the release matches its press";
+}
+
+TEST_F(InputControl, CapsLockFollowsTheUser) {
+    command(0, [](control::Control& c) { c.set_caps_lock(true); });
+    cross_from_0();
+    EXPECT_EQ(caps_on(1), std::vector<bool>{true}) << "on over there, as here";
+    key(0, kCapsLock, KeyAction::Down);
+    key(0, kCapsLock, KeyAction::Up);
+    EXPECT_EQ(caps_on(1), (std::vector<bool>{true, false})) << "a press toggles it there";
+    EXPECT_TRUE(keys_on(1).empty()) << "Caps Lock travels as a state, never as a held key";
+    command(0, [](control::Control& c) { c.set_caps_lock(true); }); // stale: the cursor is away
+    command(0, [](control::Control& c) { c.return_home(protocol::LeaveReason::ReleasedByHotkey); });
+    ASSERT_EQ(node(0).control_observer.ended.size(), 1U);
+    EXPECT_FALSE(node(0).control_observer.ended.back().caps_lock)
+        << "back home as the user left it";
+}
+
+TEST_F(InputControl, CrossingOnlyWithAModifierWhenChosen) {
+    control::InputSettings with_control;
+    with_control.crossing_modifiers = 0b0001'0001; // either Control key
+    with_control.push.immediate = true;
+    settings(0, with_control);
+    cross_from_0();
+    EXPECT_TRUE(node(0).control_observer.began.empty());
+    key(0, kLeftControl, KeyAction::Down);
+    cross_from_0();
+    EXPECT_EQ(node(0).control_observer.began.size(), 1U);
+}
+
+TEST_F(InputControl, APushMustLastAsLongAsChosen) {
+    control::InputSettings slow;
+    slow.push.time = milliseconds(300);
+    settings(0, slow);
+    for (int i = 0; i < 10; ++i) { // 200 ms of pushing
+        move(0, kWidth - 1, 400, 10, 0);
+    }
+    EXPECT_TRUE(node(0).control_observer.began.empty());
+    for (int i = 0; i < 10; ++i) { // past 300 ms
+        move(0, kWidth - 1, 400, 10, 0);
+    }
+    EXPECT_EQ(node(0).control_observer.began.size(), 1U);
+}
+
+TEST_F(InputControl, PointerSpeedPerComputer) {
+    command(0, [&](control::Control& c) { c.set_speed(id(1), 2'000); });
+    cross_from_0();
+    move(0, kWidth - 1, 400, 100, 0);
+    EXPECT_EQ(std::get<control::MoveCursor>(node(1).control_observer.injected.back()).position,
+              at(200, 400))
+        << "twice as fast on computer 1";
 }
 
 } // namespace

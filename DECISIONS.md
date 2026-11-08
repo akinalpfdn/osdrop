@@ -444,3 +444,39 @@ choices the plan leaves open are logged here.
 **Why:** The event tap already sees every key in both modes, so no second mechanism is needed, and the chords are unlikely to clash with app shortcuts. Settings come with Phase 16.
 **Trade-offs:** The chords are fixed until then.
 **Revisit if:** Users report clashes.
+
+---
+
+## 2026-11-04 — Shortcuts keep their place between a Mac and a PC
+**Chosen:** User decision at the start of Phase 12: by default the controller swaps Control and Command/Windows (HID 0xE0 ↔ 0xE3, 0xE4 ↔ 0xE7) when the cursor is on a computer of the other platform, so ⌘C copies on a PC and Ctrl+C on a PC keyboard copies on a Mac; ⌥ stays Alt. Mac ↔ Mac and PC ↔ PC pass keys unchanged. Each computer's setting decides how its own keyboard behaves elsewhere, so the two directions are set apart.
+**Alternatives:** Keys by position (⌘ is the Windows key), kept as the other setting.
+**Why:** People switch between the two with their habits, not with key positions; the swap is the same both ways, so one rule serves both directions.
+**Trade-offs:** Shortcuts that use the Windows key (Win+E, Win+L) are typed with Control on a Mac keyboard.
+**Revisit if:** Users ask for per-key remapping.
+
+---
+
+## 2026-11-04 — Caps Lock travels as a state
+**Chosen:** Enter carries the controller's Caps Lock (a byte that was reserved); the endpoint sets it and turns it over on each Caps Lock press, which it never injects as a key; a controller that comes back sets its own Caps Lock as it left the endpoints. On the Mac it is read and set with `IOHIDGet/SetModifierLockState`.
+**Alternatives:** Forwarding Caps Lock as key presses.
+**Why:** macOS does not toggle Caps Lock for a posted key event, and a press that reaches a computer whose state differs would invert the user's intent.
+**Trade-offs:** A protocol change (unreleased, fixtures updated).
+**Revisit if:** Num Lock or Scroll Lock need the same.
+
+---
+
+## 2026-11-04 — A line is a notch everywhere; a trackpad point is 1/48 of a Windows notch
+**Chosen:** Scrolling travels as content movement; lines map to wheel notches (WHEEL_DELTA 120) and points to 2.5 wheel units, with fractions carried between events. Mac ↔ Mac passes values unchanged.
+**Alternatives:** Mapping lines to Windows' lines per notch; pixels from the target's line height.
+**Why:** A notch then scrolls as the target's own settings say, and trackpad steps stay fine. The point ratio approximates three lines of a typical Windows app per notch.
+**Trade-offs:** The point ratio is an estimate until the PC is back.
+**Revisit if:** K7 on the PC feels too fast or slow.
+
+---
+
+## 2026-11-04 — Input settings live in preferences until the settings window
+**Chosen:** The modifier mapping, push time, immediate crossing, crossing modifier and per-computer pointer speed are read from UserDefaults keys under `input.` at start and handed to core; Phase 16 adds the window that writes them.
+**Alternatives:** Waiting for Phase 16 to make them settable.
+**Why:** Core and the tests need the settings now, and the hardware rows can be run with `defaults write`.
+**Trade-offs:** Changes take effect at the next start until the window exists.
+**Revisit if:** Phase 16.

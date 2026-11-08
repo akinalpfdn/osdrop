@@ -25,6 +25,7 @@ control/screen_report_mixed_scale.bin	control	valid	17	a PC: a 150% laptop panel
 control/screen_report_bounds.bin	control	valid	17	smallest and largest monitor sizes at the coordinate limits
 control/layout_three.bin	control	valid	18	three computers, one detached
 control/enter.bin	control	valid	32	Enter with Shift held
+control/enter_caps_lock.bin	control	valid	32	Enter with Caps Lock on
 control/enter_with_drag.bin	control	valid	32	Enter carrying a drag
 control/leave_crossed_on.bin	control	valid	33	Leave: crossed on
 control/refuse_locked.bin	control	valid	34	Refuse: locked
@@ -126,6 +127,7 @@ malformed/layout_placement_cut.bin	control	error	3	placement cut short
 malformed/enter_control_0.bin	control	error	8	control_id 0
 malformed/enter_x_outside.bin	control	error	8	x is the largest i32
 malformed/enter_reserved_set.bin	control	error	8	reserved byte is 1
+malformed/enter_unknown_lock.bin	control	error	8	a lock bit beyond Caps Lock
 malformed/leave_reason_0.bin	control	error	8	reason 0
 malformed/leave_reason_5.bin	control	error	8	reason 5
 malformed/refuse_control_0.bin	control	error	8	control_id 0

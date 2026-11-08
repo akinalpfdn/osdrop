@@ -195,7 +195,7 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
         });
     };
     callbacks.capture_ended = [](void* context, const uint8_t* /*device*/, int32_t x, int32_t y,
-                                 uint8_t reason, uint8_t refused) {
+                                 uint8_t reason, uint8_t refused, uint8_t /*caps_lock*/) {
         auto* e = static_cast<Events*>(context);
         e->update(
             [&] { e->ended.push_back({.reason = reason, .refused = refused, .x = x, .y = y}); });
@@ -875,12 +875,14 @@ TEST(CapiMesh, PushingThroughAnEdgeMovesTheInputToAnotherMember) {
     ASSERT_EQ(released.size(), 1U);
     EXPECT_EQ(released.front().usage, 0xE1) << "released on the Mac";
     EXPECT_EQ(released.front().action, 2);
-    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.injected.size() >= 2; }));
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.injected.size() >= 3; }));
     const auto entered = pc.events.read([&] { return pc.events.injected; });
     EXPECT_EQ(entered.front().kind, OSDROP_INPUT_POINTER);
     EXPECT_EQ(entered.front().x, 0) << "it enters at the PC's left edge";
     EXPECT_EQ(entered.front().y, 400 * 16);
-    EXPECT_EQ(entered.at(1).usage, 0xE1) << "Shift is held on the PC";
+    EXPECT_EQ(entered.at(1).kind, OSDROP_INPUT_CAPS_LOCK);
+    EXPECT_EQ(entered.at(1).action, 2) << "Caps Lock as on the Mac: off";
+    EXPECT_EQ(entered.at(2).usage, 0xE1) << "Shift is held on the PC";
     EXPECT_EQ(pc.events.read([&] { return pc.events.controlled; }),
               (std::vector<std::optional<DeviceId>>{mac.device_id}));
 
@@ -945,6 +947,22 @@ TEST(CapiMesh, InputCommandsCheckTheirArguments) {
     EXPECT_EQ(osdrop_mesh_lock_input(mac.mesh, 1), OSDROP_OK);
     EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 4), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_set_unavailable(mac.mesh, 1), OSDROP_OK);
+    osdrop_input_settings settings{
+        .modifier_mapping = 1, .immediate = 0, .crossing_modifiers = 0, .push_ms = 500};
+    EXPECT_EQ(osdrop_mesh_set_input_settings(mac.mesh, &settings), OSDROP_OK);
+    settings.push_ms = 5'001;
+    EXPECT_EQ(osdrop_mesh_set_input_settings(mac.mesh, &settings), OSDROP_ERROR_INVALID_ARGUMENT);
+    settings.push_ms = 0;
+    settings.modifier_mapping = 2;
+    EXPECT_EQ(osdrop_mesh_set_input_settings(mac.mesh, &settings), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_input_settings(mac.mesh, nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_pointer_speed(mac.mesh, mac.device_id.data(), 1'500), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_set_pointer_speed(mac.mesh, mac.device_id.data(), 249),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_pointer_speed(mac.mesh, nullptr, 1'000),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_set_caps_lock(mac.mesh, 1), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_set_caps_lock(mac.mesh, 2), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_cursor_moved(nullptr, 0, 0), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_cursor_moved(mac.mesh, 0, 0), OSDROP_OK);
 }

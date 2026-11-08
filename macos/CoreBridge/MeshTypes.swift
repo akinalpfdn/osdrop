@@ -228,6 +228,8 @@ public enum ControlInput: Sendable, Equatable {
     /// injected; physical buttons use the cursor's position.
     case button(UInt8, isDown: Bool, clickCount: UInt8, position: CoordPoint)
     case scroll(ScrollStroke, position: CoordPoint)
+    /// To inject only: Caps Lock travels as a state, not as key presses.
+    case capsLock(Bool)
 
     init(_ raw: osdrop_input) {
         let position = CoordPoint(x: raw.x, y: raw.y)
@@ -236,6 +238,8 @@ public enum ControlInput: Sendable, Equatable {
             self = .key(page: raw.page, usage: raw.usage, action: raw.action)
         case OSDROP_INPUT_BUTTON:
             self = .button(raw.button, isDown: raw.action == 1, clickCount: raw.click_count, position: position)
+        case OSDROP_INPUT_CAPS_LOCK:
+            self = .capsLock(raw.action == 1)
         case OSDROP_INPUT_SCROLL:
             self = .scroll(
                 ScrollStroke(
@@ -263,6 +267,9 @@ public enum ControlInput: Sendable, Equatable {
             raw.kind = OSDROP_INPUT_SCROLL
             (raw.scroll_unit, raw.scroll_phase, raw.momentum) = (stroke.unit, stroke.phase, stroke.momentum)
             (raw.dx, raw.dy, raw.x, raw.y) = (stroke.dx, stroke.dy, position.x, position.y)
+        case .capsLock(let on):
+            raw.kind = OSDROP_INPUT_CAPS_LOCK
+            raw.action = on ? 1 : 2
         }
         return raw
     }
@@ -311,6 +318,45 @@ public enum CaptureEnd: Sendable, Equatable {
     }
 }
 
+/// How modifiers travel between a Mac and a PC; between computers of one platform they never
+/// change.
+public enum ModifierMapping: Sendable, Equatable {
+    /// Every key as it is: ⌘ is the Windows key.
+    case positions
+    /// Control and Command swapped, so ⌘C copies on a PC (the default; user decision, Phase 12).
+    case shortcuts
+}
+
+/// The user's input settings (DEVPLAN Phase 12).
+public struct InputSettings: Sendable, Equatable {
+    public static let maxPushMilliseconds: UInt32 = 5_000
+
+    public var modifierMapping: ModifierMapping
+    /// How long a push against an edge must last before the cursor crosses.
+    public var pushMilliseconds: UInt32
+    /// Cross as soon as the cursor pushes past an edge.
+    public var immediate: Bool
+    /// Enter modifier bits (bit 0 left Control … bit 7 right Command): the cursor crosses only
+    /// while one of them is held; 0: always.
+    public var crossingModifiers: UInt8
+
+    public init(
+        modifierMapping: ModifierMapping = .shortcuts, pushMilliseconds: UInt32 = 1_000, immediate: Bool = false,
+        crossingModifiers: UInt8 = 0
+    ) {
+        self.modifierMapping = modifierMapping
+        self.pushMilliseconds = pushMilliseconds
+        self.immediate = immediate
+        self.crossingModifiers = crossingModifiers
+    }
+
+    var raw: osdrop_input_settings {
+        osdrop_input_settings(
+            modifier_mapping: modifierMapping == .shortcuts ? 1 : 0, immediate: immediate ? 1 : 0,
+            crossing_modifiers: crossingModifiers, push_ms: pushMilliseconds)
+    }
+}
+
 /// Why this computer cannot be controlled now.
 public enum ControlUnavailability: Sendable, Equatable {
     case screenLocked
@@ -333,8 +379,9 @@ public enum ControlEvent: Sendable, Equatable {
     /// The cursor went to `device`: capture this Mac's input and hide its cursor; release the keys
     /// in `releaseHere` on this Mac (key events with action 2).
     case captureBegan(DeviceID, releaseHere: [ControlInput])
-    /// The cursor came back from `device`: give the input back and show the cursor at `cursor`.
-    case captureEnded(DeviceID, cursor: CoordPoint, reason: CaptureEnd)
+    /// The cursor came back from `device`: give the input back, show the cursor at `cursor` and
+    /// set Caps Lock as the user left it on the other computers.
+    case captureEnded(DeviceID, cursor: CoordPoint, reason: CaptureEnd, capsLock: Bool)
     /// `controller` controls this computer now; `nil` when the control ended.
     case controlled(by: DeviceID?)
     /// Input from the controller to apply here.

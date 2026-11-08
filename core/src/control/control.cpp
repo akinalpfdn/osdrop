@@ -34,10 +34,12 @@ constexpr std::size_t kP99Percent = 99;
 
 } // namespace
 
-Control::Control(const DeviceId& self, const ControlTunables& tunables, ControlObserver& observer,
-                 layout::LayoutObserver& layout_observer, mesh::MeshObserver& next)
+Control::Control(const DeviceId& self, protocol::Platform platform, const ControlTunables& tunables,
+                 ControlObserver& observer, layout::LayoutObserver& layout_observer,
+                 mesh::MeshObserver& next)
     : self_(self), tunables_(tunables), observer_(observer), layout_observer_(layout_observer),
-      next_(next), engine_(self, tunables.push) {}
+      next_(next), engine_(self, tunables.settings.push), platform_(platform),
+      settings_(tunables.settings) {}
 
 void Control::attach(mesh::Mesh& mesh, const layout::Layout& layout) {
     mesh_ = &mesh;
@@ -70,12 +72,20 @@ void Control::input(const Input& input, TimePoint captured) {
             [&](const PointerMoved& m) { moved(m, captured); },
             [&](const KeyInput& m) {
                 physical_.key(m.key, m.action);
-                if (away_) {
-                    send(away_->device, protocol::KeyEvent{.control_id = away_->control_id,
-                                                           .page = m.key.page,
-                                                           .usage = m.key.usage,
-                                                           .action = m.action});
+                update_lock(); // a crossing modifier may have gone down or up
+                if (!away_) {
+                    return;
                 }
+                if (m.key == HeldKey{.page = protocol::kKeyboardPage, .usage = kCapsLockUsage} &&
+                    m.action == protocol::KeyAction::Down) {
+                    caps_lock_ = !caps_lock_; // the press toggles it over there
+                }
+                const HeldKey sent =
+                    away_->swap_modifiers ? swap_control_and_command(m.key) : m.key;
+                send(away_->device, protocol::KeyEvent{.control_id = away_->control_id,
+                                                       .page = sent.page,
+                                                       .usage = sent.usage,
+                                                       .action = m.action});
             },
             [&](const ButtonInput& m) {
                 physical_.button(m.button, m.action);
@@ -121,6 +131,22 @@ void Control::return_home(protocol::LeaveReason reason) {
 void Control::set_locked(bool locked) {
     locked_ = locked;
     update_lock();
+}
+
+void Control::set_settings(const InputSettings& settings) {
+    settings_ = settings;
+    engine_.set_push(settings.push);
+    update_lock();
+}
+
+void Control::set_speed(const DeviceId& device, std::uint32_t permille) {
+    engine_.set_speed(device, permille);
+}
+
+void Control::set_caps_lock(bool on) {
+    if (!away_) {
+        caps_lock_ = on;
+    }
 }
 
 void Control::set_unavailable(std::optional<protocol::RefuseReason> reason) {
@@ -183,12 +209,21 @@ void Control::cross(const DeviceId& device, Point position) {
     } else {
         observer_.on_capture_began(device, physical_.keys());
     }
-    away_ = Away{.device = device, .control_id = next_control_id(), .sent = position};
-    send(device, protocol::Enter{.control_id = away_->control_id,
-                                 .x = coord(position.x),
-                                 .y = coord(position.y),
-                                 .modifiers = physical_.modifiers(),
-                                 .drag_id = 0});
+    const auto peer = peers_.find(device);
+    const bool swap = settings_.modifier_mapping == ModifierMapping::Shortcuts &&
+                      peer != peers_.end() && peer->second.platform != platform_;
+    away_ = Away{.device = device,
+                 .control_id = next_control_id(),
+                 .sent = position,
+                 .swap_modifiers = swap};
+    const std::uint8_t modifiers = physical_.modifiers();
+    send(device,
+         protocol::Enter{.control_id = away_->control_id,
+                         .x = coord(position.x),
+                         .y = coord(position.y),
+                         .modifiers = swap ? swap_control_and_command(modifiers) : modifiers,
+                         .locks = caps_lock_ ? protocol::kCapsLock : std::uint8_t{0},
+                         .drag_id = 0});
 }
 
 void Control::come_home(Point cursor, CaptureEnd reason,
@@ -198,8 +233,11 @@ void Control::come_home(Point cursor, CaptureEnd reason,
     }
     const DeviceId device = away_->device;
     away_.reset();
-    observer_.on_capture_ended(
-        {.device = device, .cursor = cursor, .reason = reason, .refused = refused});
+    observer_.on_capture_ended({.device = device,
+                                .cursor = cursor,
+                                .reason = reason,
+                                .refused = refused,
+                                .caps_lock = caps_lock_});
 }
 
 void Control::refresh() {
@@ -222,7 +260,9 @@ void Control::refresh() {
 }
 
 void Control::update_lock() {
-    engine_.set_locked(locked_ || !physical_.buttons().empty());
+    const std::uint8_t required = settings_.crossing_modifiers;
+    const bool missing_modifier = required != 0 && (physical_.modifiers() & required) == 0;
+    engine_.set_locked(locked_ || !physical_.buttons().empty() || missing_modifier);
 }
 
 void Control::receive_refusal(const DeviceId& device, std::uint32_t control_id, CaptureEnd reason,
@@ -259,12 +299,15 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
     if (controlled_) {
         release(); // the controller's previous entry ended with this one
     }
-    Controlled& controlled = controlled_.emplace(Controlled{.controller = device,
-                                                            .control_id = enter.control_id,
-                                                            .held = {},
-                                                            .position = point(enter.x, enter.y)});
+    Controlled& controlled =
+        controlled_.emplace(Controlled{.controller = device,
+                                       .control_id = enter.control_id,
+                                       .held = {},
+                                       .position = point(enter.x, enter.y),
+                                       .caps_lock = (enter.locks & protocol::kCapsLock) != 0});
     observer_.on_controlled(device);
     observer_.on_inject(MoveCursor{.position = controlled.position});
+    observer_.on_inject(SetCapsLock{.on = controlled.caps_lock});
     for (const HeldKey& key : modifier_keys(enter.modifiers)) {
         inject_key(controlled, {.control_id = enter.control_id,
                                 .page = key.page,
@@ -281,6 +324,13 @@ Control::Controlled* Control::controlled_by(const DeviceId& device, std::uint32_
 }
 
 void Control::inject_key(Controlled& controlled, const protocol::KeyEvent& event) {
+    if (event.page == protocol::kKeyboardPage && event.usage == kCapsLockUsage) {
+        if (event.action == protocol::KeyAction::Down) {
+            controlled.caps_lock = !controlled.caps_lock;
+            observer_.on_inject(SetCapsLock{.on = controlled.caps_lock});
+        }
+        return; // a state, never held
+    }
     if (controlled.held.key({.page = event.page, .usage = event.usage}, event.action)) {
         observer_.on_inject(event); // a release of a key never pressed here is dropped
     }
@@ -459,7 +509,8 @@ void Control::on_peer_connected(const DeviceId& device, const crypto::Key& peer_
                                 const protocol::Capabilities& capabilities) {
     peers_[device] =
         Peer{.responsive = true,
-             .accepts_control = (capabilities.features & protocol::kFeatureTakesControl) != 0};
+             .accepts_control = (capabilities.features & protocol::kFeatureTakesControl) != 0,
+             .platform = hello.platform};
     refresh();
     next_.on_peer_connected(device, peer_key, hello, capabilities);
 }
