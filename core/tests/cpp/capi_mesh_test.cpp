@@ -71,6 +71,13 @@ struct Events {
         std::uint64_t skipped_links = 0;
     };
     std::vector<Finished> finished;
+    struct Clip {
+        DeviceId device{};
+        std::uint64_t clip_id = 0;
+        std::vector<osdrop_announced_format> formats;
+    };
+    std::vector<Clip> clips;
+    std::vector<std::pair<osdrop_result, Bytes>> contents;
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex);
@@ -142,6 +149,25 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
                                uint64_t /*skipped*/) {
         auto* e = static_cast<Events*>(context);
         e->update([&] { e->offers.emplace_back(result, total_bytes); });
+    };
+    callbacks.clipboard_changed = [](void* context, const uint8_t* device, uint64_t clip_id,
+                                     const osdrop_announced_format* formats, size_t count) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            Events::Clip clip{.device = {}, .clip_id = clip_id, .formats = {}};
+            std::memcpy(clip.device.data(), device, clip.device.size());
+            const auto announced = std::span(formats, count);
+            clip.formats.assign(announced.begin(), announced.end());
+            e->clips.push_back(std::move(clip));
+        });
+    };
+    callbacks.content_received = [](void* context, uint64_t /*transfer_id*/, osdrop_result result,
+                                    const uint8_t* data, size_t size) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            const auto content = std::span(data, size);
+            e->contents.emplace_back(result, Bytes(content.begin(), content.end()));
+        });
     };
     callbacks.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* e = static_cast<Events*>(context);
@@ -634,9 +660,9 @@ std::uint64_t send_item(CMesh& from, CMesh& to, const std::filesystem::path& roo
     EXPECT_TRUE(from.events.wait_for([&] { return !from.events.offers.empty(); }));
     const std::string destination = osdrop::transfer::utf8_of(folder);
     std::uint64_t id = 0;
-    EXPECT_EQ(
-        osdrop_mesh_receive(to.mesh, from.device_id.data(), &kDragItem, destination.c_str(), &id),
-        OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_receive(to.mesh, from.device_id.data(), &kDragItem, destination.c_str(),
+                                  UINT64_MAX, &id),
+              OSDROP_OK);
     return id;
 }
 
@@ -685,6 +711,66 @@ TEST(CapiMesh, QuittingDuringATransferLeavesNothingBehind) {
     EXPECT_TRUE(osdrop::test::listing(destination.path()).empty());
 }
 
+TEST(CapiMesh, ACopyOnOneMemberIsPastedOnAnother) {
+    CMesh mac(1, "Mac");
+    CMesh pc(2, "PC");
+    connect_pair(mac, pc);
+    const std::string text = "copied on the Mac";
+    const std::array<osdrop_clipboard_content, 1> contents{
+        {{.format = OSDROP_CLIPBOARD_TEXT,
+          .data = reinterpret_cast<const uint8_t*>(text.data()), // NOLINT: the string's bytes
+          .size = text.size()}}};
+    uint64_t clip = 0;
+    ASSERT_EQ(
+        osdrop_mesh_clipboard_copied(mac.mesh, contents.data(), contents.size(), nullptr, 0, &clip),
+        OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return !pc.events.clips.empty(); }));
+    {
+        std::lock_guard lock(pc.events.mutex);
+        const Events::Clip& seen = pc.events.clips.front();
+        EXPECT_EQ(seen.device, mac.device_id);
+        EXPECT_EQ(seen.clip_id, clip);
+        ASSERT_EQ(seen.formats.size(), 1U);
+        EXPECT_EQ(seen.formats[0].format, OSDROP_CLIPBOARD_TEXT);
+        EXPECT_EQ(seen.formats[0].byte_count, text.size());
+    }
+    const osdrop_object_ref item{
+        .kind = OSDROP_OBJECT_CLIPBOARD, .object_id = clip, .item_index = OSDROP_CLIPBOARD_TEXT};
+    uint64_t id = 0;
+    ASSERT_EQ(osdrop_mesh_fetch_content(pc.mesh, mac.device_id.data(), &item, 1024, &id),
+              OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return !pc.events.contents.empty(); }));
+    std::lock_guard lock(pc.events.mutex);
+    EXPECT_EQ(pc.events.contents.front().first, OSDROP_OK);
+    EXPECT_EQ(pc.events.contents.front().second, Bytes(text.begin(), text.end()));
+}
+
+TEST(CapiMesh, ClipboardCommandsCheckTheirArguments) {
+    CMesh mac(1, "Mac");
+    uint64_t clip = 0;
+    EXPECT_EQ(osdrop_mesh_clipboard_copied(nullptr, nullptr, 0, nullptr, 0, &clip),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_clipboard_copied(mac.mesh, nullptr, 0, nullptr, 0, &clip),
+              OSDROP_ERROR_INVALID_ARGUMENT)
+        << "an empty copy";
+    const std::array<osdrop_clipboard_content, 1> files_as_bytes{
+        {{.format = OSDROP_CLIPBOARD_FILES, .data = nullptr, .size = 0}}};
+    EXPECT_EQ(osdrop_mesh_clipboard_copied(mac.mesh, files_as_bytes.data(), 1, nullptr, 0, &clip),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const DeviceId stranger{};
+    const osdrop_object_ref files{
+        .kind = OSDROP_OBJECT_CLIPBOARD, .object_id = 1, .item_index = OSDROP_CLIPBOARD_FILES};
+    uint64_t id = 0;
+    EXPECT_EQ(osdrop_mesh_fetch_content(mac.mesh, stranger.data(), &files, 64, &id),
+              OSDROP_ERROR_INVALID_ARGUMENT)
+        << "files are received, not fetched";
+    const osdrop_object_ref text{
+        .kind = OSDROP_OBJECT_CLIPBOARD, .object_id = 1, .item_index = OSDROP_CLIPBOARD_TEXT};
+    EXPECT_EQ(osdrop_mesh_fetch_content(mac.mesh, stranger.data(), &text, 64, &id),
+              OSDROP_ERROR_INVALID_STATE)
+        << "not connected";
+}
+
 TEST(CapiMesh, TransferCommandsCheckTheirArguments) {
     CMesh mac(1, "Mac");
     const osdrop::test::TempFolder temp;
@@ -708,12 +794,15 @@ TEST(CapiMesh, TransferCommandsCheckTheirArguments) {
               OSDROP_ERROR_VALUE_OUT_OF_RANGE);
     EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &kDragItem, paths.data(), 1, nullptr, 0), OSDROP_OK);
 
-    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, "relative", &id),
-              OSDROP_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), &id),
-              OSDROP_ERROR_NOT_PERMITTED)
+    EXPECT_EQ(
+        osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, "relative", UINT64_MAX, &id),
+        OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(
+        osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), UINT64_MAX, &id),
+        OSDROP_ERROR_NOT_PERMITTED)
         << "not a member";
-    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), nullptr),
+    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), UINT64_MAX,
+                                  nullptr),
               OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_withdraw(mac.mesh, OSDROP_OBJECT_DRAG, 0),
               OSDROP_ERROR_VALUE_OUT_OF_RANGE);

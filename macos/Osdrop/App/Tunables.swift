@@ -39,6 +39,17 @@ enum Tunables {
         static let promiseTimeout: Duration = .seconds(120)
     }
 
+    enum Clipboard {
+        /// macOS has no notification for pasteboard changes; its change count is read this often.
+        static let pollInterval: Duration = .milliseconds(500)
+        /// The largest text, RTF or HTML copy shared, either way.
+        static let textLimit: UInt64 = 16 * 1024 * 1024
+        static let imageLimit: UInt64 = 64 * 1024 * 1024
+        /// Files copied on another computer are fetched up to this total (user decision, Phase 15;
+        /// a setting in Phase 16). Larger copies are moved by drag and drop.
+        static let filesLimit: UInt64 = 512 * 1024 * 1024
+    }
+
     enum KeyStore {
         static let keychainService = "com.akinalpfdn.osdrop"
         static let identityAccount = "identity"

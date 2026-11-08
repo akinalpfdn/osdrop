@@ -6,6 +6,7 @@
 // once the stream's queue has room, so a slow receiver holds the reads back. ContentEnd carries
 // the digest of the whole entry; a file that changed since the scan fails with IO_ERROR.
 
+#include "crypto/primitives.hpp"
 #include "transfer/manifest.hpp"
 #include "transfer/streams.hpp"
 #include "transfer/types.hpp"
@@ -38,6 +39,12 @@ public:
     [[nodiscard]] Status<Error> offer(const protocol::ObjectRef& item,
                                       std::vector<std::filesystem::path> roots,
                                       std::set<mesh::DeviceId> audience);
+    /// Offers one single content held in memory (clipboard formats 1-4), to the devices in
+    /// `audience`. Replaces an earlier offer of the same item.
+    [[nodiscard]] Status<Error>
+    offer_content(const protocol::ObjectRef& item,
+                  std::shared_ptr<const std::vector<std::uint8_t>> bytes,
+                  std::set<mesh::DeviceId> audience);
     /// Withdraws every item of an object; requests for them fail with CANCELLED.
     void withdraw(protocol::ObjectKind kind, std::uint64_t object_id);
 
@@ -60,6 +67,8 @@ private:
         std::optional<Error> scan_error;
         std::uint64_t generation = 0; ///< tells a stale scan result from the current one
         std::shared_ptr<DigestCache> digests;
+        std::shared_ptr<const std::vector<std::uint8_t>> content; ///< single contents only
+        crypto::ContentHasher::Digest content_digest{};
     };
 
     struct Job {
@@ -85,6 +94,8 @@ private:
     /// Starts or continues the front job; false when it waits (scan, read, queue).
     bool serve_front(const StreamKey& key, Serving& serving);
     bool serve_content(const StreamKey& key, Serving& serving, const Job& job, Offer& offer);
+    /// A single content from memory, as much as the stream's queue takes.
+    bool serve_memory(const StreamKey& key, Serving& serving, const Job& job, const Offer& offer);
     void read_next(const StreamKey& key, Serving& serving, std::uint32_t request_id);
     void read_done(const StreamKey& key, std::uint32_t request_id, Batch batch);
     void finish_job(const StreamKey& key, Serving& serving, std::optional<Error> error);

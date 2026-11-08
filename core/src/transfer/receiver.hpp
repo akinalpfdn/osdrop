@@ -38,7 +38,13 @@ public:
     /// the device may not send this computer files, INVALID_STATE when it is not connected.
     [[nodiscard]] Expected<TransferId, Error> receive(const mesh::DeviceId& device,
                                                       const protocol::ObjectRef& item,
-                                                      const std::filesystem::path& destination);
+                                                      const std::filesystem::path& destination,
+                                                      std::uint64_t max_bytes = UINT64_MAX);
+    /// Fetches a single content (clipboard formats 1-4) into memory; TOO_LARGE beyond
+    /// `max_bytes`. The clipboard permission of the device is the group's to check.
+    [[nodiscard]] Expected<TransferId, Error> fetch_content(const mesh::DeviceId& device,
+                                                            const protocol::ObjectRef& item,
+                                                            std::uint64_t max_bytes);
     /// Ends a transfer with CANCELLED; what it created is removed.
     void cancel(TransferId id);
     /// The devices that may send this computer files (none until set). Transfers from others
@@ -77,14 +83,17 @@ private:
 
     struct Fetch {
         Fetch(TransferId fetch_id, const mesh::DeviceId& from, const protocol::ObjectRef& object,
-              std::filesystem::path folder, std::size_t max_entries)
+              std::filesystem::path folder, std::size_t max_entries, std::uint64_t limit)
             : id(fetch_id), device(from), item(object), destination(std::move(folder)),
-              collector(current_platform(), max_entries) {}
+              max_bytes(limit), collector(current_platform(), max_entries) {}
 
         TransferId id;
         mesh::DeviceId device;
         protocol::ObjectRef item;
-        std::filesystem::path destination;
+        std::filesystem::path destination; ///< empty for a single content
+        std::uint64_t max_bytes;
+        bool content = false; ///< a single content into memory, not a tree onto disk
+        std::vector<std::uint8_t> buffer;
         Stage stage = Stage::Waiting;
         std::optional<Error> error;
         std::uint32_t stream = 0;
@@ -112,6 +121,9 @@ private:
     void received_manifest(Fetch& fetch, const protocol::Manifest& part);
     void received_chunk(Fetch& fetch, const protocol::ContentChunk& chunk);
     void received_end(Fetch& fetch, const protocol::ContentEnd& end);
+    void received_content_chunk(Fetch& fetch, const protocol::ContentChunk& chunk);
+    void received_content_end(Fetch& fetch, const protocol::ContentEnd& end);
+    void finish_stream(Fetch& fetch);
     void plan(Fetch& fetch);
     void planned(TransferId id, Status<Error> status, TimePoint now);
     void request_more(Fetch& fetch);

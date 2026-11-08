@@ -147,6 +147,42 @@ struct MeshTests {
         #expect(try Data(contentsOf: destination.appending(path: "Photos/2024/beach.raw")) == content)
     }
 
+    @Test("A copy on one member is fetched on another")
+    func sharesTheClipboard() async throws {
+        let mac = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Mac"))
+        let other = try Mesh(Mesh.Configuration(identity: try DeviceIdentity.generate(), name: "Other Mac"))
+        let macEvents = Self.listen(to: mac)
+        let otherEvents = Self.listen(to: other)
+        let connection = try other.pair(host: "127.0.0.1", port: mac.listenPort)
+        #expect(await macEvents.wait { Self.code(in: $0) != nil })
+        let macCode = try #require(Self.code(in: await macEvents.events))
+        try other.confirmPairing(connection, accepted: true)
+        try mac.confirmPairing(macCode.connection, accepted: true)
+        #expect(
+            await otherEvents.wait { events in
+                events.contains { if case .peerConnected = $0 { true } else { false } }
+            })
+
+        let text = Data("copied on the Mac".utf8)
+        let clip = try mac.clipboardCopied([ClipboardContent(format: .text, data: text)], files: [])
+        #expect(
+            await otherEvents.wait { events in
+                events.contains {
+                    if case .clipboardChanged(let device, clip, let formats) = $0 {
+                        device == mac.deviceID && formats == [AnnouncedFormat(format: .text, byteCount: 17)]
+                    } else {
+                        false
+                    }
+                }
+            })
+        let item = TransferItem(kind: .clipboard, objectID: clip, index: ClipboardFormat.text.code)
+        let id = try other.fetchContent(item, from: mac.deviceID, maxBytes: 1024)
+        #expect(
+            await otherEvents.wait { events in
+                events.contains { if case .contentReceived(id, .success(text)) = $0 { true } else { false } }
+            })
+    }
+
     @Test("Commands and stored states are checked")
     func checksArguments() throws {
         #expect(throws: CoreError.badMagic) {

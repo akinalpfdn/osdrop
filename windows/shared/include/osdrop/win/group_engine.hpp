@@ -6,6 +6,7 @@
 // DNS-SD and storage behind the interfaces below (windows/engine).
 
 #include <osdrop/osdrop.h>
+#include <osdrop/win/clipboard_sync.hpp>
 #include <osdrop/win/expected.hpp>
 
 #include <array>
@@ -110,6 +111,9 @@ public:
     virtual void peer_responsive(const DeviceIdBytes& device, bool responsive) = 0;
     virtual void stats(const DeviceIdBytes& device, const osdrop_session_stats& stats) = 0;
     virtual void log(osdrop_log_level level, const char* message) = 0;
+    /// Another computer's copy is not on the clipboard; `name` is empty when not known.
+    virtual void clipboard_notice(ClipboardNotice notice, const DeviceIdBytes& device,
+                                  const std::string& name) = 0;
 };
 
 class GroupEngine {
@@ -117,6 +121,8 @@ public:
     struct Config {
         std::string device_name; ///< 1 to 64 bytes of UTF-8
         osdrop_random_source random{};
+        /// The clipboard to share; none: the clipboard is not shared. Outlives the engine.
+        ClipboardHost* clipboard = nullptr;
     };
 
     /// Fails with UNSUPPORTED_VERSION for a group stored by a newer Osdrop (it is kept, not
@@ -146,6 +152,9 @@ public:
     void close_all(bool sleeping);
     /// After waking: browses again, so members are found and dialled again.
     void resume();
+    /// The shared clipboard; null without a ClipboardHost. Its copied() runs on the clipboard
+    /// thread.
+    [[nodiscard]] ClipboardSync* clipboard() { return clipboard_.get(); }
 
 private:
     GroupEngine(Config config, StateStore& store, Discovery& discovery, EngineEvents& events);
@@ -166,6 +175,8 @@ private:
     Discovery& discovery_;
     EngineEvents& events_;
     osdrop_mesh* mesh_ = nullptr;
+    std::unique_ptr<ClipboardSync> clipboard_;
+    std::unique_ptr<CoreClipboardMesh> clipboard_mesh_;
     DeviceIdBytes self_{}; ///< set before port_, which publishes it
 
     mutable std::mutex mutex_;

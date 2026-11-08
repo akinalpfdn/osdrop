@@ -56,6 +56,28 @@ public sealed class GroupViewModelTests
     }
 
     [Fact]
+    public void ACopyThatDoesNotArriveLeavesANoticeUntilDismissed()
+    {
+        var engine = new FakeEngine();
+        var group = new GroupViewModel(engine);
+        Assert.False(group.HasClipboardNotice);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardUnavailable, DeviceId: _laptop, Name: "Laptop"));
+        Assert.True(group.HasClipboardNotice);
+        Assert.Equal(Formatted(Localization.Strings.ClipboardUnavailable, "Laptop"), group.ClipboardNotice);
+        group.DismissClipboardNoticeCommand.Execute(null);
+        Assert.False(group.HasClipboardNotice);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardTooLarge, DeviceId: _laptop, Name: ""));
+        Assert.Equal(
+            Formatted(Localization.Strings.ClipboardTooLarge, Localization.Strings.ClipboardOtherComputer),
+            group.ClipboardNotice);
+    }
+
+    private static string Formatted(string text, string value) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, text, value);
+
+    [Fact]
     public async Task MembersAndNearbyComputersFollowTheEngine()
     {
         var engine = new FakeEngine { Info = new EngineInfo(_self, "47474747474747474747474747474747", 50_000) };

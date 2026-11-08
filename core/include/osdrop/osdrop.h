@@ -270,6 +270,30 @@ typedef struct osdrop_object_ref {
     uint32_t item_index;
 } osdrop_object_ref;
 
+/* NOLINTBEGIN(cppcoreguidelines-use-enum-class,performance-enum-size) */
+typedef enum osdrop_clipboard_format {
+    OSDROP_CLIPBOARD_TEXT = 1,  /* plain text, UTF-8 */
+    OSDROP_CLIPBOARD_RTF = 2,   /* rich text */
+    OSDROP_CLIPBOARD_HTML = 3,  /* HTML, UTF-8 */
+    OSDROP_CLIPBOARD_IMAGE = 4, /* PNG */
+    OSDROP_CLIPBOARD_FILES = 5, /* files and folders, fetched with osdrop_mesh_receive */
+    OSDROP_CLIPBOARD_FORMAT_MAX_ENUM = 0x7FFFFFFF
+} osdrop_clipboard_format;
+/* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
+
+/* One format of a copy on this computer, with its bytes. */
+typedef struct osdrop_clipboard_content {
+    osdrop_clipboard_format format; /* TEXT, RTF, HTML or IMAGE */
+    const uint8_t* data;
+    size_t size;
+} osdrop_clipboard_content;
+
+/* One format of a copy on another member, as announced. */
+typedef struct osdrop_announced_format {
+    osdrop_clipboard_format format;
+    uint64_t byte_count; /* for FILES, the total of the files */
+} osdrop_announced_format;
+
 typedef struct osdrop_transfer_progress {
     uint64_t transfer_id;
     uint64_t bytes_done;
@@ -326,6 +350,16 @@ typedef struct osdrop_mesh_callbacks {
      */
     void (*transfer_finished)(void* context, uint64_t transfer_id, osdrop_result result,
                               const char* const* items, size_t item_count, uint64_t skipped_links);
+    /*
+     * Another member's copy is now the newest (the latest copy wins): `formats` (valid during
+     * the call) are what can be fetched with item {OSDROP_OBJECT_CLIPBOARD, clip_id, format}.
+     */
+    void (*clipboard_changed)(void* context, const uint8_t* device_id, uint64_t clip_id,
+                              const osdrop_announced_format* formats, size_t count);
+    /* The end of osdrop_mesh_fetch_content: OSDROP_OK with the content (valid during the call),
+     * or the reason. */
+    void (*content_received)(void* context, uint64_t transfer_id, osdrop_result result,
+                             const uint8_t* data, size_t size);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -485,14 +519,34 @@ osdrop_result osdrop_mesh_offer(osdrop_mesh* mesh, const osdrop_object_ref* item
 osdrop_result osdrop_mesh_withdraw(osdrop_mesh* mesh, osdrop_object_kind kind, uint64_t object_id);
 /*
  * Fetches an item a member offered into the folder `destination` (absolute UTF-8). Names the
- * folder already holds are numbered ("name (2)"). NOT_PERMITTED when the member may not send this
- * computer files, INVALID_STATE when it is not connected.
+ * folder already holds are numbered ("name (2)"). The transfer ends with TOO_LARGE when its files
+ * add up to more than `max_bytes` (UINT64_MAX: no limit). NOT_PERMITTED when the member may not
+ * send this computer files, INVALID_STATE when it is not connected.
  */
 osdrop_result osdrop_mesh_receive(osdrop_mesh* mesh, const uint8_t* device_id,
                                   const osdrop_object_ref* item, const char* destination,
-                                  uint64_t* out_transfer_id);
+                                  uint64_t max_bytes, uint64_t* out_transfer_id);
 /* Ends a transfer with CANCELLED; what it created is removed. Unknown IDs are ignored. */
 osdrop_result osdrop_mesh_cancel_transfer(osdrop_mesh* mesh, uint64_t transfer_id);
+
+/*
+ * The shared clipboard (DEVPLAN, Phase 15). osdrop_mesh_clipboard_copied reports a copy on this
+ * computer: the contents of its text, RTF, HTML and PNG formats (`count` of them, each format at
+ * most once) and the absolute UTF-8 paths of copied files (`file_count`). It is announced to the
+ * members this computer shares clipboards with, formats and sizes only (files once scanned), and
+ * its contents are served from here. Writes the new clip ID to `*out_clip_id`.
+ */
+osdrop_result osdrop_mesh_clipboard_copied(osdrop_mesh* mesh,
+                                           const osdrop_clipboard_content* contents, size_t count,
+                                           const char* const* files, size_t file_count,
+                                           uint64_t* out_clip_id);
+/*
+ * Fetches one format (TEXT, RTF, HTML or IMAGE) of another member's copy into memory; the result
+ * arrives through content_received. It ends with TOO_LARGE beyond `max_bytes`.
+ */
+osdrop_result osdrop_mesh_fetch_content(osdrop_mesh* mesh, const uint8_t* device_id,
+                                        const osdrop_object_ref* item, uint64_t max_bytes,
+                                        uint64_t* out_transfer_id);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.

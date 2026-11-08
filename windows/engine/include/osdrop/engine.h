@@ -36,6 +36,8 @@ typedef enum osdrop_engine_event_kind {
     OSDROP_ENGINE_PEER_RESPONSIVE = 8,   /* device_id, responsive */
     OSDROP_ENGINE_STATS = 9,             /* device_id, stats */
     OSDROP_ENGINE_LOG = 10,              /* level, message */
+    OSDROP_ENGINE_CLIPBOARD_UNAVAILABLE = 11, /* device_id, name: its copy could not be fetched */
+    OSDROP_ENGINE_CLIPBOARD_TOO_LARGE = 12,   /* device_id, name: its copy is over the limits */
     OSDROP_ENGINE_EVENT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_engine_event_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */

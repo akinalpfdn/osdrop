@@ -11,6 +11,14 @@ struct GroupServices: Sendable {
     let localNetwork: any LocalNetworkChecking
     let makeMesh: @Sendable (Mesh.Configuration) throws(CoreError) -> any MeshDriving
     let deviceName: String
+    let clipboard: ClipboardServices
+}
+
+/// What the shared clipboard needs, started with the mesh.
+struct ClipboardServices: Sendable {
+    let makePasteboard: @MainActor @Sendable () -> any PasteboardAccess
+    let staging: ClipboardStaging
+    let converter: any ImageConverting
 }
 
 /// A computer nearby that is not a member of this computer's group.
@@ -82,6 +90,7 @@ final class GroupController {
     private(set) var unresponsive: Set<DeviceID> = []
     /// A member removed this computer from its group.
     private(set) var wasRemoved = false
+    private(set) var clipboard: ClipboardController?
 
     var isRunning: Bool { mesh != nil }
     var deviceName: String { services.deviceName }
@@ -120,6 +129,7 @@ final class GroupController {
         }
         guard let mesh = makeMesh(configuration) else { return }
         self.mesh = mesh
+        startClipboard(mesh)
         deviceID = mesh.deviceID
         listenPort = mesh.listenPort
         services.settings.saveListenPort(mesh.listenPort)
@@ -163,6 +173,7 @@ final class GroupController {
     }
 
     func stop() {
+        clipboard?.stop()
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
         browsing?.cancel()
@@ -251,6 +262,22 @@ final class GroupController {
         NSWorkspace.shared.open(url)
     }
 
+    // MARK: - Clipboard
+
+    private func startClipboard(_ mesh: any MeshDriving) {
+        let clipboard = ClipboardController(
+            mesh: mesh, pasteboard: services.clipboard.makePasteboard(), staging: services.clipboard.staging,
+            converter: services.clipboard.converter,
+            isShared: { [weak self] in
+                self?.members.contains { !$0.isSelf && $0.isConnected } ?? false
+            },
+            nameOf: { [weak self] device in
+                self?.members.first { $0.deviceID == device }?.name ?? String(localized: "clipboard.otherComputer")
+            })
+        self.clipboard = clipboard
+        clipboard.start()
+    }
+
     // MARK: - Mesh events
 
     private func handle(_ event: MeshEvent) {
@@ -302,8 +329,10 @@ final class GroupController {
             statistics[device] = stats
         case .log(let level, let message):
             log(level, message)
-        case .offerReady, .transferProgress, .transferFinished:
-            break  // the drag and drop feature moves files (DEVPLAN, Phase 14)
+        case .clipboardChanged, .contentReceived, .transferFinished:
+            clipboard?.handle(event)
+        case .offerReady, .transferProgress:
+            break  // drag and drop (Phase 14)
         }
     }
 

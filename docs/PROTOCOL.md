@@ -449,6 +449,20 @@ format:
 
 Formats are unique.
 
+**The newest copy.** `clip_id` is the time of the copy in microseconds since 1970-01-01 UTC, but
+never at or below a clip ID the sender has already seen (from any member): then it is one above
+the highest. A member keeps the copy with the highest (`clip_id`, device ID) pair, device IDs
+compared byte by byte, and ignores announcements of older ones; so members that hear of the same
+copies agree on the newest, and a copy made after hearing of another one always wins. A sender
+announces a copy only to the members it shares clipboards with, once (members offline at the time
+miss it). It serves the formats from memory and files from a scan made at the copy; it withdraws
+them when another member's newer copy arrives, so requests for an older copy get NOT_FOUND.
+
+**Fetching.** Formats 1-4 are fetched as single contents: a ContentRequest for entry 0 with no
+manifest (a receiver asks for one byte more than it accepts, so it can tell a content that is too
+large). Format 5 is fetched like a dragged folder: manifest, then contents. Receivers fetch only
+from members whose clipboard permission is on, and files only when the files permission is on too.
+
 ## Input datagrams (UDP)
 
 A datagram is at most **1200 bytes**. It consists of a header that travels in clear (it is the

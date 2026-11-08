@@ -214,14 +214,56 @@ public final class Mesh: Sendable {
         try check(handle.withPointer { osdrop_mesh_withdraw($0, kind.raw, objectID) })
     }
 
-    /// Fetches an item a member offered into `folder`; the transfer's ID. `.notPermitted` when the
-    /// member may not send this computer files.
-    public func receive(_ item: TransferItem, from device: DeviceID, into folder: URL) throws(CoreError) -> UInt64 {
+    /// Fetches an item a member offered into `folder`; the transfer's ID. It ends with `.tooLarge`
+    /// when its files add up to more than `maxBytes`. `.notPermitted` when the member may not send
+    /// this computer files.
+    public func receive(
+        _ item: TransferItem, from device: DeviceID, into folder: URL, maxBytes: UInt64 = .max
+    ) throws(CoreError) -> UInt64 {
         var raw = item.raw
         var id: UInt64 = 0
         try check(
             folder.path(percentEncoded: false).withCString { path in
-                handle.withPointer { osdrop_mesh_receive($0, device.bytes, &raw, path, &id) }
+                handle.withPointer { osdrop_mesh_receive($0, device.bytes, &raw, path, maxBytes, &id) }
+            })
+        return id
+    }
+
+    /// Fetches one format (not `.files`) of another member's copy into memory; the result arrives
+    /// as `.contentReceived`, `.tooLarge` beyond `maxBytes`.
+    public func fetchContent(
+        _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
+    ) throws(CoreError)
+        -> UInt64
+    {
+        var raw = item.raw
+        var id: UInt64 = 0
+        try check(handle.withPointer { osdrop_mesh_fetch_content($0, device.bytes, &raw, maxBytes, &id) })
+        return id
+    }
+
+    /// A copy on this computer: the contents of its text, RTF, HTML and PNG formats, and copied
+    /// files. It is announced to the members sharing clipboards with this computer; the new clip's
+    /// ID.
+    public func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) throws(CoreError) -> UInt64 {
+        let buffers = contents.map { content in
+            let buffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: max(content.data.count, 1))
+            _ = content.data.copyBytes(to: buffer)
+            return buffer
+        }
+        defer { buffers.forEach { $0.deallocate() } }
+        let raw = zip(contents, buffers).map { content, buffer in
+            osdrop_clipboard_content(
+                format: content.format.raw, data: UnsafePointer(buffer.baseAddress), size: content.data.count)
+        }
+        var id: UInt64 = 0
+        try check(
+            withCStrings(files.map { $0.path(percentEncoded: false) }) { paths in
+                raw.withUnsafeBufferPointer { items in
+                    handle.withPointer {
+                        osdrop_mesh_clipboard_copied($0, items.baseAddress, items.count, paths, paths.count, &id)
+                    }
+                }
             })
         return id
     }
@@ -342,6 +384,24 @@ private final class MeshCallbackBox: Sendable {
                     ReceivedItem(items: paths.map { URL(filePath: $0) }, skippedLinks: skippedLinks))
             }
             MeshCallbackBox.from(context)?.continuation.yield(.transferFinished(id: id, outcome))
+        }
+        callbacks.clipboard_changed = { context, device, clipID, formats, count in
+            guard let device else { return }
+            let announced = (0..<count).compactMap { index -> AnnouncedFormat? in
+                guard let raw = formats?[index], let format = ClipboardFormat(raw.format) else { return nil }
+                return AnnouncedFormat(format: format, byteCount: raw.byte_count)
+            }
+            MeshCallbackBox.from(context)?.continuation.yield(
+                .clipboardChanged(deviceID(device), clipID: clipID, formats: announced))
+        }
+        callbacks.content_received = { context, id, result, data, size in
+            let outcome: Result<Data, CoreError> =
+                if let error = CoreError(result: result) {
+                    .failure(error)
+                } else {
+                    .success(data.map { Data(bytes: $0, count: size) } ?? Data())
+                }
+            MeshCallbackBox.from(context)?.continuation.yield(.contentReceived(id: id, outcome))
         }
         return callbacks
     }

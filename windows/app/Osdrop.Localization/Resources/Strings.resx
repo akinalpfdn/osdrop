@@ -150,4 +150,13 @@
   <data name="MeshRejected" xml:space="preserve">
     <value>Rejected datagrams: {0}</value>
   </data>
+  <data name="ClipboardUnavailable" xml:space="preserve">
+    <value>The copy from {0} could not be fetched.</value>
+  </data>
+  <data name="ClipboardTooLarge" xml:space="preserve">
+    <value>The copy from {0} is too large for the clipboard; drag it instead.</value>
+  </data>
+  <data name="ClipboardOtherComputer" xml:space="preserve">
+    <value>another computer</value>
+  </data>
 </root>
