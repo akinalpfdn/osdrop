@@ -285,6 +285,7 @@ these tests take over input on every computer they cross.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-08 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | CL5, CL6, CL9 | Pass. CL6 on the Mac showed no notification until Osdrop's notifications were allowed in System Settings › Notifications: they had been refused at macOS's first prompt |
 | 2026-11-07 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | G1, CL1–CL8 | G1 pass after the Mac's pairing window was fixed (it hid when Osdrop went to the background). CL1–CL4, CL7, CL8 pass. CL5: a paste before the files arrived gave the old clipboard with no progress shown; CL6: the notice was only inside the menu and the Computers window. Both now show a progress window and notifications; to run again |
 | 2026-11-07 | Phase 16 branch, Debug, M3 Air | U1, U2 (Turkish, Light and Dark), U5–U8 | Pass (one computer; U3 and U4 need a second) |
 | 2026-11-03 | Phase 13 branch, Release, M3 Air | Loopback throughput, 1 GiB | 210 MB/s (sender and receiver on the same computer) |
