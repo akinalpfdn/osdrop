@@ -297,6 +297,14 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
             engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
         }
     };
+    result.controlled = [](void* context, const std::uint8_t* controller) {
+        static_cast<GroupEngine*>(context)->events_.controlled(controller != nullptr);
+    };
+    result.inject = [](void* context, const osdrop_input* input) {
+        if (input != nullptr) {
+            static_cast<GroupEngine*>(context)->events_.inject(*input);
+        }
+    };
     result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* engine = static_cast<GroupEngine*>(context);
         if (engine->clipboard_ && progress != nullptr) {
@@ -479,6 +487,18 @@ osdrop_result GroupEngine::unblock(const DeviceIdBytes& device) {
 
 osdrop_result GroupEngine::leave_group() {
     return osdrop_mesh_leave_group(mesh_);
+}
+
+void GroupEngine::physical_input(const osdrop_input& input) {
+    static_cast<void>(osdrop_mesh_input(mesh_, &input, 0)); // fails only for invalid input
+}
+
+void GroupEngine::set_unavailable(std::uint8_t reason) {
+    static_cast<void>(osdrop_mesh_set_unavailable(mesh_, reason));
+}
+
+void GroupEngine::cursor_moved(std::int32_t x, std::int32_t y) {
+    static_cast<void>(osdrop_mesh_cursor_moved(mesh_, x, y));
 }
 
 osdrop_result GroupEngine::set_screens(std::span<const osdrop_monitor> monitors) {

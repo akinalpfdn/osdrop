@@ -118,12 +118,17 @@ public:
                                   const std::string& name) = 0;
     /// Copied files on their way from another computer; nullopt once they no longer are.
     virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
+    /// Another computer controls this one now, or no longer does.
+    virtual void controlled(bool controlled) = 0;
+    /// Input from the controlling computer, to inject here.
+    virtual void inject(const osdrop_input& input) = 0;
 };
 
-/// What a PC can do so far: share the clipboard and receive files. Taking control comes with the
-/// input process (DEVPLAN Phase 3), drags with the drag bridge (Phase 4); announcing them earlier
-/// would let a Mac's cursor cross into a PC that cannot follow it.
-inline constexpr std::uint32_t kAvailableFeatures = OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES;
+/// What a PC can do so far: be controlled through the input process (DEVPLAN Phase 3), share the
+/// clipboard and receive files. Drags come with the drag bridge (Phase 4); announcing them earlier
+/// would let a Mac carry a drag into a PC that cannot take it.
+inline constexpr std::uint32_t kAvailableFeatures =
+    OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES;
 
 class GroupEngine {
 public:
@@ -164,6 +169,11 @@ public:
     [[nodiscard]] osdrop_result unblock(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result leave_group();
     [[nodiscard]] osdrop_result set_screens(std::span<const osdrop_monitor> monitors);
+    /// As osdrop_mesh_input, osdrop_mesh_set_unavailable and osdrop_mesh_cursor_moved: this PC's
+    /// own input, whether it can be controlled, and where something else moved its cursor.
+    void physical_input(const osdrop_input& input);
+    void set_unavailable(std::uint8_t reason);
+    void cursor_moved(std::int32_t x, std::int32_t y);
     /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.
     void close_all(bool sleeping);
     /// After waking: browses again, so members are found and dialled again.
