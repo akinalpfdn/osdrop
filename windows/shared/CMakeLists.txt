@@ -5,10 +5,12 @@ add_library(osdrop_win_shared STATIC
     src/clipboard_sync.cpp
     src/clipboard_text.cpp
     src/group_engine.cpp
+    src/hook_timings.cpp
     src/input_protocol.cpp
     src/input_session.cpp
     src/key_codes.cpp
     src/product_names.cpp
+    src/report_queue.cpp
     src/screens.cpp
     src/txt_mapping.cpp
     src/wheel.cpp)
@@ -25,6 +27,7 @@ if(OSDROP_CORE_BUILD_TESTS)
         tests/clipboard_sync_test.cpp
         tests/clipboard_text_test.cpp
         tests/group_engine_test.cpp
+        tests/input_hook_parts_test.cpp
         tests/input_protocol_test.cpp
         tests/input_session_test.cpp
         tests/key_codes_test.cpp
