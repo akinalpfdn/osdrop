@@ -25,6 +25,8 @@ public:
     virtual void key(ScanCode scan, bool down) = 0;
     virtual void start_capture(std::int32_t park_x, std::int32_t park_y) = 0;
     virtual void stop_capture(std::int32_t x, std::int32_t y) = 0;
+    /// Whether another computer controls this PC: its own input is then reported as LocalInput.
+    virtual void set_controlled(bool controlled) = 0;
     [[nodiscard]] virtual Stats stats() const = 0;
 };
 

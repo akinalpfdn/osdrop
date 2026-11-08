@@ -60,6 +60,7 @@ std::optional<Report> InputSession::carry_out(const Request& request) {
             [&](const BeginControl&) -> std::optional<Report> {
                 if (!controlling_) {
                     controlling_ = true;
+                    device_.set_controlled(true);
                     log_.info("Control began");
                 }
                 return std::nullopt;
@@ -68,6 +69,7 @@ std::optional<Report> InputSession::carry_out(const Request& request) {
                 if (controlling_) {
                     release_all();
                     controlling_ = false;
+                    device_.set_controlled(false);
                     log_.info("Control ended");
                 }
                 return std::nullopt;
@@ -140,7 +142,10 @@ void InputSession::reset() {
         device_.stop_capture(park->x, park->y);
     }
     release_all();
-    controlling_ = false;
+    if (controlling_) {
+        controlling_ = false;
+        device_.set_controlled(false);
+    }
 }
 
 void InputSession::release_all() {

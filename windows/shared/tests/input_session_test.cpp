@@ -40,6 +40,8 @@ struct FakeDevice final : input::InputDevice {
     void stop_capture(std::int32_t x, std::int32_t y) override {
         calls.push_back("release " + std::to_string(x) + "," + std::to_string(y));
     }
+    void set_controlled(bool on) override { controlled = on; }
+    bool controlled = false;
     [[nodiscard]] input::Stats stats() const override {
         return {.events = 5, .p50_us = 1, .p99_us = 3, .max_us = 4};
     }
@@ -76,6 +78,7 @@ TEST_F(InputSessionTest, InjectionWithoutControlIsRefusedAndLogged) {
 
 TEST_F(InputSessionTest, InjectionDuringControlReachesTheDevice) {
     EXPECT_FALSE(send(input::BeginControl{}).has_value());
+    EXPECT_TRUE(device.controlled);
     EXPECT_FALSE(send(input::Move{.x = -5, .y = 7}).has_value());
     EXPECT_FALSE(send(input::Press{.button = input::Button::Right, .down = true}).has_value());
     EXPECT_FALSE(send(input::Scroll{.vertical = 120, .horizontal = 0}).has_value());
@@ -95,6 +98,7 @@ TEST_F(InputSessionTest, EndingControlReleasesWhatIsStillDown) {
     send(input::EndControl{});
     EXPECT_EQ(device.calls, (std::vector<std::string>{"key 42 up", "press 0 up"}));
     EXPECT_FALSE(session.controlling());
+    EXPECT_FALSE(device.controlled);
     ASSERT_TRUE(send(input::Key{.scan = kA, .down = true}).has_value()) << "refused again";
 }
 
@@ -108,6 +112,7 @@ TEST_F(InputSessionTest, AClientThatGoesLeavesNothingPressedOrCaptured) {
     EXPECT_EQ(device.calls, (std::vector<std::string>{"release 100,200", "press 2 up"}));
     EXPECT_FALSE(session.capturing());
     EXPECT_FALSE(session.controlling());
+    EXPECT_FALSE(device.controlled);
 }
 
 TEST_F(InputSessionTest, CaptureStartsAndStopsWithoutControl) {
