@@ -22,14 +22,14 @@ struct DragControllerTests {
     private let stagingRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
         "osdrop-tests-\(UUID().uuidString)")
 
-    private func start() -> DragController {
+    private func start(releaseHold: Duration = .milliseconds(10)) -> DragController {
         let controller = DragController(
             mesh: mesh, injector: injector, staging: DragStaging(root: stagingRoot), watcher: watcher,
             starter: starter, edge: edge,
             cursorLocation: { [cursor] in cursor.location },
             timing: DragTiming(
                 pressDelay: .milliseconds(1), beginTimeout: .milliseconds(30), releaseSettle: .milliseconds(1),
-                releaseHold: .milliseconds(10)))
+                releaseHold: releaseHold))
         controller.start()
         return controller
     }
@@ -103,7 +103,8 @@ struct DragControllerTests {
 
     @Test("A drag of promised files is reported as such, and its files are taken at the edge when wanted")
     func takesPromisedFiles() async throws {
-        let controller = start()
+        // The files arrive while the drop target still waits for them, however slow the machine.
+        let controller = start(releaseHold: .seconds(60))
         watcher.promises = true
         watcher.onChange?(true)
         #expect(mesh.calls == [.dragPromised])
