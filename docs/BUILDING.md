@@ -151,8 +151,9 @@ for **Computers…** (members and nearby computers, pairing), **Mesh…** in Deb
 Windows may hide new icons in the overflow menu (the `^` arrow on the taskbar).
 
 Native binaries land in `windows/build/<preset>/bin/`; .NET builds land in `bin/` folders. The
-shell build copies `OsdropEngine.dll` from `windows/build/debug/bin`; pass
-`-p:OsdropNativeBin=<folder>` to `dotnet build` to take it from another preset.
+shell build copies `OsdropEngine.dll`, `OsdropInput.exe`, `OsdropService.exe` and
+`OsdropInputTool.exe` from `windows/build/debug/bin` next to `Osdrop.exe`; pass
+`-p:OsdropNativeBin=<folder>` to `dotnet build` to take them from another preset.
 
 #### Firewall rule for development builds
 
@@ -169,6 +170,27 @@ New-NetFirewallRule -DisplayName "Osdrop (development)" -Direction Inbound -Acti
 Remove it with `Remove-NetFirewallRule -DisplayName "Osdrop (development)"`. The network must be
 set to Private (Settings › Network & internet › your network › Private network); DNS-SD and the
 rule do not apply on Public networks.
+
+#### Input service for development
+
+Other computers control this PC through `OsdropInput`, which `OsdropService` keeps running as
+SYSTEM in the signed-in session. `OsdropInput` accepts pipe clients only from its own folder, so
+install the service from the shell's output folder, in an administrator PowerShell command line in
+`windows\app`:
+
+```powershell
+.\Osdrop.App\bin\Release\net10.0-windows\OsdropService.exe --install
+```
+
+Run the same command again after rebuilding: it stops the service, points it at the folder and
+starts it, so the new `OsdropInput` is used (`--stop` only stops it; `--uninstall` removes it).
+Until the service runs, other computers see this PC as not accepting control. Logs are in
+`%ProgramData%\Osdrop\logs` (`service.log`, `input.log`).
+
+`OsdropInputTool.exe` in the same folder checks the input process without another computer (quit
+Osdrop first: `OsdropInput` serves one client at a time, and Osdrop stays connected):
+`stats` prints the hook callbacks' timings, and `capture 15` captures this PC's mouse and keyboard
+for up to 15 seconds (Esc ends it; nothing acts on this PC meanwhile), then plays them back here.
 
 The engine keeps its state in `%APPDATA%\Osdrop`: the identity and the group sealed with DPAPI for
 the signed-in user, and the arrangement as it is. Deleting the folder makes the PC a new computer

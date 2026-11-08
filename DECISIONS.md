@@ -597,3 +597,30 @@ choices the plan leaves open are logged here.
 **Why:** Letting removed computers pair again (same day) opened code spam; a block that every member honours stops it in one place. Versioned entries merge like the rest of the roster, so an unblock spreads and a member that missed it cannot undo it.
 **Trade-offs:** A new identity (Osdrop reinstalled, its key store cleared) is a new device and is not blocked. RosterState and the stored group state change format (version 2; version 1 is still read). Blocks a computer brings into another group apply there too.
 **Revisit if:** Users are blocked by new identities in practice; a pairing wait for refused codes would then help.
+
+---
+
+## 2026-11-08 — Hidden cursors come back three ways
+**Chosen:** OsdropInput hides the cursor by replacing every system cursor with a transparent one and restores the copies it saved. A marker file records that they are hidden: after a crash the next OsdropInput reloads the cursors, and the pipe's client, which runs as the user, reloads them too when the pipe breaks.
+**Alternatives:** Only `SPI_SETCURSORS` on release; a full-screen window with no cursor.
+**Why:** As SYSTEM, `SPI_SETCURSORS` reads SYSTEM's registry, so it brings back the default scheme, not the user's; only the user's own process gets their scheme back. A full-screen window takes the foreground from the user's app.
+**Trade-offs:** After a crash with no client running (the developer tool killed too), the user gets the default cursors until they sign in again or change the scheme.
+**Revisit if:** Code signing allows `uiAccess`: the user's own process could then hide and restore the cursors.
+
+---
+
+## 2026-11-08 — The input pipe admits Osdrop's own executables only, one client at a time
+**Chosen:** A client must run in OsdropInput's session as its user and be `Osdrop.exe` or `OsdropInputTool.exe` from OsdropInput's own folder; the pipe has one instance, created once per process. The shell's build copies the input process, the service and the tool next to `Osdrop.exe`, so development uses the same check as an installed copy.
+**Alternatives:** Any process of the session's user (the ACL alone); a shared secret handed to the app.
+**Why:** DEVPLAN's security model: malware running as the user must not reach a SYSTEM injector. The install folder needs an administrator to write to; a secret the user's processes can read protects nothing.
+**Trade-offs:** The tool and Osdrop cannot use the input process at the same time; the hardware rows quit Osdrop first.
+**Revisit if:** Osdrop needs a second client (a helper of the drag bridge), or code signing allows checking signatures instead of paths.
+
+---
+
+## 2026-11-08 — Phase 3 makes the PC controllable; the PC controlling others is Phase 11's Windows half
+**Chosen:** The engine's `InputBridge` injects what a controlling computer sends and reports this PC's own input during control, and the PC announces OSDROP_FEATURE_TAKES_CONTROL. Watching all of the PC's input for crossings from its edges, capture and the hotkeys stay with the Windows half of the controller (Phase 11), on top of the same input process.
+**Alternatives:** Both directions in this phase.
+**Why:** The feature bit means "injects input", the phase's gate is capture and injection over elevated windows, and the bridge is what lets a Mac's cursor cross in. The controller needs an observing mode in OsdropInput and crossing tests of its own.
+**Trade-offs:** Until then a PC's own mouse cannot cross to a Mac.
+**Revisit if:** The user wants both directions in one step.

@@ -25,8 +25,9 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 | `Package.swift` | Exposes `core` to Swift as `OsdropCore` and its wrapper `CoreBridge` |
 | `macos/` | Swift menu bar app (generated with XcodeGen from `macos/project.yml`) and `CoreBridge` |
 | `windows/engine/` | Native engine DLL (`OsdropEngine.dll`) used by the shell |
-| `windows/input/` | `OsdropInput.exe`: input capture and injection as SYSTEM in the user's session |
+| `windows/input/` | `OsdropInput.exe`: input capture and injection as SYSTEM in the user's session, and `OsdropInputTool.exe` for developers |
 | `windows/service/` | `OsdropService`: keeps `OsdropInput` running in the active session |
+| `windows/system/` | Win32 pieces shared by the engine, the input process, the service and the tool |
 | `windows/shared/` | Windows-header-free libraries, built and tested on every host |
 | `windows/app/` | WPF shell (`Osdrop.App`) and its strings (`Osdrop.Localization`) |
 | `windows/installer/` | Inno Setup script |
@@ -192,8 +193,9 @@ the others fetch it in the background and put it on their own clipboard as real 
 
 ## Cursor and keyboard across computers
 
-Built in Phase 11 for `core` and the Mac; the Windows side comes with Phase 3. Core decides every
-crossing, refusal and release; the platforms capture, inject, hide the cursor and show state.
+Built in Phase 11 for `core` and the Mac; on Windows, being controlled came with Phase 3 (see
+"Windows input process"). Core decides every crossing, refusal and release; the platforms capture,
+inject, hide the cursor and show state.
 
 - **Core** (`core/src/control`). `Control` is both parts of every computer. As a controller it
   takes all of the computer's physical input from the platform and drives the crossing engine with
@@ -343,3 +345,51 @@ Built in Phase 2 (`macos/Osdrop/Services/Drag`):
 - **Threads** — AppKit runs some promise callbacks on background queues (file coordination for
   sandboxed targets, delivery of received promises). Those callbacks are nonisolated and tested
   from background queues.
+
+## Windows input process
+
+Built in Phase 3. Hooking and injecting over elevated windows needs a process above their
+integrity level, so input runs in a SYSTEM process inside the user's session, apart from the
+engine (security reasoning: `SECURITY_MODEL.md`, "Windows input process").
+
+- **OsdropService** (`windows/service`). A LocalSystem service whose only job is to keep
+  `OsdropInput` running in the active console session: started there with the service's own token
+  (its session changed) on `winsta0\default`, moved on log on, log off and fast user switching,
+  asked to quit through `Global\com.akinalpfdn.osdrop.input.stop.<session>` before it is ended,
+  restarted at once after a run of a minute or more and with pauses from 0.5 to 30 s while it keeps
+  failing. `--install`, `--stop` and `--uninstall` are for the installer and for development.
+- **OsdropInput** (`windows/input`). Per-monitor DPI aware v2, so every position is a physical
+  pixel of the virtual desktop. Low-level hooks run on a time-critical thread with its own message
+  loop; their callbacks only decide and enqueue (`ReportQueue`: motion added up while the pipe is
+  busy, keys and buttons never dropped) and are timed (`HookTimings`), because Windows removes a
+  hook whose callback is slow. Its own SendInput events carry the tag `OSDP` in `dwExtraInfo` and
+  pass the hooks. While captured, this PC's input is swallowed and reported as movement from the
+  park point where the cursor waits; every system cursor is replaced by a transparent one, and the
+  saved ones come back on release. A marker file in `%ProgramData%\Osdrop` says the cursors are
+  hidden: after a crash the next `OsdropInput` reloads them (as SYSTEM that is the default
+  scheme), and the client, which runs as the user, reloads the user's own scheme when the pipe
+  breaks. While controlled, this PC's own input is reported as LocalInput, at most every 100 ms.
+- **Input pipe** (`windows/shared/input_protocol`, portable and tested on every host). A
+  message-mode pipe per session, one message per pipe message, little-endian: magic `ODPI`,
+  version u16 (1), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
+  (x, y i32 pixels), Press (button u8 0-4, down u8), Scroll (vertical, horizontal i32 in
+  WHEEL_DELTA units), Key (scan code u16, extended u8, down u8), StartCapture (park x, y),
+  StopCapture (x, y), QueryStats. Reports: CapturedMotion (dx, dy), CapturedPress, CapturedScroll,
+  CapturedKey, LocalInput, Stats (events u64, p50, p99, max u32 in µs) and Rejected (type u16,
+  reason u16: 1 malformed, 2 another version, 3 injection without control). Positions are at most
+  2^20 either way, scrolls 64 notches, and keys only scan codes in the key table. `InputSession`
+  applies them: injection only between BeginControl and EndControl, and what the client pressed
+  is released when control ends or the client goes. Absolute moves use SendInput's 0-65535 scale
+  over the virtual desktop, rounded so every pixel is reached exactly (`absolute`).
+- **Engine** (`windows/engine/src/input`). `InputBridge` connects to the pipe (again every 2 s
+  while it cannot) and tells core this PC cannot be controlled while it is unreachable. Core's
+  `controlled` and `inject` callbacks only queue; the bridge's thread turns each input into
+  requests (`Injection`: positions from 1/16 pixel, buttons and scrolls moving the cursor first,
+  keys by scan code, Caps Lock pressed only when it differs) and keeps the newest of a run of
+  moves. LocalInput becomes physical input for core, which gives the control back to this PC's
+  user. A cursor that something else moved, holding for two 100 ms checks, is reported.
+- **OsdropInputTool** (`windows/input/tool`). `capture [s]` captures this PC's input and plays it
+  back at the same pace; `stats` prints the hook timings. It is the hardware check of this phase
+  and runs only next to `OsdropInput`.
+- **Not yet.** The PC controlling other computers (all of its input to core, crossing from its
+  edges, capture with the hotkeys) is the Windows half of the controller (Phase 11).

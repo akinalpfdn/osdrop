@@ -207,6 +207,23 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
 | CL9 | The same copy again | Copy a file, wait until the other computer says it can be pasted, then copy the same file again | Nothing is fetched again: no progress window, no notification |
 
+### Windows input (Phase 3)
+
+On the PC, with the service installed from the shell's output folder (BUILDING.md › Input service
+for development). Quit Osdrop before the tool rows: the input process serves one client at a time.
+The tool's capture takes the PC's mouse and keyboard for up to the seconds given; Esc ends it.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| W1 | Service | Install the service, then open Task Manager › Details | `OsdropInput.exe` runs as SYSTEM in the signed-in user's session; `service.log` and `input.log` in `%ProgramData%\Osdrop\logs` say it started |
+| W2 | Capture and playback | Open Notepad, run `OsdropInputTool capture 15`, then within the 15 seconds type a sentence, click into the text, move the mouse and scroll | During the capture nothing happens on screen and no cursor shows; then the cursor shows where it was, and the playback types the same sentence and clicks and scrolls the same way |
+| W3 | Elevated windows (go/no-go) | As W2 over Task Manager (scroll its list, click a column) and over a PowerShell window run as administrator (type a command) | The capture swallows input there too and the playback reaches both windows. If not, the phase stops here and the findings are written down |
+| W4 | Input process ended | In an administrator PowerShell run `Start-Sleep 5; taskkill /F /IM OsdropInput.exe`, and at once in another one `OsdropInputTool capture 30` | Within a second of the kill the cursor shows and the mouse and keyboard work; the tool says OsdropInput went away; a new OsdropInput starts |
+| W5 | Hook timing | Use the PC for 10 minutes with the service running, then run `OsdropInputTool stats`; then W2 again | p99 under 1000 µs; the capture still swallows input, so the hook was never removed |
+| W6 | Pipe access | Copy `OsdropInputTool.exe` to the desktop and run `stats` there; run `runas /user:<another user> <Osdrop's folder>\OsdropInputTool.exe stats` | Both are refused; `input.log` names the refused client; nothing is injected |
+| W7 | User switching | Sign in as a second user with fast user switching, then switch back | OsdropInput follows the active session each time (Task Manager › Details › Session ID) |
+| W8 | Mac → PC | With Osdrop on both and the service running, push the Mac's cursor into the PC; type in Notepad, click, scroll, use an elevated window; then move the PC's own mouse. Stop the service and push again | The cursor crosses and input lands on the PC, elevated windows included; moving the PC's mouse brings the Mac's cursor home. With the service stopped the PC's edge is a wall and the Mac says the PC does not accept control |
+
 ### Cursor and keyboard (Phase 11)
 
 Run with Osdrop on every computer, members of one group, with Accessibility granted. A push lasts
