@@ -33,10 +33,6 @@ std::string_view describe(DecodeError error) {
 
 InputSession::InputSession(InputDevice& device, InputLog& log) : device_(device), log_(log) {}
 
-InputSession::~InputSession() {
-    reset();
-}
-
 std::optional<Report> InputSession::handle(std::span<const std::uint8_t> message) {
     const std::uint16_t type = type_of(message);
     const auto request = decode_request(message);

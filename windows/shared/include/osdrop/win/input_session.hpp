@@ -40,7 +40,8 @@ public:
 class InputSession {
 public:
     InputSession(InputDevice& device, InputLog& log);
-    ~InputSession();
+    /// Does not reset: the owner calls reset() when the client goes or the process ends.
+    ~InputSession() = default;
     InputSession(const InputSession&) = delete;
     InputSession& operator=(const InputSession&) = delete;
     InputSession(InputSession&&) = delete;
