@@ -1,5 +1,5 @@
 # Phase 004 (MVP-04) — Windows input process and service
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 3 (go/no-go gate). Depends on: Phase 0
 

@@ -1,0 +1,122 @@
+// The input pipe's messages (DEVPLAN Phase 3): every request and report survives a round trip,
+// and malformed or out-of-range messages are refused with the right error.
+#include <osdrop/win/input_protocol.hpp>
+
+#include <gtest/gtest.h>
+
+#include <cstdint>
+#include <vector>
+
+namespace {
+
+namespace input = osdrop::win::input;
+using input::DecodeError;
+using osdrop::win::ScanCode;
+
+const ScanCode kA{.code = 0x1E, .extended = false};
+const ScanCode kRightArrow{.code = 0x4D, .extended = true};
+
+TEST(InputProtocol, EveryRequestRoundTrips) {
+    const std::vector<input::Request> requests{
+        input::BeginControl{},
+        input::EndControl{},
+        input::Move{.x = -input::kMaxCoordinate, .y = input::kMaxCoordinate},
+        input::Press{.button = input::Button::X2, .down = true},
+        input::Scroll{.vertical = -input::kMaxScroll, .horizontal = 30},
+        input::Key{.scan = kRightArrow, .down = true},
+        input::StartCapture{.park_x = 1280, .park_y = 720},
+        input::StopCapture{.x = -1920, .y = 0},
+        input::QueryStats{},
+    };
+    for (const input::Request& request : requests) {
+        const auto bytes = input::encode(request);
+        ASSERT_LE(bytes.size(), input::kMaxMessageSize);
+        const auto decoded = input::decode_request(bytes);
+        ASSERT_TRUE(decoded.has_value()) << input::type_name(input::type_of(bytes));
+        EXPECT_EQ(decoded.value(), request);
+        EXPECT_EQ(input::type_of(request), input::type_of(bytes));
+    }
+}
+
+TEST(InputProtocol, EveryReportRoundTrips) {
+    const std::vector<input::Report> reports{
+        input::CapturedMotion{.dx = -3, .dy = 12},
+        input::CapturedPress{.button = input::Button::Middle, .down = false},
+        input::CapturedScroll{.vertical = 120, .horizontal = -40},
+        input::CapturedKey{.scan = kA, .down = true},
+        input::LocalInput{},
+        input::Stats{.events = 1ULL << 40U, .p50_us = 4, .p99_us = 90, .max_us = 2'000},
+        input::Rejected{.type = 3, .reason = input::Refusal::NotControlling},
+    };
+    for (const input::Report& report : reports) {
+        const auto bytes = input::encode(report);
+        ASSERT_LE(bytes.size(), input::kMaxMessageSize);
+        const auto decoded = input::decode_report(bytes);
+        ASSERT_TRUE(decoded.has_value()) << input::type_name(input::type_of(bytes));
+        EXPECT_EQ(decoded.value(), report);
+    }
+}
+
+DecodeError request_error(const std::vector<std::uint8_t>& bytes) {
+    const auto decoded = input::decode_request(bytes);
+    EXPECT_FALSE(decoded.has_value());
+    return decoded ? DecodeError::Truncated : decoded.error();
+}
+
+TEST(InputProtocol, BrokenMessagesAreRefused) {
+    const auto good = input::encode(input::Request(input::Move{.x = 10, .y = 20}));
+    EXPECT_EQ(request_error({good.begin(), good.begin() + 5}), DecodeError::Truncated);
+    auto foreign = good;
+    foreign[0] = 'X';
+    EXPECT_EQ(request_error(foreign), DecodeError::BadMagic);
+    auto newer = good;
+    newer[4] = input::kVersion + 1;
+    EXPECT_EQ(request_error(newer), DecodeError::UnsupportedVersion);
+    auto unknown = good;
+    unknown[6] = 77;
+    EXPECT_EQ(request_error(unknown), DecodeError::UnknownType);
+    auto wide = good;
+    wide[7] = 1; // 256 + Move's type: not Move
+    EXPECT_EQ(request_error(wide), DecodeError::UnknownType);
+    auto longer = good;
+    longer.push_back(0);
+    EXPECT_EQ(request_error(longer), DecodeError::LengthMismatch);
+    auto stretched = longer;
+    stretched[8] = 9; // the length field agrees, the body does not
+    EXPECT_EQ(request_error(stretched), DecodeError::LengthMismatch);
+    const auto report = input::encode(input::Report(input::LocalInput{}));
+    EXPECT_EQ(request_error(report), DecodeError::UnknownType) << "a report is no request";
+}
+
+TEST(InputProtocol, ValuesOutOfRangeAreRefused) {
+    EXPECT_EQ(request_error(input::encode(
+                  input::Request(input::Move{.x = input::kMaxCoordinate + 1, .y = 0}))),
+              DecodeError::ValueOutOfRange);
+    EXPECT_EQ(request_error(input::encode(input::Request(
+                  input::Scroll{.vertical = 0, .horizontal = -input::kMaxScroll - 1}))),
+              DecodeError::ValueOutOfRange);
+    auto button = input::encode(input::Request(input::Press{.button = input::Button::Left}));
+    button[input::kHeaderSize] = 5;
+    EXPECT_EQ(request_error(button), DecodeError::ValueOutOfRange);
+    auto down = button;
+    down[input::kHeaderSize] = 0;
+    down[input::kHeaderSize + 1] = 2;
+    EXPECT_EQ(request_error(down), DecodeError::ValueOutOfRange);
+    EXPECT_EQ(request_error(input::encode(input::Request(
+                  input::Key{.scan = ScanCode{.code = 0x7F, .extended = true}, .down = true}))),
+              DecodeError::ValueOutOfRange)
+        << "no key has that scan code";
+    auto rejected = input::encode(input::Report(input::Rejected{.type = 3}));
+    rejected[input::kHeaderSize + 2] = 9;
+    EXPECT_FALSE(input::decode_report(rejected).has_value());
+}
+
+TEST(InputProtocol, TypesHaveNamesForTheLog) {
+    EXPECT_EQ(
+        input::type_name(input::type_of(input::encode(input::Request(input::Key{.scan = kA})))),
+        "Key");
+    EXPECT_EQ(input::type_name(999), "unknown");
+    EXPECT_EQ(input::type_of(std::vector<std::uint8_t>{1, 2}), 0);
+}
+
+} // namespace
