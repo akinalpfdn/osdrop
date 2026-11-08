@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Osdrop.App/Osdrop.App.csproj" />
+  <Project Path="Osdrop.App.Tests/Osdrop.App.Tests.csproj" />
   <Project Path="Osdrop.Localization/Osdrop.Localization.csproj" />
   <Project Path="Osdrop.Localization.Tests/Osdrop.Localization.Tests.csproj" />
 </Solution>

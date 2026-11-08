@@ -36,6 +36,13 @@ typedef struct osdrop_version {
 #define OSDROP_GROUP_ID_SIZE 16
 #define OSDROP_KEY_SIZE 32
 
+/* Capabilities feature bits (PROTOCOL.md "Capabilities"). */
+#define OSDROP_FEATURE_TAKES_CONTROL 0x01u
+#define OSDROP_FEATURE_DRAG_SOURCE 0x02u
+#define OSDROP_FEATURE_DRAG_TARGET 0x04u
+#define OSDROP_FEATURE_CLIPBOARD 0x08u
+#define OSDROP_FEATURE_FILES 0x10u
+
 /*
  * Plain C enums: this header is consumed from C, Swift and C#. Each ends with a *_MAX_ENUM value
  * so the C++ side can receive any 32-bit value from a binding without undefined behaviour; it is

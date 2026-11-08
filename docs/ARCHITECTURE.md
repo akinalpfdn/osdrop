@@ -107,6 +107,28 @@ physical pixels).
 - **Observer chain.** mesh → `Group` (trust) → `Layout` (arrangement) → the platform, so the
   layout hears only from members.
 
+## Group on the platforms
+
+Built in Phase 10. Both apps start core's mesh from their stored identity and states, pass every
+Bonjour result to it, advertise this computer's group, and show pairings; core decides whom to
+dial and whom to trust.
+
+- **macOS** (`macos/Osdrop`). `GroupController` (main actor) owns a `CoreMesh` actor, so core's
+  waiting commands never run on the main thread. `DNSServiceDiscovery` uses the DNS-SD C API:
+  Network.framework cannot advertise a port core's socket owns. The identity and group state are
+  Keychain items; the arrangement and the listening port are preferences. `SystemEvents` ends
+  sessions before sleep and quit and browses again after waking. `PairingWindowPresenter` shows
+  the pairing window on whichever Mac takes part.
+- **Windows** (`windows/`). `GroupEngine` in `windows/shared` holds the same logic in portable
+  C++, tested on every host with fake DNS-SD and real meshes on loopback. The engine DLL adds
+  DNS-SD (`DnsServiceRegister`/`Browse`/`Resolve`), DPAPI files under `%APPDATA%\Osdrop`, monitor
+  enumeration in physical pixels with logical frames from core, and a C API whose callback hands
+  the shell one event struct. The shell calls the engine on one serial worker, never on the UI
+  thread, and posts events to the dispatcher.
+- **Advertising the group.** When the group changes, the old Bonjour registration is withdrawn
+  and a new one made, so browsers see the new `grp` value as a change and pass it on; members
+  then dial the computer that just joined.
+
 ## macOS input layer
 
 Built in Phase 1 (`macos/Osdrop/Services/Input`):

@@ -1,3 +1,5 @@
+import CoreBridge
+
 /// Composition root: the single place where concrete services are created and injected.
 @MainActor
 final class AppDependencies {
@@ -9,6 +11,7 @@ final class AppDependencies {
     let secureInput: any SecureInputChecking
     let screens: any ScreenDescribing
     let staging: DragStaging
+    let group: GroupController
 
     init(
         accessibility: AccessibilityPermission = AccessibilityPermission(),
@@ -17,7 +20,8 @@ final class AppDependencies {
         focus: any CaptureFocusing = InvisibleKeyWindowFocus(),
         secureInput: any SecureInputChecking = SystemSecureInput(),
         screens: any ScreenDescribing = CGScreenDescriber(),
-        staging: DragStaging = DragStaging()
+        staging: DragStaging = DragStaging(),
+        groupServices: GroupServices = .system
     ) {
         self.accessibility = accessibility
         self.cursor = cursor
@@ -27,5 +31,17 @@ final class AppDependencies {
         self.secureInput = secureInput
         self.screens = screens
         self.staging = staging
+        self.group = GroupController(services: groupServices, screens: screens)
+    }
+}
+
+extension GroupServices {
+    /// The real Keychain, settings, Bonjour and core mesh.
+    static var system: GroupServices {
+        GroupServices(
+            keyStore: KeychainKeyStore(), settings: UserDefaultsSettings(), discovery: DNSServiceDiscovery(),
+            localNetwork: BonjourLocalNetworkCheck(),
+            makeMesh: { configuration throws(CoreError) in try CoreMesh(configuration) },
+            deviceName: DeviceName.current())
     }
 }

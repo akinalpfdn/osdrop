@@ -18,4 +18,136 @@
   <data name="TrayQuit" xml:space="preserve">
     <value>Osdrop'tan Çık</value>
   </data>
+  <data name="TrayComputers" xml:space="preserve">
+    <value>Bilgisayarlar…</value>
+  </data>
+  <data name="TrayMesh" xml:space="preserve">
+    <value>Mesh…</value>
+  </data>
+  <data name="EngineUnavailable" xml:space="preserve">
+    <value>Osdrop'un motoru başlatılamadı. Osdrop'u yeniden yükleyin.</value>
+  </data>
+  <data name="EngineNewerVersion" xml:space="preserve">
+    <value>Grup daha yeni bir Osdrop tarafından kaydedilmiş. Bu PC'deki Osdrop'u güncelleyin.</value>
+  </data>
+  <data name="EngineStarting" xml:space="preserve">
+    <value>Osdrop hâlâ başlıyor. Biraz sonra yeniden deneyin.</value>
+  </data>
+  <data name="GroupWindowTitle" xml:space="preserve">
+    <value>Osdrop</value>
+  </data>
+  <data name="GroupMembers" xml:space="preserve">
+    <value>Bu gruptakiler</value>
+  </data>
+  <data name="GroupEmpty" xml:space="preserve">
+    <value>Grup başlatmak için yakındaki bir Mac veya PC ile eşleştirin.</value>
+  </data>
+  <data name="GroupThisComputer" xml:space="preserve">
+    <value>Bu bilgisayar</value>
+  </data>
+  <data name="GroupConnected" xml:space="preserve">
+    <value>Bağlı</value>
+  </data>
+  <data name="GroupNotConnected" xml:space="preserve">
+    <value>Bağlı değil</value>
+  </data>
+  <data name="GroupNotResponding" xml:space="preserve">
+    <value>Yanıt vermiyor</value>
+  </data>
+  <data name="GroupRemove" xml:space="preserve">
+    <value>Çıkar</value>
+  </data>
+  <data name="GroupLeave" xml:space="preserve">
+    <value>Gruptan ayrıl</value>
+  </data>
+  <data name="GroupRemoved" xml:space="preserve">
+    <value>Başka bir bilgisayar bunu gruptan çıkardı.</value>
+  </data>
+  <data name="GroupDismiss" xml:space="preserve">
+    <value>Tamam</value>
+  </data>
+  <data name="GroupNearby" xml:space="preserve">
+    <value>Yakındakiler</value>
+  </data>
+  <data name="GroupNearbyNone" xml:space="preserve">
+    <value>Bu ağda Osdrop çalıştıran başka bir Mac veya PC bulunamadı.</value>
+  </data>
+  <data name="GroupPair" xml:space="preserve">
+    <value>Eşleştir</value>
+  </data>
+  <data name="GroupInAnotherGroup" xml:space="preserve">
+    <value>Başka bir grupta</value>
+  </data>
+  <data name="GroupNeedsUpdate" xml:space="preserve">
+    <value>Farklı bir Osdrop sürümü çalıştırıyor; ikisini de aynı sürüme güncelleyin.</value>
+  </data>
+  <data name="PairingTitle" xml:space="preserve">
+    <value>Eşleştirme</value>
+  </data>
+  <data name="PairingDialing" xml:space="preserve">
+    <value>{0} ile bağlantı kuruluyor…</value>
+  </data>
+  <data name="PairingConfirm" xml:space="preserve">
+    <value>{0} ile eşleştirilsin mi?</value>
+  </data>
+  <data name="PairingHint" xml:space="preserve">
+    <value>Yalnızca diğer bilgisayar aynı kodu gösteriyorsa eşleştirin.</value>
+  </data>
+  <data name="PairingAccept" xml:space="preserve">
+    <value>Eşleştir</value>
+  </data>
+  <data name="PairingReject" xml:space="preserve">
+    <value>Eşleştirme</value>
+  </data>
+  <data name="PairingWaiting" xml:space="preserve">
+    <value>Kodun {0} üzerinde onaylanması bekleniyor…</value>
+  </data>
+  <data name="PairingFailed" xml:space="preserve">
+    <value>{0} ile eşleştirme tamamlanmadı</value>
+  </data>
+  <data name="PairingFailedRejected" xml:space="preserve">
+    <value>Kod onaylanmadı.</value>
+  </data>
+  <data name="PairingFailedBusy" xml:space="preserve">
+    <value>Diğer bilgisayar şu anda başka biriyle eşleşiyor. Biraz sonra yeniden deneyin.</value>
+  </data>
+  <data name="PairingFailedGroupFull" xml:space="preserve">
+    <value>Grupta zaten 8 bilgisayar var.</value>
+  </data>
+  <data name="PairingFailedInAnotherGroup" xml:space="preserve">
+    <value>İki bilgisayar farklı gruplarda. Önce birinin grubundan ayrılması gerekiyor.</value>
+  </data>
+  <data name="PairingFailedTimedOut" xml:space="preserve">
+    <value>Zamanında yanıt gelmedi.</value>
+  </data>
+  <data name="PairingFailedUnreachable" xml:space="preserve">
+    <value>Diğer bilgisayara ulaşılamadı.</value>
+  </data>
+  <data name="PairingClose" xml:space="preserve">
+    <value>Kapat</value>
+  </data>
+  <data name="MeshWindowTitle" xml:space="preserve">
+    <value>Mesh</value>
+  </data>
+  <data name="MeshDevice" xml:space="preserve">
+    <value>Cihaz kimliği:</value>
+  </data>
+  <data name="MeshGroup" xml:space="preserve">
+    <value>Grup:</value>
+  </data>
+  <data name="MeshPort" xml:space="preserve">
+    <value>Dinleme portu:</value>
+  </data>
+  <data name="MeshNoSession" xml:space="preserve">
+    <value>Oturum yok</value>
+  </data>
+  <data name="MeshRoundTrip" xml:space="preserve">
+    <value>Gidiş-dönüş: {0} ms</value>
+  </data>
+  <data name="MeshClockOffset" xml:space="preserve">
+    <value>Saat farkı: {0} µs</value>
+  </data>
+  <data name="MeshRejected" xml:space="preserve">
+    <value>Reddedilen datagramlar: {0}</value>
+  </data>
 </root>

@@ -4,11 +4,32 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
   <Color x:Key="Osdrop.Color.Accent">#FF1E8E5A</Color>
   <Color x:Key="Osdrop.Color.OnAccent">#FFFFFFFF</Color>
+  <Color x:Key="Osdrop.Color.Warning">#FFB35C00</Color>
 
   <SolidColorBrush x:Key="Osdrop.Brush.TrayIconBackground" Color="{StaticResource Osdrop.Color.Accent}" />
   <SolidColorBrush x:Key="Osdrop.Brush.TrayIconForeground" Color="{StaticResource Osdrop.Color.OnAccent}" />
+  <SolidColorBrush x:Key="Osdrop.Brush.Warning" Color="{StaticResource Osdrop.Color.Warning}" />
+  <SolidColorBrush x:Key="Osdrop.Brush.Secondary" Color="{x:Static SystemColors.GrayTextColor}" />
 
   <sys:Double x:Key="Osdrop.FontSize.TrayIconGlyph">96</sys:Double>
   <FontWeight x:Key="Osdrop.FontWeight.TrayIconGlyph">Bold</FontWeight>
   <sys:String x:Key="Osdrop.Tray.IconGlyph">O</sys:String>
+
+  <sys:Double x:Key="Osdrop.FontSize.Title">16</sys:Double>
+  <sys:Double x:Key="Osdrop.FontSize.Body">14</sys:Double>
+  <sys:Double x:Key="Osdrop.FontSize.Caption">12</sys:Double>
+  <!-- The six-digit pairing code, large enough to compare across the desk. -->
+  <sys:Double x:Key="Osdrop.FontSize.PairingCode">36</sys:Double>
+  <FontFamily x:Key="Osdrop.Font.Monospace">Cascadia Mono, Consolas</FontFamily>
+  <FontWeight x:Key="Osdrop.FontWeight.Emphasis">SemiBold</FontWeight>
+
+  <sys:Double x:Key="Osdrop.Width.GroupWindow">380</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.PairingWindow">340</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.MeshWindow">520</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.Button">88</sys:Double>
+  <Thickness x:Key="Osdrop.Thickness.WindowPadding">20</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.SectionGap">0,16,0,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.ItemGap">0,8,0,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.ButtonGap">0,0,8,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.ButtonPadding">12,4</Thickness>
 </ResourceDictionary>

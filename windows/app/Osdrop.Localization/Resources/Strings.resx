@@ -18,4 +18,136 @@
   <data name="TrayQuit" xml:space="preserve">
     <value>Quit Osdrop</value>
   </data>
+  <data name="TrayComputers" xml:space="preserve">
+    <value>Computers…</value>
+  </data>
+  <data name="TrayMesh" xml:space="preserve">
+    <value>Mesh…</value>
+  </data>
+  <data name="EngineUnavailable" xml:space="preserve">
+    <value>Osdrop's engine could not be started. Reinstall Osdrop.</value>
+  </data>
+  <data name="EngineNewerVersion" xml:space="preserve">
+    <value>The group was saved by a newer Osdrop. Update Osdrop on this PC.</value>
+  </data>
+  <data name="EngineStarting" xml:space="preserve">
+    <value>Osdrop is still starting. Try again in a moment.</value>
+  </data>
+  <data name="GroupWindowTitle" xml:space="preserve">
+    <value>Osdrop</value>
+  </data>
+  <data name="GroupMembers" xml:space="preserve">
+    <value>In this group</value>
+  </data>
+  <data name="GroupEmpty" xml:space="preserve">
+    <value>Pair with a Mac or PC nearby to start a group.</value>
+  </data>
+  <data name="GroupThisComputer" xml:space="preserve">
+    <value>This computer</value>
+  </data>
+  <data name="GroupConnected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="GroupNotConnected" xml:space="preserve">
+    <value>Not connected</value>
+  </data>
+  <data name="GroupNotResponding" xml:space="preserve">
+    <value>Not responding</value>
+  </data>
+  <data name="GroupRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="GroupLeave" xml:space="preserve">
+    <value>Leave the group</value>
+  </data>
+  <data name="GroupRemoved" xml:space="preserve">
+    <value>Another computer removed this one from the group.</value>
+  </data>
+  <data name="GroupDismiss" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="GroupNearby" xml:space="preserve">
+    <value>Nearby</value>
+  </data>
+  <data name="GroupNearbyNone" xml:space="preserve">
+    <value>No other Mac or PC running Osdrop was found on this network.</value>
+  </data>
+  <data name="GroupPair" xml:space="preserve">
+    <value>Pair</value>
+  </data>
+  <data name="GroupInAnotherGroup" xml:space="preserve">
+    <value>In another group</value>
+  </data>
+  <data name="GroupNeedsUpdate" xml:space="preserve">
+    <value>Runs another Osdrop version; update both to the same one.</value>
+  </data>
+  <data name="PairingTitle" xml:space="preserve">
+    <value>Pairing</value>
+  </data>
+  <data name="PairingDialing" xml:space="preserve">
+    <value>Contacting {0}…</value>
+  </data>
+  <data name="PairingConfirm" xml:space="preserve">
+    <value>Pair with {0}?</value>
+  </data>
+  <data name="PairingHint" xml:space="preserve">
+    <value>Pair only if the other computer shows the same code.</value>
+  </data>
+  <data name="PairingAccept" xml:space="preserve">
+    <value>Pair</value>
+  </data>
+  <data name="PairingReject" xml:space="preserve">
+    <value>Don't Pair</value>
+  </data>
+  <data name="PairingWaiting" xml:space="preserve">
+    <value>Waiting for the code to be confirmed on {0}…</value>
+  </data>
+  <data name="PairingFailed" xml:space="preserve">
+    <value>Pairing with {0} did not complete</value>
+  </data>
+  <data name="PairingFailedRejected" xml:space="preserve">
+    <value>The code was not confirmed.</value>
+  </data>
+  <data name="PairingFailedBusy" xml:space="preserve">
+    <value>The other computer is pairing with another one. Try again in a moment.</value>
+  </data>
+  <data name="PairingFailedGroupFull" xml:space="preserve">
+    <value>The group already has 8 computers.</value>
+  </data>
+  <data name="PairingFailedInAnotherGroup" xml:space="preserve">
+    <value>The two computers are in different groups. One of them must leave its group first.</value>
+  </data>
+  <data name="PairingFailedTimedOut" xml:space="preserve">
+    <value>Nobody answered in time.</value>
+  </data>
+  <data name="PairingFailedUnreachable" xml:space="preserve">
+    <value>The other computer could not be reached.</value>
+  </data>
+  <data name="PairingClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="MeshWindowTitle" xml:space="preserve">
+    <value>Mesh</value>
+  </data>
+  <data name="MeshDevice" xml:space="preserve">
+    <value>Device ID:</value>
+  </data>
+  <data name="MeshGroup" xml:space="preserve">
+    <value>Group:</value>
+  </data>
+  <data name="MeshPort" xml:space="preserve">
+    <value>Listening port:</value>
+  </data>
+  <data name="MeshNoSession" xml:space="preserve">
+    <value>No session</value>
+  </data>
+  <data name="MeshRoundTrip" xml:space="preserve">
+    <value>Round trip: {0} ms</value>
+  </data>
+  <data name="MeshClockOffset" xml:space="preserve">
+    <value>Clock offset: {0} µs</value>
+  </data>
+  <data name="MeshRejected" xml:space="preserve">
+    <value>Rejected datagrams: {0}</value>
+  </data>
 </root>

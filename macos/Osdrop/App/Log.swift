@@ -9,4 +9,7 @@ enum Log {
     static let permissions = Logger(subsystem: subsystem, category: "permissions")
     static let screens = Logger(subsystem: subsystem, category: "screens")
     static let drag = Logger(subsystem: subsystem, category: "drag")
+    static let discovery = Logger(subsystem: subsystem, category: "discovery")
+    static let mesh = Logger(subsystem: subsystem, category: "mesh")
+    static let group = Logger(subsystem: subsystem, category: "group")
 }

@@ -171,10 +171,13 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(encode_error(protocol::SessionSetup{.udp_port = 1, .transfer_token = id(1)}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::PeerError{.code = 0}), Error::ValueOutOfRange);
-    EXPECT_EQ(encode_error(protocol::RosterState{.group_id = id(1)}), Error::ValueOutOfRange);
-    EXPECT_EQ(encode_error(protocol::RosterState{.group_id = id(1),
-                                                 .members = {{.device_id = id(2), .name = "A"},
-                                                             {.device_id = id(2), .name = "B"}}}),
+    EXPECT_EQ(
+        encode_error(protocol::RosterState{.group_id = id(1), .members = {}, .revocations = {}}),
+        Error::ValueOutOfRange);
+    EXPECT_EQ(encode_error(protocol::RosterState{
+                  .group_id = id(1),
+                  .members = {{.device_id = id(2), .name = "A"}, {.device_id = id(2), .name = "B"}},
+                  .revocations = {}}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::ScreenReport{.monitors = {{.key = id(1),
                                                                 .width = 16,
@@ -202,7 +205,7 @@ TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::ButtonEvent{.control_id = 1, .click_count = 0}),
               Error::ValueOutOfRange);
-    EXPECT_EQ(encode_error(protocol::DragOffer{.probe_id = 0, .drag_id = 0}),
+    EXPECT_EQ(encode_error(protocol::DragOffer{.probe_id = 0, .drag_id = 0, .items = {}}),
               Error::ValueOutOfRange);
     EXPECT_EQ(
         encode_error(protocol::DragOffer{
@@ -313,7 +316,8 @@ TEST(TransferCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(error(protocol::ContentRequest{
                   .request_id = 1, .object = text, .entry_index = 1, .length = 1}),
               Error::ValueOutOfRange);
-    EXPECT_EQ(error(protocol::ContentChunk{.request_id = 1}), Error::ValueOutOfRange);
+    EXPECT_EQ(error(protocol::ContentChunk{.request_id = 1, .offset = 0, .data = {}}),
+              Error::ValueOutOfRange);
     EXPECT_EQ(error(protocol::TransferError{.code = 0}), Error::ValueOutOfRange);
 }
 
