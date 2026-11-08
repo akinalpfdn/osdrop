@@ -1,7 +1,10 @@
 include(FetchContent)
 
+# The tag archive is the same file (same hash); it is tried when the release download fails, as it
+# did on 2026-11-08 (HTTP 504).
 FetchContent_Declare(googletest
     URL https://github.com/google/googletest/releases/download/v1.18.0/googletest-1.18.0.tar.gz
+        https://github.com/google/googletest/archive/refs/tags/v1.18.0.tar.gz
     URL_HASH SHA256=6e3191c1455468b3fc35a417fb565c1c5071aee1b7e7f85e30cf48a98d37d8b5
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 # Match the MSVC runtime used by the rest of the build: the DLL runtime by default, the static one
