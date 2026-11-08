@@ -105,6 +105,35 @@ TEST(Group, ARevokedComputerIsRefusedEverywhere) {
     EXPECT_TRUE(network.node(2).observer.connected.empty());
 }
 
+TEST(Group, ARemovedComputerPairsAgainWithACode) {
+    SimulatedMeshNetwork network;
+    form_group(network, 3);
+    const auto removed = network.node(2).mesh.device_id();
+    ASSERT_TRUE(network.node(0).group->revoke(removed, network.now).has_value());
+    network.run_for(milliseconds(200));
+    ASSERT_FALSE(state(network, 2).in_group());
+
+    pair(network, 2, 1); // started on the removed computer, with a member that did not remove it
+    rediscover(network);
+    network.run_for(milliseconds(4'000));
+    expect_full_mesh_of_members(network);
+    EXPECT_EQ(network.node(0).group_observer.codes.size(), 2U) << "no code with the new pairing";
+}
+
+TEST(Group, TheMemberThatRemovedAComputerCanPairWithItAgain) {
+    SimulatedMeshNetwork network;
+    form_group(network, 2);
+    const auto removed = network.node(1).mesh.device_id();
+    ASSERT_TRUE(network.node(0).group->revoke(removed, network.now).has_value());
+    network.run_for(milliseconds(200));
+    ASSERT_FALSE(state(network, 1).in_group());
+
+    pair(network, 0, 1);
+    rediscover(network);
+    network.run_for(milliseconds(4'000));
+    expect_full_mesh_of_members(network);
+}
+
 TEST(Group, LeavingTellsTheOthersAndClearsTheState) {
     SimulatedMeshNetwork network;
     form_group(network, 3);

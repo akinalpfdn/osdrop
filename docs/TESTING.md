@@ -171,7 +171,7 @@ Macs; PC rows need two PCs.
 | G1 | Mac ↔ PC | On the Mac, menu › Nearby › **Pair** next to the PC | Both show the same code; after **Pair** on both, each lists the other as connected |
 | G2 | Mac ↔ Mac, PC ↔ PC | As G1 between two Macs, then between two PCs | As G1 |
 | G3 | Third computer | Pair a third computer with any member | Every member lists it as connected without another code |
-| G4 | Revocation | On any member, remove another one | It disappears everywhere; the removed computer says it was removed and lists no group |
+| G4 | Revocation | On any member, remove another one; then pair the two again, once from each side | It disappears everywhere; the removed computer says it was removed and lists no group. Pairing again shows a code and brings it back to every member |
 | G5 | Restart | Quit and start Osdrop on one member; then restart that computer | Members reconnect without a code or any action |
 | G6 | Different groups | Pair a computer of one group with one of another group | Refused before any code: the two are in different groups |
 | G7 | Local Network off (Mac) | Turn off Osdrop in System Settings › Local Network | The menu says Local Network access is needed; turning it on finds computers again |

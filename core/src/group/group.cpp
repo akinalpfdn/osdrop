@@ -80,13 +80,12 @@ TrustVerdict Group::on_trust_query(const crypto::Key& peer_key, const protocol::
                 .refusal = Error::NotTrusted,
                 .features = offered_features(state_.permissions_for(device))};
     }
-    if (state_.roster.pairings().contains(device)) {
-        return {.decision = TrustDecision::Blocked, .refusal = Error::NotTrusted};
-    }
+    // A removed computer that has left the group pairs again like any other, with a code; its
+    // new pairing gets an epoch above its revocation.
     const bool peer_in_group = !protocol::is_zero(hello.group_id);
     if (state_.in_group() && peer_in_group) {
-        // Another group, or a new member this computer has not heard of yet: the mesh dials it
-        // again once a roster from a member names it.
+        // Another group, a removed member that has not heard of it, or a new member this computer
+        // has not heard of yet: the mesh dials it again once a roster from a member names it.
         return {.decision = TrustDecision::Blocked,
                 .refusal =
                     hello.group_id == state_.group_id ? Error::NotTrusted : Error::InAnotherGroup};

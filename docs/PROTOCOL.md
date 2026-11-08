@@ -812,12 +812,14 @@ After the handshake, each side decides about the peer in this order:
 | The peer | Decision |
 |----------|----------|
 | A member | Trusted: PairingConfirm *accepted* at once |
-| A device revoked here | Error NOT_TRUSTED |
-| In this computer's group, but not in its roster yet | Error NOT_TRUSTED; dialled again once a roster names it |
+| In this computer's group, but not a member: not in its roster yet, or revoked without having heard of it | Error NOT_TRUSTED; dialled again once a roster names it |
 | In another group, while this computer is in one | Error IN_ANOTHER_GROUP |
 | Anyone else while a pairing code is shown here | Error PEER_BUSY |
 | In no group, while this computer's group has 8 members | Error GROUP_FULL |
 | Anyone else | Pairing code |
+
+A revoked device that has left the group (it does when it learns of its revocation) is in no
+group, so it gets a pairing code like any other computer, from whichever side starts the pairing.
 
 Once both users have accepted:
 

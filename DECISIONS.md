@@ -579,3 +579,12 @@ choices the plan leaves open are logged here.
 **Why:** Copying a file twice is common, and a large file was fetched again in full. Skipping the announcement needs no protocol or engine change.
 **Trade-offs:** A file changed without its size or modification time changing is not sent again. When something else was copied in between, the file is fetched again.
 **Revisit if:** Repeated fetches still show up in use; the receiving cache would cover them.
+
+---
+
+## 2026-11-08 — A removed computer pairs again with a code
+**Chosen:** User decision: a revoked device that has left the group gets a pairing code like any other computer, from either side; its new pairing has an epoch above its revocation. A revoked device that still claims the group is refused as before (NOT_TRUSTED).
+**Alternatives:** Only a member may start the new pairing; or a revoked device never comes back, and the group has to be formed again.
+**Why:** G4 on hardware: after removing the PC, the Mac refused it before any code, so it could never rejoin, although DEVPLAN says a revoked device comes back by pairing again. Refusing it gained nothing: a new key pairs as an unknown computer anyway, and both users still confirm the code.
+**Trade-offs:** Someone at a removed computer can show a pairing code on members again; it goes nowhere unless a member accepts it.
+**Revisit if:** Removed computers prompt members unwanted; a member-side block list would then be the answer.
