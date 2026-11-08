@@ -32,6 +32,7 @@ Windows can take over and inject mouse and keyboard input wherever a user can cl
   (marker file), and the client as the user when the pipe breaks.
 - The pipe admits only `Osdrop.exe` and `OsdropInputTool.exe` from OsdropInput's folder, one at a
   time; the shell's build copies the native executables next to `Osdrop.exe`.
-- The engine's `InputBridge` makes the PC controllable (Mac → PC) and announces TAKES_CONTROL; the
-  PC controlling others stays with Phase 11's Windows half (to confirm with the user).
+- The engine's `InputBridge` makes the PC controllable (Mac → PC) and announces TAKES_CONTROL.
+- User decision (2026-11-08): run W1–W8 first; once they pass, the PC controlling other computers
+  (PC → Mac, Phase 11's Windows half) is added to this PR, so Phase 3 delivers both directions.
 - Hardware rows: TESTING.md W1–W8; W3 is the go/no-go gate.

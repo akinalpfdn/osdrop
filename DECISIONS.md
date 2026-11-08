@@ -624,3 +624,4 @@ choices the plan leaves open are logged here.
 **Why:** The feature bit means "injects input", the phase's gate is capture and injection over elevated windows, and the bridge is what lets a Mac's cursor cross in. The controller needs an observing mode in OsdropInput and crossing tests of its own.
 **Trade-offs:** Until then a PC's own mouse cannot cross to a Mac.
 **Revisit if:** The user wants both directions in one step.
+User decision (same day): after the hardware rows pass, the PC controlling others is added to the Phase 3 PR.

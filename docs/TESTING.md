@@ -211,7 +211,8 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 
 On the PC, with the service installed from the shell's output folder (BUILDING.md › Input service
 for development). Quit Osdrop before the tool rows: the input process serves one client at a time.
-The tool's capture takes the PC's mouse and keyboard for up to the seconds given; Esc ends it.
+The tool's capture starts 5 seconds after the command, so the window to try it on can be clicked
+first, and takes the PC's mouse and keyboard for up to the seconds given; Esc ends it.
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|

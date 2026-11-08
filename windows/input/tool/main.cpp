@@ -30,6 +30,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr std::uint16_t kEscape = 0x01;
 constexpr int kMaxSeconds = 60;
+constexpr auto kStartDelay = std::chrono::seconds(5);
 constexpr auto kReplayDelay = std::chrono::seconds(3);
 constexpr auto kStatsTimeout = std::chrono::seconds(2);
 
@@ -187,6 +188,8 @@ int capture(int seconds) {
     GetCursorPos(&before);
     const POINT park{.x = GetSystemMetrics(SM_CXSCREEN) / 2,
                      .y = GetSystemMetrics(SM_CYSCREEN) / 2};
+    std::cout << "The capture starts in 5 s: click into the window to try it on.\n";
+    std::this_thread::sleep_for(kStartDelay);
     std::cout << "Capturing for " << seconds
               << " s: this PC's mouse and keyboard act nowhere until then. Esc ends it early.\n";
     inbox.start();
