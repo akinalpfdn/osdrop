@@ -3,16 +3,20 @@
 // A deterministic network of meshes for tests: a simulated clock, TCP connections that are
 // reliable and ordered (delayed by `latency`, optionally limited in bandwidth each), input
 // datagrams that can be lost and reordered, nodes that can freeze (power loss), and a capture of
-// every byte on the wire.
+// every byte on the wire. File work of the transfer engine runs between steps, on the test's
+// thread, unless a node holds it back (a slow disk).
 
 #include "crypto_test_support.hpp"
 #include "group/group.hpp"
 #include "layout/layout.hpp"
 #include "mesh/mesh.hpp"
+#include "transfer/service.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <deque>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -119,11 +123,15 @@ public:
     std::vector<std::pair<ConnectionId, Error>> failures;
     std::vector<std::optional<Error>> left;
     layout::Layout* layout = nullptr; ///< told about every change, as the platform glue does
+    transfer::TransferService* transfers = nullptr; ///< as well
 
     void on_state_changed(const group::GroupState& state) override {
         stored = state;
         if (layout != nullptr) {
             layout->group_changed(state.group_id, members_of(state));
+        }
+        if (transfers != nullptr) {
+            transfers->set_files_permitted(state.file_senders());
         }
     }
     void on_pairing_code(ConnectionId connection, std::uint32_t code, const crypto::Key& /*key*/,
@@ -134,6 +142,55 @@ public:
         failures.emplace_back(connection, reason);
     }
     void on_left_group(std::optional<Error> reason) override { left.push_back(reason); }
+};
+
+/// Runs the transfer engine's file work when the network says so.
+class ManualExecutor final : public transfer::TransferExecutor {
+public:
+    bool hold_files = false; ///< a disk that does not keep up
+
+    void run_file_work(std::function<void()> work) override { files_.push_back(std::move(work)); }
+    void run_on_mesh(std::function<void(TimePoint)> work) override {
+        mesh_.push_back(std::move(work));
+    }
+
+    /// Runs what is queued, and what that queues, until nothing is left.
+    void drain(mesh::Mesh& mesh, TimePoint now) {
+        while ((!hold_files && !files_.empty()) || !mesh_.empty()) {
+            while (!hold_files && !files_.empty()) {
+                auto work = std::move(files_.front());
+                files_.pop_front();
+                work();
+            }
+            while (!mesh_.empty()) {
+                auto work = std::move(mesh_.front());
+                mesh_.pop_front();
+                work(now);
+                mesh.flush(now);
+            }
+        }
+    }
+
+    [[nodiscard]] std::size_t queued_files() const { return files_.size(); }
+
+private:
+    std::deque<std::function<void()>> files_;
+    std::deque<std::function<void(TimePoint)>> mesh_;
+};
+
+class RecordingTransferObserver final : public transfer::TransferObserver {
+public:
+    std::vector<transfer::OfferReady> offers;
+    std::vector<transfer::TransferProgress> progress;
+    std::vector<transfer::TransferOutcome> finished;
+
+    void on_offer_ready(const transfer::OfferReady& ready) override { offers.push_back(ready); }
+    void on_transfer_progress(const transfer::TransferProgress& update) override {
+        progress.push_back(update);
+    }
+    void on_transfer_finished(const transfer::TransferOutcome& outcome) override {
+        finished.push_back(outcome);
+    }
 };
 
 class RecordingLayoutObserver final : public layout::LayoutObserver {
@@ -174,6 +231,7 @@ public:
     void set_input_destination(ConnectionId /*id*/, std::uint16_t /*port*/) override {}
     void accept_input_source(ConnectionId /*id*/) override {}
     std::size_t queued_bytes(ConnectionId id) const override;
+    void pause_reading(ConnectionId id, bool paused) override;
     void close(ConnectionId id) override;
     std::uint16_t listen_port() const override { return 49'152; }
 
@@ -184,15 +242,20 @@ private:
 
 class SimulatedNode {
 public:
-    /// With a group state, a Group answers trust and a Layout keeps the arrangement, between the
-    /// mesh and `observer`: mesh → group → layout → observer, as in the apps.
+    /// With a group state, a Group answers trust, a Layout keeps the arrangement and a
+    /// TransferService moves files, between the mesh and `observer`: mesh → group → layout →
+    /// transfers → observer, as in the apps.
     SimulatedNode(SimulatedMeshNetwork& network, std::size_t index, mesh::MeshConfig config,
                   std::uint64_t seed, std::optional<group::GroupState> group_state = std::nullopt,
-                  layout::LayoutState layout_state = {})
+                  layout::LayoutState layout_state = {},
+                  const transfer::TransferTunables& transfer_tunables = {})
         : random(seed), identity(key_pair(random)), transport(network, index),
+          transfers(group_state ? std::make_unique<transfer::TransferService>(
+                                      transfer_tunables, executor, transfer_observer, observer)
+                                : nullptr),
           layout(group_state ? std::make_unique<layout::Layout>(
                                    crypto::device_id(identity.public_key()),
-                                   std::move(layout_state), layout_observer, observer)
+                                   std::move(layout_state), layout_observer, *transfers)
                              : nullptr),
           group(group_state ? std::make_unique<group::Group>(
                                   group::GroupConfig{.platform = config.platform,
@@ -204,7 +267,10 @@ public:
           address{"node" + std::to_string(index), 49'152} {
         if (group) {
             group_observer.layout = layout.get();
+            group_observer.transfers = transfers.get();
             layout->group_changed(group_state->group_id, members_of(*group_state));
+            transfers->set_files_permitted(group_state->file_senders());
+            transfers->attach(mesh);
             layout->attach(mesh);
             group->attach(mesh);
         }
@@ -215,7 +281,10 @@ public:
     RecordingMeshObserver observer;
     RecordingGroupObserver group_observer;
     RecordingLayoutObserver layout_observer;
+    ManualExecutor executor;
+    RecordingTransferObserver transfer_observer;
     SimulatedTransport transport;
+    std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
     mesh::Mesh mesh;
@@ -241,7 +310,11 @@ public:
     /// what has not been delivered yet counts as queued for writing.
     std::optional<double> bandwidth_bytes_per_ms;
     TimePoint now{std::chrono::seconds(1000)};
-    std::vector<std::vector<std::uint8_t>> wire; ///< every TCP write and datagram, in order
+    std::vector<std::vector<std::uint8_t>> wire;  ///< every TCP write and datagram, in order
+    transfer::TransferTunables transfer_tunables; ///< for nodes added from now on
+    bool capture_wire = true;                     ///< off for bulk transfers
+    /// Sees every TCP write before it travels and may change it (tampering on the path).
+    std::function<void(std::vector<std::uint8_t>&)> tamper;
 
     static mesh::MeshConfig config(const protocol::Id& group, std::string name) {
         mesh::MeshConfig config;
@@ -257,9 +330,9 @@ public:
                        std::optional<std::uint64_t> seed = std::nullopt,
                        layout::LayoutState layout_state = {}) {
         const std::size_t index = nodes_.size();
-        nodes_.push_back(std::make_unique<SimulatedNode>(*this, index, node_config,
-                                                         seed.value_or(7 + index), group_state,
-                                                         std::move(layout_state)));
+        nodes_.push_back(std::make_unique<SimulatedNode>(
+            *this, index, node_config, seed.value_or(7 + index), group_state,
+            std::move(layout_state), transfer_tunables));
         return *nodes_.back();
     }
     SimulatedNode& node(std::size_t index) { return *nodes_.at(index); }
@@ -300,13 +373,20 @@ public:
                 deliver(event);
             }
         }
+        // Held events stay ahead of everything not yet due, so TCP data keeps its order.
         for (Event& event : held) {
-            event.at = now + milliseconds(1);
-            queue_.push_back(std::move(event));
+            event.at = now;
         }
+        queue_.insert(queue_.begin(), std::make_move_iterator(held.begin()),
+                      std::make_move_iterator(held.end()));
         for (auto& simulated : nodes_) {
             if (!simulated->frozen && now >= simulated->mesh.next_wakeup()) {
                 simulated->mesh.on_timer(now);
+            }
+        }
+        for (auto& simulated : nodes_) {
+            if (!simulated->frozen) {
+                simulated->executor.drain(simulated->mesh, now);
             }
         }
     }
@@ -396,12 +476,17 @@ public:
         if (it == links_.end()) {
             return;
         }
-        wire.emplace_back(bytes.begin(), bytes.end());
+        if (capture_wire) {
+            wire.emplace_back(bytes.begin(), bytes.end());
+        }
         Event event{.at = {},
                     .kind = Event::Kind::Bytes,
                     .from = {from, id},
                     .target = it->second,
                     .bytes = {bytes.begin(), bytes.end()}};
+        if (tamper) {
+            tamper(event.bytes);
+        }
         if (bandwidth_bytes_per_ms) {
             // Bytes leave one after another at the link's rate; until then they are queued.
             TimePoint& free = link_free_[event.from];
@@ -413,6 +498,15 @@ public:
             queued_[event.from] += bytes.size();
         }
         enqueue_ordered(std::move(event));
+    }
+
+    /// A paused end receives nothing; what is sent to it waits (and counts as queued).
+    void pause(std::size_t node_index, ConnectionId id, bool paused) {
+        if (paused) {
+            paused_.insert(Endpoint{.node = node_index, .id = id});
+        } else {
+            paused_.erase(Endpoint{.node = node_index, .id = id});
+        }
     }
 
     [[nodiscard]] std::size_t queued(std::size_t node_index, ConnectionId id) const {
@@ -477,10 +571,12 @@ private:
 
     void schedule(Event event) { queue_.push_back(std::move(event)); }
 
-    /// TCP data and closes for a frozen node wait; datagrams for it are lost.
+    /// TCP data and closes for a frozen node or a paused end wait; datagrams for a frozen node
+    /// are lost.
     [[nodiscard]] bool holds(const Event& event) const {
         return (event.kind == Event::Kind::Bytes || event.kind == Event::Kind::Close) &&
-               event.target.node != kRaw && nodes_.at(event.target.node)->frozen;
+               event.target.node != kRaw &&
+               (nodes_.at(event.target.node)->frozen || paused_.contains(event.target));
     }
 
     /// TCP: in order per direction of a connection.
@@ -558,6 +654,7 @@ private:
     std::map<Endpoint, TimePoint> last_ordered_;
     std::map<Endpoint, TimePoint> link_free_;
     std::map<Endpoint, std::size_t> queued_;
+    std::set<Endpoint> paused_;
     std::map<std::size_t, Endpoint> raw_;
     std::map<std::size_t, bool> raw_open_;
     std::size_t next_raw_ = 1;
@@ -590,6 +687,10 @@ inline void SimulatedTransport::send(ConnectionId id, std::span<const std::uint8
 inline void SimulatedTransport::send_datagram(ConnectionId id,
                                               std::span<const std::uint8_t> datagram) {
     network_->send_datagram(node_, id, datagram);
+}
+
+inline void SimulatedTransport::pause_reading(ConnectionId id, bool paused) {
+    network_->pause(node_, id, paused);
 }
 
 inline void SimulatedTransport::close(ConnectionId id) {

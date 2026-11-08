@@ -45,6 +45,11 @@ static_assert(static_cast<int>(Error::NotPermitted) == OSDROP_ERROR_NOT_PERMITTE
 static_assert(static_cast<int>(Error::GroupFull) == OSDROP_ERROR_GROUP_FULL);
 static_assert(static_cast<int>(Error::InAnotherGroup) == OSDROP_ERROR_IN_ANOTHER_GROUP);
 static_assert(static_cast<int>(Error::InvalidLayout) == OSDROP_ERROR_INVALID_LAYOUT);
+static_assert(static_cast<int>(Error::Cancelled) == OSDROP_ERROR_CANCELLED);
+static_assert(static_cast<int>(Error::IoError) == OSDROP_ERROR_IO);
+static_assert(static_cast<int>(Error::NoSpace) == OSDROP_ERROR_NO_SPACE);
+static_assert(static_cast<int>(Error::IntegrityFailed) == OSDROP_ERROR_INTEGRITY_FAILED);
+static_assert(static_cast<int>(Error::NotFound) == OSDROP_ERROR_NOT_FOUND);
 static_assert(OSDROP_PROTOCOL_VERSION == protocol::kVersion);
 static_assert(OSDROP_PROTOCOL_MINOR == protocol::kMinorVersion);
 static_assert(OSDROP_MAX_CONTROL_MESSAGE_SIZE == protocol::kMaxControlMessageSize);

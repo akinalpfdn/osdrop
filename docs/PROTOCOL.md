@@ -556,8 +556,9 @@ entry:
 | byte_count | u64 | file: its size. folder: 0. link: the length of its target, 1–4096 |
 | modified_us | i64 | modification time, microseconds since 1970-01-01 UTC |
 
-A link's content is its target path as UTF-8 bytes, requested like a file's; receivers decide
-whether to create the link (DEVPLAN, Phase 13).
+A link's content is its target path as UTF-8 bytes in NFC with `/` separators, requested like a
+file's; receivers recreate a link only when its target names another entry of the same item
+("Transfers" below).
 
 ### 0x84 ContentRequest
 
@@ -672,6 +673,37 @@ peer's SessionSetup and a stream ID of its own parity. The accepting side closes
 unless the token belongs to an established session, the parity is the opener's and the ID was not
 used before in that session. Ending a session ends its streams. A side accepts no more messages
 for a stream while 4 MiB are waiting to be written to it, and continues once less than 1 MiB is.
+
+### Transfers
+
+- **Order.** The receiving side asks for the item's manifest first, then for the content of each
+  file and link, whole: offset 0 and length `byte_count` (1 for an empty file). Several requests
+  may be outstanding; the sending side answers the requests of one stream in the order they came.
+- **Manifests.** Paths are in NFC. When two offered paths have the same name, the sender numbers
+  the later ones ("name (2).ext").
+- **Content.** ContentEnd's `byte_count` is what was sent for the request and its digest covers
+  the whole entry. Before sending it, the sender checks that the file still has the size and
+  modification time it had when the item was scanned, and sends TransferError IO_ERROR otherwise.
+- **Checks on receipt.** Chunks must continue where the last one ended and stay within the entry's
+  `byte_count`; ContentEnd must give that `byte_count` and the digest of what arrived. Anything else
+  ends the transfer with INTEGRITY_FAILED (or UNEXPECTED_MESSAGE), and so does any TransferError:
+  the receiver removes every file and folder the transfer created.
+- **Names on disk.** Receivers map names for their file system as `core` does (DEVPLAN, Phase 13),
+  number names one folder would hold twice on a case-insensitive file system, and number top-level
+  names the destination already holds.
+- **Links.** A receiver resolves a link's target against the link's folder; when it names another
+  entry of the same item, the link is created with the target rewritten to the mapped names.
+  Absolute targets, targets that leave the item and targets that name nothing in it are skipped.
+- **Limits.** A computer serves at most its own `max_transfer_streams` streams from one peer at a
+  time; another one gets TransferError PEER_BUSY (request 0) and is closed. Receivers open at most
+  the lower of both computers' limits.
+- **Ending early.** A receiver that gives up closes the stream. A sender whose object is withdrawn
+  answers its outstanding requests with TransferError CANCELLED. TransferCancel drops one request
+  and keeps the stream. A receiver may stop reading a stream for a while (its disk is slower); TCP
+  then holds the sender back.
+- **Who may fetch.** A sender answers requests for items it did not offer to the requesting member
+  with NOT_PERMITTED and for unknown items with NOT_FOUND. A receiver fetches nothing from a member
+  whose "files" permission it has turned off ("Permissions" below).
 
 ## Group membership
 
@@ -881,6 +913,11 @@ Decoding and encoding report these codes, which are also the values of `osdrop_r
 | 29 | GROUP_FULL | pairing refused: the group already has the most computers allowed (8) |
 | 30 | IN_ANOTHER_GROUP | pairing refused: the two computers belong to different groups; one must leave its group first |
 | 31 | INVALID_LAYOUT | an arrangement was refused: monitors of two computers overlap, or a computer touches no other and is not detached |
+| 32 | CANCELLED | a transfer was cancelled on either side |
+| 33 | IO_ERROR | a file could not be read or written |
+| 34 | NO_SPACE | the receiver has not enough free space for a transfer |
+| 35 | INTEGRITY_FAILED | received content does not match the sender's digest |
+| 36 | NOT_FOUND | the requested item, entry or file no longer exists |
 
 ## Fixtures
 

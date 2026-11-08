@@ -41,6 +41,22 @@ void wipe(std::span<std::uint8_t> secret);
 void blake2b(std::span<std::uint8_t> out, ByteParts parts);
 [[nodiscard]] Hash blake2b(ByteParts parts);
 
+/// BLAKE2b-256 over data that arrives in pieces, as file contents do (docs/PROTOCOL.md,
+/// ContentEnd).
+class ContentHasher {
+public:
+    static constexpr std::size_t kDigestSize = 32;
+    using Digest = std::array<std::uint8_t, kDigestSize>;
+
+    ContentHasher();
+    void update(std::span<const std::uint8_t> data);
+    /// The digest of everything so far; the hasher starts over afterwards.
+    [[nodiscard]] Digest finish();
+
+private:
+    alignas(8) std::array<std::uint8_t, 256> context_{}; // a crypto_blake2b_ctx
+};
+
 /// Keyed BLAKE2b (RFC 7693) with a key of 1-64 bytes, otherwise as blake2b().
 void blake2b_keyed(std::span<std::uint8_t> out, std::span<const std::uint8_t> key, ByteParts parts);
 

@@ -96,7 +96,7 @@ All persistent data is local to each computer. Nothing leaves the LAN.
 - **Drag start on the receiving Mac:** `beginDraggingSession` needs a real mouse-down event, so Osdrop injects a button-down into its own helper window under the cursor and starts the session from that event; subsequent injected moves drive the drag and the injected button-up drops it.
 - **File promises:** `NSFilePromiseProvider` writes each item into the folder the drop target names, asynchronously. Osdrop resolves name collisions itself (Finder does not for promises) and publishes progress for the destination file so Finder shows it on the icon. Apps that accept only file URLs get a lazily provided URL to a staged copy, below a size cap.
 - **Files and Folders privacy:** reading a file that the user dragged onto Osdrop is allowed; reading file URLs from the general pasteboard (clipboard file copy) in Desktop, Documents or Downloads may trigger a TCC prompt. Phase 15 verifies and handles it in onboarding.
-- **Received files** get the quarantine attribute, as AirDrop does, unless the user decides otherwise in Phase 13.
+- **Received files** are not marked with the quarantine attribute (user decision, Phase 13).
 - **Local Network permission** (macOS 15+): `NSLocalNetworkUsageDescription` and `NSBonjourServices` in Info.plist; permission status read from a Bonjour browse, as Osplay does.
 - **Screen lock and sleep:** a locked or sleeping Mac refuses control; the controller treats it as a wall and shows why.
 - **Info.plist:** `LSUIElement = true`. Launch at login through `SMAppService`.
@@ -114,7 +114,7 @@ All persistent data is local to each computer. Nothing leaves the LAN.
 - **Drag start on the receiving PC:** a helper window receives an injected button-down and calls `DoDragDrop` on a dedicated STA thread with a data object that offers virtual files and implements `IDataObjectAsyncCapability`, so Explorer reads the streams on a background thread with its own progress dialog. A delayed `CF_HDROP` to staged copies serves apps that need real paths, below a size cap.
 - **Clipboard:** delayed rendering (`WM_RENDERFORMAT`, `WM_RENDERALLFORMATS`); clipboard history and cloud clipboard may request delayed formats eagerly, verified in Phase 15. Sensitive content is respected through `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` and `CanUploadToCloudClipboard`.
 - **File names:** long paths through `\\?\`, reserved names (`CON`, `NUL`, `COM1`…), invalid characters, trailing dots and spaces are mapped by one tested function in `core`.
-- **Received files** get Mark of the Web unless the user decides otherwise in Phase 13.
+- **Received files** are not marked with Mark of the Web (user decision, Phase 13).
 - **Firewall:** the installer adds one inbound rule for the app on every network profile (Osplay lesson 2026-10-26: Windows 11 marks new networks Public).
 - **Code signing:** none for now; SmartScreen warns once. Keyboard hooks combined with input injection in unsigned binaries may be flagged by antivirus products; see Risks.
 
@@ -189,7 +189,7 @@ CLIPBOARD: copy anywhere ─► announce formats to the group ─► peers insta
 - `input_client` — pipe client to `OsdropInput`.
 - `drag` — edge drop targets, virtual-file data objects, drag source thread.
 - `clipboard` — format listener, delayed rendering.
-- `files` — readers and writers with long paths, Mark of the Web.
+- `files` — readers and writers with long paths.
 - `discovery` — DNS-SD register/browse.
 - `keystore` — DPAPI identity, roster and permissions under `%APPDATA%\Osdrop`.
 - `screens` — monitor enumeration and change notifications.
@@ -245,7 +245,7 @@ Phase 5 writes the authoritative `docs/PROTOCOL.md` and fixtures in `protocol/fi
 - First pairing: both screens show a 6-digit code derived from the handshake hash; the user confirms on both. The new device joins the group of whichever side is already in one; the member then introduces it to the others over their authenticated sessions, and they trust it without another code. A device already in a different group must leave it first.
 - Later connections: the peer must be a current roster member, or the connection is refused with a specific error.
 - Local permissions are enforced by the receiving `core`: control, files and clipboard can each be refused per device.
-- Received files never open automatically and are marked as coming from another computer (Phase 13 decision).
+- Received files never open automatically. They are not marked as coming from another computer (user decision, Phase 13: the files come from the user's own paired computers).
 - Keystrokes, clipboard contents and file contents are never logged; input is logged as counts only.
 - No unencrypted mode exists in release builds.
 
@@ -527,8 +527,8 @@ Phases 1–4 retire the platform risks first. They build production modules, tes
 - Manifests (tree, sizes, times, attributes), ranged reads, per-file BLAKE2b verification, cancellation from either side, a concurrency limit and backpressure.
 - Portable name mapping in `core` (NFC, Windows-invalid characters, reserved names, trailing dots and spaces, case collisions within one tree, path length), replacing the Phase 4 function.
 - Platform readers and writers (long paths on Windows), a free-space check before writing, removal of partial files on failure.
-- Marking of received files (quarantine on macOS, Mark of the Web on Windows), decided with the user at the start of the phase.
-- Symbolic links inside folders arrive as link entries whose content is the target; whether a receiver recreates, follows or skips them is decided with the user at the start of the phase.
+- Received files are not marked (no quarantine on macOS, no Mark of the Web on Windows): user decision at the start of the phase.
+- Symbolic links inside folders arrive as link entries whose content is the target; a receiver recreates those whose target stays inside the item and skips the rest (user decision at the start of the phase).
 - Receiver-side enforcement of the "files" permission.
 **Depends on**: Phase 7, Phase 8
 **Acceptance criteria**:

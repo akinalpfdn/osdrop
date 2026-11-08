@@ -9,11 +9,16 @@
 #include "mesh/mesh.hpp"
 #include "protocol/control_messages.hpp"
 #include "protocol/wire.hpp"
+#include "transfer/file_thread.hpp"
+#include "transfer/files.hpp"
+#include "transfer/service.hpp"
 #include "transport/asio_node.hpp"
 
 #include <osdrop/osdrop.h>
 
 #include <algorithm>
+#include <exception>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <new>
@@ -30,6 +35,7 @@ namespace group = osdrop::group;
 namespace layout = osdrop::layout;
 namespace mesh = osdrop::mesh;
 namespace protocol = osdrop::protocol;
+namespace transfer = osdrop::transfer;
 using osdrop::Error;
 using osdrop::TimePoint;
 
@@ -44,6 +50,8 @@ static_assert(OSDROP_FEATURE_TAKES_CONTROL == protocol::kFeatureTakesControl &&
               OSDROP_FEATURE_FILES == protocol::kFeatureFiles);
 static_assert(OSDROP_MONITOR_KEY_SIZE == protocol::kIdSize &&
               OSDROP_MAX_MONITORS == protocol::kMaxMonitors);
+static_assert(OSDROP_OBJECT_DRAG == static_cast<int>(protocol::ObjectKind::Drag) &&
+              OSDROP_OBJECT_CLIPBOARD == static_cast<int>(protocol::ObjectKind::Clipboard));
 
 osdrop_result to_result(Error error) {
     return static_cast<osdrop_result>(error);
@@ -106,22 +114,51 @@ std::set<layout::DeviceId> members_of(const group::GroupState& state) {
     return members;
 }
 
-/// Turns group and layout events, and the mesh events passed on for members, into the platform's
-/// C callbacks, and tells the layout about group changes. The group answers trust and handles
-/// pairing itself, so those mesh events never arrive here.
+osdrop_object_ref to_c(const protocol::ObjectRef& item) {
+    return {.kind = static_cast<osdrop_object_kind>(item.kind),
+            .object_id = item.object_id,
+            .item_index = item.item_index};
+}
+
+/// An object reference the protocol can carry (PROTOCOL.md, "Transfer streams").
+osdrop::Expected<protocol::ObjectRef, Error> to_object(const osdrop_object_ref& item) {
+    using Result = osdrop::Expected<protocol::ObjectRef, Error>;
+    if (item.kind != OSDROP_OBJECT_DRAG && item.kind != OSDROP_OBJECT_CLIPBOARD) {
+        return Result::failure(Error::ValueOutOfRange);
+    }
+    const bool drag = item.kind == OSDROP_OBJECT_DRAG;
+    if (item.object_id == 0 || (drag && item.item_index >= protocol::kMaxDragItems) ||
+        (!drag && (item.item_index < 1 || item.item_index > protocol::kMaxClipboardFormats))) {
+        return Result::failure(Error::ValueOutOfRange);
+    }
+    return protocol::ObjectRef{.kind = static_cast<protocol::ObjectKind>(item.kind),
+                               .object_id = item.object_id,
+                               .item_index = item.item_index};
+}
+
+/// Turns group, layout and transfer events, and the mesh events passed on for members, into the
+/// platform's C callbacks, and tells the layout and the transfers about group changes. The group
+/// answers trust and handles pairing itself, so those mesh events never arrive here.
 class CallbackObserver final : public group::GroupObserver,
                                public layout::LayoutObserver,
+                               public transfer::TransferObserver,
                                public mesh::MeshObserver {
 public:
     explicit CallbackObserver(const osdrop_mesh_callbacks& callbacks) : callbacks_(callbacks) {}
 
-    /// The layout to tell about group changes; set once, before the mesh starts.
-    void follow(layout::Layout& arrangement) { layout_ = &arrangement; }
+    /// The layers to tell about group changes; set once, before the mesh starts.
+    void follow(layout::Layout& arrangement, transfer::TransferService& transfers) {
+        layout_ = &arrangement;
+        transfers_ = &transfers;
+    }
 
     // --- group::GroupObserver ---
     void on_state_changed(const group::GroupState& state) override {
         if (layout_ != nullptr) {
             layout_->group_changed(state.group_id, members_of(state));
+        }
+        if (transfers_ != nullptr) {
+            transfers_->set_files_permitted(state.file_senders());
         }
         if (callbacks_.group_changed != nullptr) {
             const std::vector<std::uint8_t> bytes = group::encode_state(state);
@@ -213,9 +250,69 @@ public:
         }
     }
 
+    // --- transfer::TransferObserver ---
+    void on_offer_ready(const transfer::OfferReady& ready) override {
+        if (callbacks_.offer_ready != nullptr) {
+            const osdrop_object_ref item = to_c(ready.item);
+            callbacks_.offer_ready(callbacks_.context, &item,
+                                   ready.error ? to_result(*ready.error) : OSDROP_OK,
+                                   ready.total_bytes, ready.entry_count, ready.skipped);
+        }
+    }
+    void on_transfer_progress(const transfer::TransferProgress& progress) override {
+        if (callbacks_.transfer_progress != nullptr) {
+            const osdrop_transfer_progress c_progress{.transfer_id = progress.id,
+                                                      .bytes_done = progress.bytes_done,
+                                                      .bytes_total = progress.bytes_total,
+                                                      .files_done = progress.files_done,
+                                                      .files_total = progress.files_total};
+            callbacks_.transfer_progress(callbacks_.context, &c_progress);
+        }
+    }
+    void on_transfer_finished(const transfer::TransferOutcome& outcome) override {
+        if (callbacks_.transfer_finished == nullptr) {
+            return;
+        }
+        std::vector<std::string> paths;
+        paths.reserve(outcome.items.size());
+        for (const std::filesystem::path& item : outcome.items) {
+            paths.push_back(transfer::utf8_of(item));
+        }
+        std::vector<const char*> items;
+        items.reserve(paths.size());
+        for (const std::string& path : paths) {
+            items.push_back(path.c_str());
+        }
+        callbacks_.transfer_finished(callbacks_.context, outcome.id,
+                                     outcome.error ? to_result(*outcome.error) : OSDROP_OK,
+                                     items.data(), items.size(), outcome.skipped_links);
+    }
+
 private:
     osdrop_mesh_callbacks callbacks_;
     layout::Layout* layout_ = nullptr;
+    transfer::TransferService* transfers_ = nullptr;
+};
+
+/// File work on the file thread; results back on the node's I/O thread, with the mesh flushed.
+class NodeExecutor final : public transfer::TransferExecutor {
+public:
+    explicit NodeExecutor(transfer::FileThread& files) : files_(&files) {}
+
+    /// Set once, right after the node starts; nothing posts results before.
+    void run_with(osdrop::transport::AsioNode& node) { node_ = &node; }
+
+    void run_file_work(std::function<void()> work) override { files_->post(std::move(work)); }
+    void run_on_mesh(std::function<void(TimePoint)> work) override {
+        node_->run([moved = std::move(work)](mesh::Mesh& mesh, TimePoint now) {
+            moved(now);
+            mesh.flush(now);
+        });
+    }
+
+private:
+    transfer::FileThread* files_;
+    osdrop::transport::AsioNode* node_ = nullptr;
 };
 
 bool valid_platform(osdrop_platform platform) {
@@ -330,14 +427,36 @@ osdrop::Expected<layout::Placements, Error> to_placements(const osdrop_placement
 
 } // namespace
 
-/// The C handle: the platform's callbacks, the group, the layout and the node that runs the mesh.
-/// The group and the layout live on the I/O thread: every access goes through the node.
+/// The C handle: the platform's callbacks, the group, the layout, the transfers and the node that
+/// runs the mesh. The layers live on the I/O thread: every access goes through the node.
 struct osdrop_mesh {
     osdrop_mesh(const osdrop_random_source& random_source, const osdrop_mesh_callbacks& callbacks)
-        : random(random_source), observer(callbacks) {}
+        : random(random_source), observer(callbacks), executor(file_thread) {}
+    ~osdrop_mesh() {
+        try {
+            // Transfers in progress are rolled back, then the file thread finishes what is queued
+            // (those rollbacks included) while the node still takes their results.
+            if (node && transfers) {
+                static_cast<void>(node->run_and_wait([this](mesh::Mesh& mesh, TimePoint now) {
+                    transfers->shutdown();
+                    mesh.flush(now);
+                }));
+            }
+            file_thread.stop();
+        } catch (...) {
+            std::terminate(); // only locking and joining can throw: unrecoverable
+        }
+    }
+    osdrop_mesh(const osdrop_mesh&) = delete;
+    osdrop_mesh& operator=(const osdrop_mesh&) = delete;
+    osdrop_mesh(osdrop_mesh&&) = delete;
+    osdrop_mesh& operator=(osdrop_mesh&&) = delete;
 
     osdrop::capi::CallbackRandomSource random;
     CallbackObserver observer;
+    transfer::FileThread file_thread;
+    NodeExecutor executor;
+    std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
     std::unique_ptr<osdrop::transport::AsioNode> node; // declared last: stopped first
@@ -394,28 +513,35 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (!handle) {
         return OSDROP_ERROR_INTERNAL;
     }
-    // mesh → group → layout → callbacks
+    // mesh → group → layout → transfers → callbacks
+    handle->transfers = std::make_unique<transfer::TransferService>(
+        transfer::TransferTunables{.max_streams = config->max_transfer_streams}, handle->executor,
+        handle->observer, handle->observer);
     handle->layout = std::make_unique<layout::Layout>(
         osdrop::crypto::device_id(identity.value().public_key()), std::move(arrangement.value()),
-        handle->observer, handle->observer);
-    handle->observer.follow(*handle->layout);
+        handle->observer, *handle->transfers);
+    handle->observer.follow(*handle->layout, *handle->transfers);
     handle->layout->group_changed(state.value().group_id, members_of(state.value()));
+    handle->transfers->set_files_permitted(state.value().file_senders());
     handle->group = std::make_unique<group::Group>(
         group::GroupConfig{.platform = mesh_config.platform, .device_name = name}, identity.value(),
         std::move(state.value()), handle->random, handle->observer, *handle->layout);
     group::Group& member_layer = *handle->group;
     layout::Layout& arrangement_layer = *handle->layout;
+    transfer::TransferService& transfer_layer = *handle->transfers;
     auto node = osdrop::transport::AsioNode::create(
         std::move(mesh_config), std::move(identity.value()), handle->random, member_layer,
         osdrop::transport::NodeOptions{.listen_port = config->listen_port},
-        [&member_layer, &arrangement_layer](mesh::Mesh& mesh) {
+        [&member_layer, &arrangement_layer, &transfer_layer](mesh::Mesh& mesh) {
             member_layer.attach(mesh);
             arrangement_layer.attach(mesh);
+            transfer_layer.attach(mesh);
         });
     if (!node) {
         return to_result(node.error());
     }
     handle->node = std::move(node.value());
+    handle->executor.run_with(*handle->node);
     *out_mesh = handle.release();
     return OSDROP_OK;
 }
@@ -614,6 +740,92 @@ osdrop_result osdrop_mesh_set_layout(osdrop_mesh* mesh, const osdrop_placement* 
         result = arrangement.set_placements(std::move(wanted.value()), now);
     }));
     return to_result(result);
+}
+
+osdrop_result osdrop_mesh_offer(osdrop_mesh* mesh, const osdrop_object_ref* item,
+                                const char* const* paths, size_t path_count,
+                                const uint8_t* audience, size_t audience_count) {
+    if (mesh == nullptr || item == nullptr || paths == nullptr || path_count == 0 ||
+        (audience == nullptr && audience_count != 0)) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto object = to_object(*item);
+    if (!object) {
+        return to_result(object.error());
+    }
+    std::vector<std::filesystem::path> roots;
+    roots.reserve(path_count);
+    for (const char* path : std::span(paths, path_count)) {
+        if (path == nullptr) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        roots.push_back(transfer::path_from_utf8(path));
+    }
+    std::set<mesh::DeviceId> devices;
+    for (std::size_t i = 0; i < audience_count; ++i) {
+        devices.insert(read_id(std::span(audience, audience_count * protocol::kIdSize)
+                                   .subspan(i * protocol::kIdSize)
+                                   .data()));
+    }
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    transfer::TransferService& transfers = *mesh->transfers;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& /*mesh*/, TimePoint /*now*/) {
+        result = transfers.offer(object.value(), std::move(roots), std::move(devices));
+    }));
+    return to_result(result);
+}
+
+osdrop_result osdrop_mesh_withdraw(osdrop_mesh* mesh, osdrop_object_kind kind, uint64_t object_id) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    if ((kind != OSDROP_OBJECT_DRAG && kind != OSDROP_OBJECT_CLIPBOARD) || object_id == 0) {
+        return OSDROP_ERROR_VALUE_OUT_OF_RANGE;
+    }
+    transfer::TransferService& transfers = *mesh->transfers;
+    const bool ran = mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        transfers.withdraw(static_cast<protocol::ObjectKind>(kind), object_id);
+        node_mesh.flush(now);
+    });
+    return ran ? OSDROP_OK : OSDROP_ERROR_INTERNAL;
+}
+
+osdrop_result osdrop_mesh_receive(osdrop_mesh* mesh, const uint8_t* device_id,
+                                  const osdrop_object_ref* item, const char* destination,
+                                  uint64_t* out_transfer_id) {
+    if (mesh == nullptr || device_id == nullptr || item == nullptr || destination == nullptr ||
+        out_transfer_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto object = to_object(*item);
+    if (!object) {
+        return to_result(object.error());
+    }
+    const protocol::Id device = read_id(device_id);
+    const std::filesystem::path folder = transfer::path_from_utf8(destination);
+    auto result = osdrop::Expected<transfer::TransferId, Error>::failure(Error::Internal);
+    transfer::TransferService& transfers = *mesh->transfers;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        result = transfers.receive(device, object.value(), folder);
+        node_mesh.flush(now);
+    }));
+    if (!result) {
+        return to_result(result.error());
+    }
+    *out_transfer_id = result.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_cancel_transfer(osdrop_mesh* mesh, uint64_t transfer_id) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    transfer::TransferService& transfers = *mesh->transfers;
+    const bool ran = mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        transfers.cancel(transfer_id);
+        node_mesh.flush(now);
+    });
+    return ran ? OSDROP_OK : OSDROP_ERROR_INTERNAL;
 }
 
 osdrop_result osdrop_layout_check(const osdrop_layout_computer* computers, size_t count,

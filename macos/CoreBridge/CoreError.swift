@@ -38,6 +38,16 @@ public enum CoreError: Error, Equatable, Sendable {
     case inAnotherGroup
     /// The arrangement has overlapping monitors, or a computer that touches no other.
     case invalidLayout
+    /// A transfer was cancelled on either side.
+    case cancelled
+    /// A file could not be read or written.
+    case ioFailure
+    /// Not enough free space for a transfer.
+    case noSpace
+    /// Received content does not match the sender's digest.
+    case integrityFailed
+    /// The offered item or file no longer exists.
+    case notFound
     /// A code added to the core after this app was built.
     case unknown(code: UInt32)
 
@@ -76,6 +86,11 @@ public enum CoreError: Error, Equatable, Sendable {
         case OSDROP_ERROR_GROUP_FULL: self = .groupFull
         case OSDROP_ERROR_IN_ANOTHER_GROUP: self = .inAnotherGroup
         case OSDROP_ERROR_INVALID_LAYOUT: self = .invalidLayout
+        case OSDROP_ERROR_CANCELLED: self = .cancelled
+        case OSDROP_ERROR_IO: self = .ioFailure
+        case OSDROP_ERROR_NO_SPACE: self = .noSpace
+        case OSDROP_ERROR_INTEGRITY_FAILED: self = .integrityFailed
+        case OSDROP_ERROR_NOT_FOUND: self = .notFound
         default: self = .unknown(code: result.rawValue)
         }
     }
@@ -114,6 +129,11 @@ public enum CoreError: Error, Equatable, Sendable {
         case .groupFull: OSDROP_ERROR_GROUP_FULL.rawValue
         case .inAnotherGroup: OSDROP_ERROR_IN_ANOTHER_GROUP.rawValue
         case .invalidLayout: OSDROP_ERROR_INVALID_LAYOUT.rawValue
+        case .cancelled: OSDROP_ERROR_CANCELLED.rawValue
+        case .ioFailure: OSDROP_ERROR_IO.rawValue
+        case .noSpace: OSDROP_ERROR_NO_SPACE.rawValue
+        case .integrityFailed: OSDROP_ERROR_INTEGRITY_FAILED.rawValue
+        case .notFound: OSDROP_ERROR_NOT_FOUND.rawValue
         case .unknown(let code): code
         }
     }

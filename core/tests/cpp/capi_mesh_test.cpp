@@ -1,6 +1,9 @@
 // The mesh and the group through the C API, as the platforms use them: computers on loopback pair
-// into a group, store the state core hands them, reconnect from it, and revoke, leave and set
-// permissions, reporting everything through C callbacks.
+// into a group, store the state core hands them, reconnect from it, revoke, leave and set
+// permissions, and send each other files, reporting everything through C callbacks.
+#include "temp_folder.hpp"
+#include "transfer/files.hpp"
+
 #include <osdrop/osdrop.h>
 
 #include <gtest/gtest.h>
@@ -9,10 +12,16 @@
 #include <array>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <thread>
 #include <utility>
@@ -53,6 +62,15 @@ struct Events {
     std::vector<osdrop_result> left;
     Bytes layout; ///< the last layout state handed over
     int log_lines = 0;
+    std::vector<std::pair<osdrop_result, std::uint64_t>> offers; ///< result, total bytes
+    std::vector<osdrop_transfer_progress> progress;
+    struct Finished {
+        std::uint64_t id = 0;
+        osdrop_result result = OSDROP_OK;
+        std::vector<std::string> items;
+        std::uint64_t skipped_links = 0;
+    };
+    std::vector<Finished> finished;
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex);
@@ -118,6 +136,29 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
     callbacks.log = [](void* context, osdrop_log_level /*level*/, const char* message) {
         auto* e = static_cast<Events*>(context);
         e->update([&] { e->log_lines += message[0] != '\0' ? 1 : 0; });
+    };
+    callbacks.offer_ready = [](void* context, const osdrop_object_ref* /*item*/,
+                               osdrop_result result, uint64_t total_bytes, uint64_t /*entries*/,
+                               uint64_t /*skipped*/) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->offers.emplace_back(result, total_bytes); });
+    };
+    callbacks.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->progress.push_back(*progress); });
+    };
+    callbacks.transfer_finished = [](void* context, uint64_t transfer_id, osdrop_result result,
+                                     const char* const* items, size_t item_count,
+                                     uint64_t skipped_links) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            Events::Finished finished{
+                .id = transfer_id, .result = result, .items = {}, .skipped_links = skipped_links};
+            for (const char* item : std::span(items, item_count)) {
+                finished.items.emplace_back(item);
+            }
+            e->finished.push_back(std::move(finished));
+        });
     };
     return callbacks;
 }
@@ -570,6 +611,168 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     EXPECT_EQ(osdrop_mesh_listen_port(nullptr, nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_leave_group(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
     osdrop_mesh_destroy(nullptr);
+}
+
+/// Two members on loopback, connected.
+void connect_pair(CMesh& mac, CMesh& pc) {
+    pair(pc, mac);
+    ASSERT_TRUE(grouped(mac, pc));
+    ASSERT_TRUE(mac.events.wait_for([&] { return mac.events.connected == 1; }));
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.connected == 1; }));
+}
+
+constexpr osdrop_object_ref kDragItem{.kind = OSDROP_OBJECT_DRAG, .object_id = 1, .item_index = 0};
+
+/// `from` offers `root` to `to`, which fetches it into `folder`; the transfer's ID.
+std::uint64_t send_item(CMesh& from, CMesh& to, const std::filesystem::path& root,
+                        const std::filesystem::path& folder) {
+    const std::string path = osdrop::transfer::utf8_of(root);
+    const std::array<const char*, 1> paths{path.c_str()};
+    EXPECT_EQ(osdrop_mesh_offer(from.mesh, &kDragItem, paths.data(), paths.size(),
+                                to.device_id.data(), 1),
+              OSDROP_OK);
+    EXPECT_TRUE(from.events.wait_for([&] { return !from.events.offers.empty(); }));
+    const std::string destination = osdrop::transfer::utf8_of(folder);
+    std::uint64_t id = 0;
+    EXPECT_EQ(
+        osdrop_mesh_receive(to.mesh, from.device_id.data(), &kDragItem, destination.c_str(), &id),
+        OSDROP_OK);
+    return id;
+}
+
+TEST(CapiMesh, MembersSendEachOtherFilesOverLoopback) {
+    const osdrop::test::TempFolder source;
+    const osdrop::test::TempFolder destination;
+    osdrop::test::write_file(source / "Project/a.bin", osdrop::test::pattern(3'000'000));
+    osdrop::test::write_file(source / "Project/sub/b.txt", "hello");
+    CMesh mac(1, "Mac");
+    CMesh pc(2, "PC");
+    connect_pair(mac, pc);
+
+    const std::uint64_t id = send_item(mac, pc, source / "Project", destination.path());
+    EXPECT_NE(id, 0U);
+    {
+        std::lock_guard lock(mac.events.mutex);
+        EXPECT_EQ(mac.events.offers.front(), std::pair(OSDROP_OK, std::uint64_t{3'000'005}));
+    }
+    ASSERT_TRUE(pc.events.wait_for([&] { return !pc.events.finished.empty(); }));
+    std::lock_guard lock(pc.events.mutex);
+    const Events::Finished& finished = pc.events.finished.front();
+    EXPECT_EQ(finished.id, id);
+    EXPECT_EQ(finished.result, OSDROP_OK);
+    EXPECT_EQ(finished.items,
+              std::vector<std::string>{osdrop::transfer::utf8_of(destination / "Project")});
+    EXPECT_EQ(osdrop::test::read_file(destination / "Project/a.bin"),
+              osdrop::test::pattern(3'000'000));
+    EXPECT_EQ(osdrop::test::read_file(destination / "Project/sub/b.txt"),
+              osdrop::test::read_file(source / "Project/sub/b.txt"));
+    ASSERT_FALSE(pc.events.progress.empty());
+    EXPECT_EQ(pc.events.progress.back().bytes_done, 3'000'005U);
+}
+
+TEST(CapiMesh, QuittingDuringATransferLeavesNothingBehind) {
+    const osdrop::test::TempFolder source;
+    const osdrop::test::TempFolder destination;
+    osdrop::test::write_file(source / "big.bin", osdrop::test::pattern(64'000'000));
+    CMesh mac(1, "Mac");
+    auto pc = std::make_unique<CMesh>(2, "PC");
+    connect_pair(mac, *pc);
+
+    send_item(mac, *pc, source / "big.bin", destination.path());
+    ASSERT_TRUE(pc->events.wait_for(
+        [&] { return !pc->events.progress.empty() && pc->events.progress.back().bytes_done > 0; }));
+    pc.reset(); // quit while it writes
+    EXPECT_TRUE(osdrop::test::listing(destination.path()).empty());
+}
+
+TEST(CapiMesh, TransferCommandsCheckTheirArguments) {
+    CMesh mac(1, "Mac");
+    const osdrop::test::TempFolder temp;
+    const std::string folder = osdrop::transfer::utf8_of(temp.path());
+    const std::array<const char*, 1> paths{folder.c_str()};
+    const DeviceId stranger{};
+    std::uint64_t id = 0;
+    EXPECT_EQ(osdrop_mesh_offer(nullptr, &kDragItem, paths.data(), 1, nullptr, 0),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &kDragItem, paths.data(), 0, nullptr, 0),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const std::array<const char*, 1> relative{"relative/path"};
+    EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &kDragItem, relative.data(), 1, nullptr, 0),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const osdrop_object_ref no_id{.kind = OSDROP_OBJECT_DRAG, .object_id = 0, .item_index = 0};
+    EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &no_id, paths.data(), 1, nullptr, 0),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    const osdrop_object_ref no_format{
+        .kind = OSDROP_OBJECT_CLIPBOARD, .object_id = 1, .item_index = 6};
+    EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &no_format, paths.data(), 1, nullptr, 0),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_mesh_offer(mac.mesh, &kDragItem, paths.data(), 1, nullptr, 0), OSDROP_OK);
+
+    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, "relative", &id),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), &id),
+              OSDROP_ERROR_NOT_PERMITTED)
+        << "not a member";
+    EXPECT_EQ(osdrop_mesh_receive(mac.mesh, stranger.data(), &kDragItem, folder.c_str(), nullptr),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_withdraw(mac.mesh, OSDROP_OBJECT_DRAG, 0),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_mesh_withdraw(mac.mesh, OSDROP_OBJECT_DRAG, 1), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_cancel_transfer(mac.mesh, 99), OSDROP_OK);
+    EXPECT_EQ(osdrop_mesh_cancel_transfer(nullptr, 99), OSDROP_ERROR_INVALID_ARGUMENT);
+}
+
+/// An environment variable; MSVC refuses std::getenv as unsafe.
+std::optional<std::string> environment(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string text(value);
+    std::free(value); // NOLINT(cppcoreguidelines-no-malloc): _dupenv_s allocates with malloc
+    return text;
+#else
+    const char* value = std::getenv(name); // NOLINT(concurrency-mt-unsafe): tests are serial here
+    return value == nullptr ? std::nullopt : std::optional<std::string>(value);
+#endif
+}
+
+/// A measurement, not a check: OSDROP_TRANSFER_BENCH_MB=1024 with a release build moves that many
+/// megabytes between two meshes on loopback and prints the rate (DEVPLAN Phase 13: 90 MB/s on
+/// wired gigabit between a Mac and a PC; loopback until the PC is available).
+TEST(CapiMesh, TransferThroughputOnLoopback) {
+    const std::optional<std::string> setting = environment("OSDROP_TRANSFER_BENCH_MB");
+    if (!setting) {
+        GTEST_SKIP() << "set OSDROP_TRANSFER_BENCH_MB to measure";
+    }
+    const std::size_t megabytes = std::stoul(*setting);
+    const osdrop::test::TempFolder source;
+    const osdrop::test::TempFolder destination;
+    {
+        std::ofstream out(osdrop::transfer::native_path(source / "bench.bin"), std::ios::binary);
+        const auto block = osdrop::test::pattern(std::size_t{1} << 20U);
+        for (std::size_t i = 0; i < megabytes; ++i) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): bytes as chars
+            out.write(reinterpret_cast<const char*>(block.data()),
+                      static_cast<std::streamsize>(block.size()));
+        }
+    }
+    CMesh mac(1, "Mac");
+    CMesh pc(2, "PC");
+    connect_pair(mac, pc);
+    const auto started = std::chrono::steady_clock::now();
+    send_item(mac, pc, source / "bench.bin", destination.path());
+    std::unique_lock lock(pc.events.mutex);
+    ASSERT_TRUE(pc.events.changed.wait_for(lock, std::chrono::minutes(10),
+                                           [&] { return !pc.events.finished.empty(); }));
+    ASSERT_EQ(pc.events.finished.front().result, OSDROP_OK);
+    const double seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    const double rate = static_cast<double>(megabytes) * 1.048576 / seconds;
+    std::cout << megabytes << " MiB in " << seconds << " s: " << rate << " MB/s\n";
+    RecordProperty("megabytes_per_second", std::to_string(rate));
 }
 
 } // namespace

@@ -13,6 +13,7 @@ let package = Package(
         .target(
             name: "OsdropCore",
             path: "core",
+            exclude: ["src/transfer/unicode_tables.inc"],  // included by unicode.cpp
             sources: ["src", "third_party/monocypher/monocypher.c"],
             publicHeadersPath: "include",
             cSettings: [.headerSearchPath("third_party/monocypher")],

@@ -3,7 +3,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -60,6 +62,31 @@ TEST(CryptoPrimitives, Blake2bMatchesRfc7693) {
     EXPECT_EQ(std::vector<std::uint8_t>(hash.begin(), hash.end()),
               from_hex("ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"
                        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"));
+}
+
+// Digests from Python: hashlib.blake2b(data, digest_size=32).
+TEST(CryptoPrimitives, ContentHasherMatchesBlake2b256InAnyChunking) {
+    crypto::ContentHasher hasher;
+    const auto empty = hasher.finish();
+    EXPECT_EQ(std::vector<std::uint8_t>(empty.begin(), empty.end()),
+              from_hex("0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"));
+
+    hasher.update(bytes("abc"));
+    const auto abc = hasher.finish();
+    EXPECT_EQ(std::vector<std::uint8_t>(abc.begin(), abc.end()),
+              from_hex("bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319"));
+
+    const auto data = counting(1000);
+    const auto expected =
+        from_hex("c636324d47d89f2b2434dc2c994100663fbbaea880ff020fc5de89dd0f77a1ec");
+    for (const std::size_t chunk : {std::size_t{1}, std::size_t{127}, std::size_t{128},
+                                    std::size_t{129}, std::size_t{1000}}) {
+        for (std::size_t offset = 0; offset < data.size(); offset += chunk) {
+            hasher.update(std::span(data).subspan(offset, std::min(chunk, data.size() - offset)));
+        }
+        const auto digest = hasher.finish();
+        EXPECT_EQ(std::vector<std::uint8_t>(digest.begin(), digest.end()), expected) << chunk;
+    }
 }
 
 TEST(CryptoPrimitives, KeyedBlake2bMatchesTheReferenceVectors) {

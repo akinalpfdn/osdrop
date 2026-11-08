@@ -38,6 +38,14 @@ enum class Error : std::uint8_t {
     GroupFull = 29,
     InAnotherGroup = 30,
     InvalidLayout = 31,
+    Cancelled = 32,
+    IoError = 33,
+    NoSpace = 34,
+    IntegrityFailed = 35,
+    NotFound = 36,
 };
+
+/// The highest code this build knows; a peer's newer codes are reported as PeerError.
+inline constexpr Error kLastError = Error::NotFound;
 
 } // namespace osdrop

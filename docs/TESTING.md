@@ -37,6 +37,17 @@ simulated network, including members that were offline. `transport_test.cpp` rep
 on real loopback sockets, including control latency while a transfer stream is saturated and a
 recording relay on the control connection.
 
+The transfer tests move real files between members over the simulated network: folder trees with
+empty, chunk-sized and multi-megabyte files, executable flags, times, NFD names and links inside
+and outside the item; names the destination already holds; content that does not match its digest
+and bytes changed on the way; cancelling from either side; a full disk; the files permission and
+the audience of an offer; a slow disk (the stream pauses instead of memory filling); the stream
+limit per peer; hundreds of small files; a source that changes during the transfer; a lost peer.
+After every failure nothing the transfer created may remain. The name mapping runs over a corpus
+of Unicode, emoji, reserved names and long names, and NFC against random strings normalized by
+Python's `unicodedata` (the same Unicode version as the tables).
+Through the C API, members on loopback send files and quit in the middle of a transfer.
+
 ### Protocol fixtures and fuzzing
 
 `protocol/fixtures/` holds valid and malformed samples of every message, written by an independent
@@ -138,9 +149,24 @@ Macs; PC rows need two PCs.
 | G6 | Different groups | Pair a computer of one group with one of another group | Refused before any code: the two are in different groups |
 | G7 | Local Network off (Mac) | Turn off Osdrop in System Settings › Local Network | The menu says Local Network access is needed; turning it on finds computers again |
 
+### File transfer (Phase 13)
+
+Measured in a release build: `OSDROP_TRANSFER_BENCH_MB=1024 core/build/release/tests/cpp/osdrop_core_tests
+--gtest_filter=CapiMesh.TransferThroughputOnLoopback` moves that many megabytes between two
+meshes on loopback and prints the rate. The rows below need two computers and run once the
+apps can start transfers (drag and drop, Phase 14).
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| F1 | Throughput Mac → PC | A 10 GB file over wired gigabit | At least 90 MB/s |
+| F2 | Throughput PC → Mac | As F1 the other way | At least 90 MB/s |
+| F3 | Mac ↔ Mac | A folder with nested folders, links and long names | Arrives intact; links inside the folder work |
+| F4 | Cancel | Cancel in the middle of a large file, on either side | Nothing is left in the destination |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-03 | Phase 13 branch, Release, M3 Air | Loopback throughput, 1 GiB | 210 MB/s (sender and receiver on the same computer) |
 | 2026-11-02 | Phase 2 branch, Debug, M3 Air | D1–D7 | Pass after two fixes found by D4 (WhatsApp) and D5 (Photos): AppKit called promise callbacks off the main thread |
 | 2026-11-02 | Phase 1 branch, Debug, M3 Air | C1, C3, C5 | Pass (C3 after the capture guard was added; before it, the cursor stayed hidden while the app was stopped). C5: macOS refused Osdrop keyboard focus with Finder in front |

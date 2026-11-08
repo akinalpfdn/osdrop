@@ -121,6 +121,16 @@ Permissions GroupState::permissions_for(const DeviceId& device) const {
     return it == permissions.end() ? Permissions{} : it->second;
 }
 
+std::set<DeviceId> GroupState::file_senders() const {
+    std::set<DeviceId> senders;
+    for (const Member& member : roster.members()) {
+        if (permissions_for(member.device_id).files) {
+            senders.insert(member.device_id);
+        }
+    }
+    return senders;
+}
+
 std::vector<std::uint8_t> encode_state(const GroupState& state) {
     std::size_t size = kMagic.size() + 1 + protocol::kIdSize + 6;
     for (const auto& [device, member] : state.roster.pairings()) {
