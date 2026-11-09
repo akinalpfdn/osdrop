@@ -5,6 +5,7 @@
 #include <sddl.h>
 #include <wtsapi32.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <vector>
@@ -95,12 +96,18 @@ bool same_path(std::wstring_view a, std::wstring_view b) {
                                 static_cast<int>(b.size()), TRUE) == CSTR_EQUAL;
 }
 
-std::string ascii(std::wstring_view text) {
-    std::string result;
-    result.reserve(text.size());
-    for (const wchar_t c : text) {
-        result.push_back(c >= 0x20 && c < 0x7F ? static_cast<char>(c) : '?');
+std::string log_text(std::wstring_view text) {
+    std::wstring printable(text);
+    std::ranges::replace_if(printable, [](wchar_t c) { return c < L' ' || c == 0x7F; }, L'?');
+    const int bytes =
+        WideCharToMultiByte(CP_UTF8, 0, printable.data(), static_cast<int>(printable.size()),
+                            nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) {
+        return {};
     }
+    std::string result(static_cast<std::size_t>(bytes), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, printable.data(), static_cast<int>(printable.size()),
+                        result.data(), bytes, nullptr, nullptr);
     return result;
 }
 

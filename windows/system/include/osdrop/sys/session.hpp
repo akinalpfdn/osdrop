@@ -31,7 +31,7 @@ namespace osdrop::sys {
 /// Paths compared as Windows does: without regard to case.
 [[nodiscard]] bool same_path(std::wstring_view a, std::wstring_view b);
 
-/// ASCII text for SIDs and paths in log lines; other characters become '?'.
-[[nodiscard]] std::string ascii(std::wstring_view text);
+/// SIDs and paths for log lines: UTF-8, control characters as '?', so a line stays one line.
+[[nodiscard]] std::string log_text(std::wstring_view text);
 
 } // namespace osdrop::sys
