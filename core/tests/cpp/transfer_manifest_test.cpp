@@ -222,4 +222,25 @@ TEST(TransferManifest, LinksKeepPointingAtTheSameEntryAfterMapping) {
     EXPECT_EQ(transfer::mapped_link_target(plan, l1, ""), std::nullopt);
 }
 
+TEST(TransferManifest, ABackslashInAMacNameIsPartOfTheNameNotASeparator) {
+    // A Mac may name a file "a\b"; a link to it must not lead to "a/b" instead.
+    for (const auto target : {transfer::TargetPlatform::MacOS, transfer::TargetPlatform::Windows}) {
+        transfer::ManifestCollector collector(target);
+        ASSERT_TRUE(
+            collector
+                .add({.request_id = 1,
+                      .is_last = true,
+                      .entries = {folder_entry("Item"), folder_entry("Item/a"), file("Item/a/b"),
+                                  file(R"(Item/a\b)"), link("Item/l", 5)}})
+                .has_value());
+        const auto& plan = collector.plan();
+        const std::size_t l = plan.index_of.at("Item/l");
+        const std::string& named = plan.entries.at(plan.index_of.at(R"(Item/a\b)")).target;
+        EXPECT_EQ(transfer::mapped_link_target(plan, l, R"(a\b)"),
+                  named.substr(named.find('/') + 1))
+            << "the file whose name has the backslash";
+        EXPECT_EQ(transfer::mapped_link_target(plan, l, "a/b"), "a/b");
+    }
+}
+
 } // namespace
