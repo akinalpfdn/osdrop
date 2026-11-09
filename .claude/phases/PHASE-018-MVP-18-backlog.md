@@ -1,6 +1,6 @@
 # Phase 018 (MVP-18) — Windows app UI
-Status: ACTIVE — code done on `feature/phase-17-windows-ui` (stacked on Phase 3's branch); the UI is
-tried on the PC next (TESTING WU1–WU9)
+Status: BACKLOG — code done (PR #19); the panel, settings and crossing were tried on the PC
+(user, 2026-11-09: "çok iyi"); TESTING WU1–WU9 are open as rows
 
 DEVPLAN reference: Phase 17. Depends on: Phases 12, 14, 15
 
