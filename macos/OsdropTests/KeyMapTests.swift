@@ -132,3 +132,28 @@ struct ClickCounterTests {
         #expect(counter.press(.right, at: CGPoint(x: 10, y: 0), time: 1.9) == 1)
     }
 }
+
+@Suite("Input forwarder")
+struct InputForwarderTests {
+    private let held = CGPoint(x: 500, y: 300)
+
+    private func event(_ event: InputEvent, at seconds: Double) -> CapturedInput {
+        CapturedInput(event: event, timestamp: 0, location: held, tapTime: UInt64(seconds * 1e9))
+    }
+
+    private func clickCount(_ forwarder: inout InputForwarder, at seconds: Double) -> UInt8? {
+        let pressed = forwarder.convert(event(.button(.left, isDown: true), at: seconds))
+        _ = forwarder.convert(event(.button(.left, isDown: false), at: seconds + 0.05))
+        if case .button(_, _, let count, _) = pressed { return count }
+        return nil
+    }
+
+    @Test("Captured clicks count where they land on the other computer")
+    func capturedClicks() {
+        var forwarder = InputForwarder(doubleClickInterval: 0.5)
+        #expect(clickCount(&forwarder, at: 1.0) == 1)
+        _ = forwarder.convert(event(.pointerMoved(dx: 40, dy: 0), at: 1.1))
+        #expect(clickCount(&forwarder, at: 1.15) == 1, "the cursor moved on there, though it is held here")
+        #expect(clickCount(&forwarder, at: 1.3) == 2)
+    }
+}

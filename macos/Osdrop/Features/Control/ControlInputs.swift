@@ -66,12 +66,18 @@ struct InputForwarder {
 
     private var clicks: ClickCounter
     private var clickCounts: [MouseButton: Int] = [:]
+    /// Where clicks are counted from: the cursor's location, plus the movement made while it
+    /// stands still. During capture the cursor is held in place while it moves on another
+    /// computer, so quick clicks on different things there stay single clicks.
+    private var pointer = CGPoint.zero
+    private var lastLocation: CGPoint?
 
     init(doubleClickInterval: TimeInterval) {
         clicks = ClickCounter(interval: doubleClickInterval, radius: Tunables.Input.clickRadius)
     }
 
     mutating func convert(_ captured: CapturedInput) -> ControlInput? {
+        follow(captured)
         let position = ControlCoordinates.coord(captured.location)
         switch captured.event {
         case .pointerMoved(let dx, let dy):
@@ -83,7 +89,7 @@ struct InputForwarder {
             let seconds = Double(captured.tapTime) / 1e9
             let count: Int
             if isDown {
-                count = clicks.press(button, at: captured.location, time: seconds)
+                count = clicks.press(button, at: pointer, time: seconds)
                 clickCounts[button] = count
             } else {
                 count = clickCounts[button] ?? 1
@@ -92,6 +98,16 @@ struct InputForwarder {
                 UInt8(button.number), isDown: isDown, clickCount: UInt8(clamping: count), position: position)
         case .scroll(let delta):
             return .scroll(ControlScroll.stroke(delta), position: position)
+        }
+    }
+
+    private mutating func follow(_ captured: CapturedInput) {
+        if captured.location != lastLocation {
+            pointer = captured.location
+            lastLocation = captured.location
+        } else if case .pointerMoved(let dx, let dy) = captured.event {
+            pointer.x += dx
+            pointer.y += dy
         }
     }
 
