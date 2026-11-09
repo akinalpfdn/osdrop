@@ -109,6 +109,10 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult SetHotkeys(nint engine, NativeHotkey* returnHotkey, NativeHotkey* lockHotkey);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_respects_cursor_clip")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetRespectsCursorClip(nint engine, byte respects);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_lock_input")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult LockInput(nint engine, byte locked);

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -149,6 +150,24 @@ TEST_F(InputForwarderTest, OtherReportsAreNoInput) {
     EXPECT_FALSE(forwarder.convert(input::LocalInput{}, now).has_value());
     EXPECT_FALSE(forwarder.convert(input::Released{}, now).has_value());
     EXPECT_FALSE(forwarder.convert(input::HotkeyPressed{}, now).has_value());
+}
+
+TEST_F(InputForwarderTest, PushingAtTheEdgeOfAGamesRectangleMovesNothing) {
+    // A full-screen game on the main monitor holds the cursor there.
+    forwarder.set_clip(osdrop::win::PixelRect{.left = 0, .top = 0, .right = 1920, .bottom = 1080});
+    osdrop_input event = convert(input::WatchedMotion{.x = 1925, .y = 300, .dx = 6, .dy = 2});
+    EXPECT_EQ(event.x, 1919 * kSixteenths);
+    EXPECT_EQ(event.dx, 0) << "no push past the edge";
+    EXPECT_EQ(event.dy, 2 * kSixteenths) << "along the edge it still moves";
+    event = convert(input::WatchedMotion{.x = 1910, .y = 300, .dx = -4, .dy = 0});
+    EXPECT_EQ(event.dx, -4 * kSixteenths) << "inside it moves as before";
+
+    forwarder.set_clip(std::nullopt);
+    event = convert(input::WatchedMotion{.x = 1925, .y = 300, .dx = 6, .dy = 0});
+    EXPECT_EQ(event.dx, 6 * kSixteenths) << "let go, the push crosses again";
+    forwarder.set_clip(osdrop::win::PixelRect{});
+    event = convert(input::WatchedMotion{.x = 1925, .y = 300, .dx = 6, .dy = 0});
+    EXPECT_EQ(event.dx, 6 * kSixteenths) << "an empty rectangle holds nothing";
 }
 
 } // namespace

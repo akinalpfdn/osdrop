@@ -402,7 +402,9 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
         *engine->group,
         osdrop::engine::InputBridge::Listener{
             .reachable = [events](bool reachable) { events->input_reachable(reachable); },
-            .locked = [events](bool locked) { events->input_locked(locked); }});
+            .locked = [events](bool locked) { events->input_locked(locked); },
+            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); }});
+    engine->input->set_respects_clip(config->respects_cursor_clip == 1);
     if (const auto chords = chords_of(config->return_hotkey, config->lock_hotkey)) {
         engine->input->set_chords(chords->first, chords->second);
     } else {
@@ -647,6 +649,14 @@ osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->input->set_chords(chords->first, chords->second);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_set_respects_cursor_clip(osdrop_engine* engine, uint8_t respects) {
+    if (engine == nullptr || respects > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->input->set_respects_clip(respects == 1);
     return OSDROP_OK;
 }
 

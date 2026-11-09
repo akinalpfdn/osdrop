@@ -40,6 +40,7 @@ public:
     struct Listener {
         std::function<void(bool reachable)> reachable; ///< whether OsdropInput answers
         std::function<void(bool locked)> locked;       ///< "lock input here"
+        std::function<void(const char* message)> log;  ///< a line for the shell's log
     };
 
     InputBridge(win::GroupEngine& group, Listener listener);
@@ -61,6 +62,9 @@ public:
     void set_monitors(std::vector<win::PhysicalMonitor> monitors);
     /// "Lock input here", from the shell or the lock hotkey. Any thread.
     void set_locked(bool locked);
+    /// Whether a rectangle an application holds the cursor in (a game) keeps it from crossing.
+    /// Any thread.
+    void set_respects_clip(bool respects);
     /// The user's chords (a valid pair), sent to OsdropInput now and after every reconnect. Any
     /// thread.
     void set_chords(const win::input::Chord& return_home, const win::input::Chord& lock_input);
@@ -96,6 +100,7 @@ private:
     void send_chords(const Chords& chords);
     void tick();
     void watch_cursor();
+    void check_clip();
     void report_caps_lock();
 
     // The pipe's reader thread.
@@ -126,6 +131,7 @@ private:
     std::atomic<bool> capturing_{false};
     std::atomic<bool> closed_{false};
     std::atomic<bool> locked_{false}; // "lock input here"
+    std::atomic<bool> respects_clip_{true};
 
     // The bridge's thread only.
     std::unique_ptr<sys::InputClient> client_;
@@ -139,7 +145,9 @@ private:
     Clock::time_point last_heartbeat_;
     Clock::time_point last_cursor_check_;
     Clock::time_point last_caps_check_;
-    Clock::time_point caps_settled_; // Caps Lock set by Osdrop is read again only after this
+    Clock::time_point last_clip_check_;
+    std::optional<win::PixelRect> clip_; // as last given to the forwarder
+    Clock::time_point caps_settled_;     // Caps Lock set by Osdrop is read again only after this
     std::optional<bool> caps_reported_;
 
     std::thread thread_; // declared last: starts once everything above exists

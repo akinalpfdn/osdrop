@@ -540,4 +540,10 @@
   <data name="KeyWindows" xml:space="preserve">
     <value>Win</value>
   </data>
+  <data name="SettingsGameCursor" xml:space="preserve">
+    <value>Don't cross while a game holds the cursor</value>
+  </data>
+  <data name="SettingsGameCursorDescription" xml:space="preserve">
+    <value>A game that keeps the cursor on its monitor keeps it on this PC too. Games in a window that do not hold the cursor still let it cross.</value>
+  </data>
 </root>

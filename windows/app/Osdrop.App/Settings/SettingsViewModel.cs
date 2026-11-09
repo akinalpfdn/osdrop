@@ -173,6 +173,21 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>No crossing while a game holds the cursor on its monitor.</summary>
+    public bool RespectsGameCursor
+    {
+        get => Settings.RespectsGameCursor;
+        set
+        {
+            if (value != Settings.RespectsGameCursor)
+            {
+                Settings.RespectsGameCursor = value;
+                OnPropertyChanged();
+                _ = _engine.SetRespectsGameCursorAsync(value);
+            }
+        }
+    }
+
     public static double MinPushSeconds => AppTunables.MinPushSeconds;
     public static double MaxPushSeconds => AppTunables.MaxPushSeconds;
     public static double PushSecondsStep => AppTunables.PushSecondsStep;

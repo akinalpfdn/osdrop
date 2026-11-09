@@ -212,6 +212,7 @@ internal unsafe struct NativeEngineConfig
     public NativeInputSettings Input;
     public NativeHotkey ReturnHotkey;
     public NativeHotkey LockHotkey;
+    public byte RespectsCursorClip;
 }
 
 /// <summary>osdrop_engine_input_state.</summary>

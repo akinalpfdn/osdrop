@@ -55,6 +55,10 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial uint PushMilliseconds { get; set; } = AppTunables.DefaultPushMilliseconds;
 
+    /// <summary>No crossing while a game holds the cursor on its monitor (as it reaches no other monitor).</summary>
+    [ObservableProperty]
+    public partial bool RespectsGameCursor { get; set; } = true;
+
     /// <summary>The chord that brings the cursor home.</summary>
     [ObservableProperty]
     public partial Hotkey ReturnHotkey { get; set; } = Hotkey.DefaultReturnHome;
@@ -70,7 +74,7 @@ public sealed partial class AppSettings : ObservableObject
     internal InputSettings Input => new(ModifierMapping, CrossesImmediately, CrossingModifiers, PushMilliseconds);
 
     internal EngineOptions EngineOptions =>
-        new(DeviceName, SharesClipboard, ClipboardFilesLimit, Input, ReturnHotkey, LockHotkey);
+        new(DeviceName, SharesClipboard, ClipboardFilesLimit, Input, ReturnHotkey, LockHotkey, RespectsGameCursor);
 
     public static AppSettings Load()
     {
@@ -133,6 +137,7 @@ public sealed partial class AppSettings : ObservableObject
             PushMilliseconds = Math.Clamp(
                 stored.PushMilliseconds, (uint)(AppTunables.MinPushSeconds * 1000), (uint)(AppTunables.MaxPushSeconds * 1000));
             (ReturnHotkey, LockHotkey) = Usable(stored.ReturnHotkey, stored.LockHotkey);
+            RespectsGameCursor = stored.RespectsGameCursor;
             PointerSpeeds = (stored.PointerSpeeds ?? [])
                 .Where(entry => entry.Value is >= 250 and <= 4000 && entry.Key.Length == NativeSizes.DeviceId * 2)
                 .ToDictionary(entry => entry.Key, entry => entry.Value);
@@ -152,7 +157,7 @@ public sealed partial class AppSettings : ObservableObject
         var stored = new Stored(
             DeviceName, ChecksForUpdates, LastUpdateCheck, SharesClipboard, ClipboardFilesLimit, ModifierMapping,
             CrossesImmediately, CrossingModifiers, PushMilliseconds, new Dictionary<string, uint>(PointerSpeeds),
-            ReturnHotkey, LockHotkey);
+            ReturnHotkey, LockHotkey, RespectsGameCursor);
         try
         {
             _ = Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -176,7 +181,8 @@ public sealed partial class AppSettings : ObservableObject
         uint PushMilliseconds = AppTunables.DefaultPushMilliseconds,
         Dictionary<string, uint>? PointerSpeeds = null,
         Hotkey? ReturnHotkey = null,
-        Hotkey? LockHotkey = null);
+        Hotkey? LockHotkey = null,
+        bool RespectsGameCursor = true);
 
     /// <summary>Stored chords, or the defaults when they are missing, damaged or the same.</summary>
     private static (Hotkey Return, Hotkey Lock) Usable(Hotkey? returnHome, Hotkey? lockInput) =>

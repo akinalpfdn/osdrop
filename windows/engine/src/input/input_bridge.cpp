@@ -19,6 +19,8 @@ constexpr auto kTickInterval = std::chrono::milliseconds(100);
 constexpr auto kCursorCheckInterval = std::chrono::milliseconds(100);
 /// Farther than this from where Osdrop put it, the cursor was moved by something else.
 constexpr LONG kCursorReportDistance = 2;
+/// While watching, how often the rectangle a game may hold the cursor in is read.
+constexpr auto kClipCheckInterval = std::chrono::milliseconds(100);
 /// While the cursor is home, how often Caps Lock is read; after Osdrop sets it, how long before.
 constexpr auto kCapsCheckInterval = std::chrono::milliseconds(250);
 constexpr auto kCapsSettleTime = std::chrono::milliseconds(300);
@@ -362,6 +364,44 @@ void InputBridge::tick() {
         last_caps_check_ = now;
         report_caps_lock();
     }
+    if (watching_ && !capturing_ && now - last_clip_check_ >= kClipCheckInterval) {
+        last_clip_check_ = now;
+        check_clip();
+    }
+}
+
+void InputBridge::set_respects_clip(bool respects) {
+    respects_clip_ = respects; // the next check applies it
+}
+
+void InputBridge::check_clip() {
+    // A game that keeps the cursor on its monitor holds it in a rectangle smaller than the
+    // desktop; then it does not cross to another computer either.
+    std::optional<win::PixelRect> clip;
+    RECT held{};
+    if (respects_clip_ && GetClipCursor(&held) != FALSE) {
+        const RECT desktop{
+            .left = GetSystemMetrics(SM_XVIRTUALSCREEN),
+            .top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+            .right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            .bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        const bool smaller = held.left > desktop.left || held.top > desktop.top ||
+                             held.right < desktop.right || held.bottom < desktop.bottom;
+        if (smaller) {
+            clip = win::PixelRect{
+                .left = held.left, .top = held.top, .right = held.right, .bottom = held.bottom};
+        }
+    }
+    if (clip == clip_) {
+        return;
+    }
+    if (clip.has_value() != clip_.has_value() && listener_.log) {
+        listener_.log(clip ? "An application holds the cursor: no crossings"
+                           : "The cursor is free again: crossings resume");
+    }
+    clip_ = clip;
+    const std::scoped_lock lock(forwarder_mutex_);
+    forwarder_.set_clip(clip);
 }
 
 void InputBridge::watch_cursor() {

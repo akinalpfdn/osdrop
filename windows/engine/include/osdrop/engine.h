@@ -108,6 +108,8 @@ typedef struct osdrop_engine_config {
     osdrop_input_settings input;
     osdrop_engine_hotkey return_hotkey; /* brings the cursor home */
     osdrop_engine_hotkey lock_hotkey;   /* "lock input here" */
+    uint8_t
+        respects_cursor_clip; /* 1: no crossing while an application (a game) holds the cursor */
 } osdrop_engine_config;
 
 /* A computer nearby that is not a member of this PC's group. */
@@ -189,6 +191,9 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_set_pointer_speed(osdrop_engine* e
 OSDROP_ENGINE_API osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
                                                           const osdrop_engine_hotkey* return_hotkey,
                                                           const osdrop_engine_hotkey* lock_hotkey);
+/* Whether no crossing happens while an application (a game) holds the cursor in a rectangle. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_respects_cursor_clip(osdrop_engine* engine,
+                                                                       uint8_t respects);
 /* "Lock input here" (also toggled by the lock hotkey); INPUT_CHANGED follows. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_lock_input(osdrop_engine* engine, uint8_t locked);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_get_input_state(osdrop_engine* engine,

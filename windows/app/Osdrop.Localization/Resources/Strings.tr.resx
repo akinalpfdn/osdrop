@@ -540,4 +540,10 @@
   <data name="KeyWindows" xml:space="preserve">
     <value>Win</value>
   </data>
+  <data name="SettingsGameCursor" xml:space="preserve">
+    <value>Bir oyun imleci tutarken geçme</value>
+  </data>
+  <data name="SettingsGameCursorDescription" xml:space="preserve">
+    <value>İmleci kendi monitöründe tutan bir oyun onu bu PC'de de tutar. İmleci tutmayan pencereli oyunlar geçişe yine izin verir.</value>
+  </data>
 </root>

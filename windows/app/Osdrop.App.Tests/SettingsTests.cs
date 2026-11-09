@@ -68,6 +68,11 @@ public sealed class SettingsTests
         var engine = new FakeEngine();
         (SettingsViewModel settings, AppSettings stored) = await MakeAsync(engine);
 
+        Assert.True(settings.RespectsGameCursor);
+        settings.RespectsGameCursor = false;
+        Assert.Equal([false], engine.GameCursorSettings);
+        Assert.False(stored.RespectsGameCursor);
+
         settings.CrossesImmediately = true;
         settings.Mapping = settings.Mappings.Single(choice => choice.Value == ModifierMapping.Positions);
         settings.PushSeconds = 1.5;

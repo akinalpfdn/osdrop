@@ -57,7 +57,7 @@ public sealed record Hotkey(byte Modifiers, ushort ScanCode, bool Extended)
 /// <summary>What the engine starts with; a new name restarts it.</summary>
 internal sealed record EngineOptions(
     string? DeviceName, bool SharesClipboard, ulong ClipboardFilesLimit, InputSettings Input,
-    Hotkey ReturnHotkey, Hotkey LockHotkey);
+    Hotkey ReturnHotkey, Hotkey LockHotkey, bool RespectsGameCursor);
 
 /// <summary>A monitor's logical frame in the arrangement, in 1/16 of a unit, relative to its computer.</summary>
 internal readonly record struct MonitorFrame(int X, int Y, int Width, int Height);
@@ -127,6 +127,8 @@ internal interface IGroupEngine
     Task<CoreResult> SetClipboardAsync(bool shared, ulong filesLimit);
     /// <summary>INVALID_ARGUMENT for a chord the hook cannot match.</summary>
     Task<CoreResult> SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput);
+    /// <summary>Whether no crossing happens while a game holds the cursor on its monitor.</summary>
+    Task<CoreResult> SetRespectsGameCursorAsync(bool respects);
     Task<CoreResult> LockInputAsync(bool locked);
     Task<InputState> GetInputStateAsync();
     Task DismissInputNoticeAsync();

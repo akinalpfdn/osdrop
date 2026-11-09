@@ -6,7 +6,9 @@
 // movement still pushes past an outer edge; a captured one waits at the park point. Clicks are
 // counted with this PC's double-click settings, by where the cursor is on the computer the input
 // goes to, so quick clicks on different things there stay single clicks; a key that goes down
-// again while down is a repeat. Portable and unit tested.
+// again while down is a repeat. While a game holds the cursor in a rectangle (ClipCursor), the
+// cursor stays in it and pushing against its edges moves nothing, so it crosses to no other
+// computer, as it reaches no other monitor. Portable and unit tested.
 
 #include <osdrop/osdrop.h>
 #include <osdrop/win/input_protocol.hpp>
@@ -26,6 +28,15 @@ struct Pixel {
     std::int32_t x = 0;
     std::int32_t y = 0;
     bool operator==(const Pixel&) const = default;
+};
+
+/// A rectangle of physical pixels; right and bottom are outside it.
+struct PixelRect {
+    std::int32_t left = 0;
+    std::int32_t top = 0;
+    std::int32_t right = 0;
+    std::int32_t bottom = 0;
+    bool operator==(const PixelRect&) const = default;
 };
 
 /// GetDoubleClickTime and SM_CXDOUBLECLK, SM_CYDOUBLECLK: a press continues a double click within
@@ -50,6 +61,8 @@ public:
 
     /// This PC's monitors, which a watched cursor stays on.
     void set_monitors(std::vector<PhysicalMonitor> monitors);
+    /// The rectangle an application holds the cursor in; nullopt while it moves freely.
+    void set_clip(std::optional<PixelRect> clip);
     /// Capture began: the cursor waits at `park` until release(), which shows it at `at`. A double
     /// click never spans the two.
     void capture(Pixel park);
@@ -82,6 +95,7 @@ private:
 
     ClickSettings clicks_;
     std::vector<PhysicalMonitor> monitors_;
+    std::optional<PixelRect> clip_;
     Pixel position_;
     bool captured_ = false;
     Pixel travelled_; ///< while captured: the movement since, for counting clicks

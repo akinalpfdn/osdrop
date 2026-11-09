@@ -38,6 +38,11 @@ std::int32_t added(std::int32_t a, std::int32_t b) {
         std::int64_t{a} + b, -input::kMaxCoordinate, input::kMaxCoordinate));
 }
 
+Pixel in_rect(Pixel point, const PixelRect& rect) {
+    return {.x = std::clamp(point.x, rect.left, rect.right - 1),
+            .y = std::clamp(point.y, rect.top, rect.bottom - 1)};
+}
+
 std::int64_t squared(std::int64_t value) {
     return value * value;
 }
@@ -48,6 +53,13 @@ InputForwarder::InputForwarder(ClickSettings clicks) : clicks_(clicks) {}
 
 void InputForwarder::set_monitors(std::vector<PhysicalMonitor> monitors) {
     monitors_ = std::move(monitors);
+}
+
+void InputForwarder::set_clip(std::optional<PixelRect> clip) {
+    if (clip && (clip->right <= clip->left || clip->bottom <= clip->top)) {
+        clip.reset(); // an empty rectangle holds nothing
+    }
+    clip_ = clip;
 }
 
 void InputForwarder::capture(Pixel park) {
@@ -72,6 +84,15 @@ void InputForwarder::reset() {
 std::optional<Forwarded> InputForwarder::convert(const input::Report& report,
                                                  Clock::time_point now) {
     if (const auto* motion = std::get_if<input::WatchedMotion>(&report)) {
+        if (const std::optional<PixelRect>& clip = clip_) {
+            // Only the movement inside the rectangle counts: a push at its edge moves nothing.
+            const Pixel to = in_rect({.x = motion->x, .y = motion->y}, *clip);
+            const Pixel from =
+                in_rect({.x = motion->x - motion->dx, .y = motion->y - motion->dy}, *clip);
+            position_ = on_monitor(to);
+            return Forwarded{.input = pointer(to.x - from.x, to.y - from.y),
+                             .ticks = motion->ticks};
+        }
         position_ = on_monitor({.x = motion->x, .y = motion->y});
         return Forwarded{.input = pointer(motion->dx, motion->dy), .ticks = motion->ticks};
     }

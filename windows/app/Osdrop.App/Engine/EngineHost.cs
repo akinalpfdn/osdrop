@@ -135,6 +135,9 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         return SetHotkeysNative(_engine, home, lockHotkey);
     });
 
+    public Task<CoreResult> SetRespectsGameCursorAsync(bool respects) =>
+        Native.Run(() => NativeMethods.SetRespectsCursorClip(_engine, respects ? (byte)1 : (byte)0));
+
     public Task<CoreResult> LockInputAsync(bool locked) =>
         Native.Run(() => NativeMethods.LockInput(_engine, locked ? (byte)1 : (byte)0));
 
@@ -191,6 +194,7 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
                 Input = ToNative(options.Input),
                 ReturnHotkey = ToNative(options.ReturnHotkey),
                 LockHotkey = ToNative(options.LockHotkey),
+                RespectsCursorClip = options.RespectsGameCursor ? (byte)1 : (byte)0,
             };
             nint engine;
             CoreResult result = NativeMethods.Create(&config, &OnEvent, context, &engine);

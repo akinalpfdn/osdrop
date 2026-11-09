@@ -119,6 +119,14 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.FromResult(HotkeyResult);
     }
 
+    public List<bool> GameCursorSettings { get; } = [];
+
+    public Task<CoreResult> SetRespectsGameCursorAsync(bool respects)
+    {
+        GameCursorSettings.Add(respects);
+        return Task.FromResult(CoreResult.Ok);
+    }
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);
