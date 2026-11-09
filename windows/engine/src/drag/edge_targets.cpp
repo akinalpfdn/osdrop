@@ -167,7 +167,7 @@ std::vector<std::filesystem::path> saved_virtual_files(IDataObject* data) {
         const std::filesystem::path path = folder / relative;
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
-        const bool is_folder = (file.dwFlags & FD_ATTRIBUTES) != 0 &&
+        const bool is_folder = (file.dwFlags & static_cast<DWORD>(FD_ATTRIBUTES)) != 0 &&
                                (file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         bool saved = false;
         if (is_folder) {
@@ -178,7 +178,7 @@ std::vector<std::filesystem::path> saved_virtual_files(IDataObject* data) {
             Medium medium;
             if (SUCCEEDED(data->GetData(&content, medium.get()))) {
                 const std::uint64_t size =
-                    (file.dwFlags & FD_FILESIZE) != 0
+                    (file.dwFlags & static_cast<DWORD>(FD_FILESIZE)) != 0
                         ? (std::uint64_t{file.nFileSizeHigh} << 32U) | file.nFileSizeLow
                         : UINT64_MAX;
                 switch (medium->tymed) {

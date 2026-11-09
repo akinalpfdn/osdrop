@@ -367,13 +367,16 @@ private:
         for (std::size_t i = 0; i < files_.files.size(); ++i) {
             const shared::VirtualFile& file = files_.files[i];
             FILEDESCRIPTORW descriptor{};
-            descriptor.dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI | FD_UNICODE;
+            // FD_UNICODE is the sign bit of the enum: the flags are combined as DWORDs.
+            descriptor.dwFlags = static_cast<DWORD>(FD_ATTRIBUTES) |
+                                 static_cast<DWORD>(FD_FILESIZE) |
+                                 static_cast<DWORD>(FD_PROGRESSUI) | static_cast<DWORD>(FD_UNICODE);
             descriptor.dwFileAttributes =
                 file.folder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
             descriptor.nFileSizeHigh = static_cast<DWORD>(file.size >> 32U);
             descriptor.nFileSizeLow = static_cast<DWORD>(file.size & 0xFFFFFFFFU);
             if (file.write_time != 0) {
-                descriptor.dwFlags |= FD_WRITESTIME;
+                descriptor.dwFlags |= static_cast<DWORD>(FD_WRITESTIME);
                 descriptor.ftLastWriteTime = file_time(file.write_time);
             }
             const std::wstring path = wide(file.path);
