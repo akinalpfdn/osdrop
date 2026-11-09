@@ -308,6 +308,20 @@ these tests take over input on every computer they cross.
 | U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
 | U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
 
+### Windows interface (Phase 17)
+
+On the PC with Osdrop built from the branch, the service installed and a Mac in the group.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| WU1 | Icon and panel | Look at the notification area, click the icon, click elsewhere; switch the taskbar between light and dark (Settings › Personalization › Colors) | Osdrop's glyph shows, readable on both taskbars; the click opens the panel above the taskbar and a click elsewhere closes it; Osdrop.exe has the same icon in Explorer |
+| WU2 | Light and dark, Turkish | Switch Windows between light and dark mode with the panel and Settings open; switch the display language to Turkish and start Osdrop again | Both windows change colors at once; every text is Turkish, nothing is cut off |
+| WU3 | Being controlled | Push the Mac's cursor into the PC; open the panel from the PC's tray with the Mac's mouse | The tray icon turns into the filled square while the Mac controls the PC; the panel says the Mac is controlling this computer |
+| WU4 | Input service | Stop the service (`OsdropService.exe --stop` as administrator), open the panel, press Repair and allow it | The panel says the service is stopped; after Repair the warning goes within a few seconds and the cursor crosses again |
+| WU5 | Arrangement | In Settings › Arrangement drag the Mac to the PC's other side | It snaps beside the PC; the Mac shows the same arrangement within a second; the cursor crosses at the new edge |
+| WU6 | Devices and input settings | Turn off "Can control this computer" for the Mac on the Mac, then rename the PC and save; change the push time and the pointer speed on the PC | The PC's cursor no longer crosses to the Mac; the Mac shows the PC's new name after it reconnects; push time and speed apply at once |
+| WU7 | Clipboard and Advanced | Turn sharing off in the panel, copy on the Mac and paste on the PC; turn it on again; press Copy in Settings › Advanced and paste it into Notepad | Nothing comes over while off; the pasted diagnostics have no computer names or addresses |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |

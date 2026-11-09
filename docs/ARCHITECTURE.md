@@ -314,6 +314,36 @@ Turkish.
   Network with their live state and links to System Settings.
 - **Errors.** `ErrorMessages` gives every core error a localized message that says what to do.
 
+## Windows interface
+
+Built in Phase 17 (`windows/app/Osdrop.App`), following Osplay's Windows shell and the Mac app
+above, so both apps work the same way: WPF-UI's Fluent controls following the system's light or
+dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
+`Osdrop.Localization` in English and Turkish.
+
+- **Tray icon and panel.** The icon is the Mac menu bar glyph, dark or light to match the taskbar,
+  filled while another computer controls this PC (`TrayIconTheme`). A click opens the panel above
+  the taskbar, the Mac menu's counterpart: where the mouse and keyboard are, the lock and
+  clipboard sharing, copied files on their way, the group and nearby computers, and Settings and
+  Quit as icons. Problems come first: an engine that did not start, the input service, an update.
+  A second start of Osdrop opens the running one's panel (`SingleInstance`).
+- **Settings.** The Mac's tabs: General (start with Windows through the Run key, daily update
+  check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
+  permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds;
+  the chords are fixed on a PC and shown), Clipboard and Files, Advanced (diagnostics without
+  names or addresses, the shell's and the input service's log folders). `AppSettings` saves every
+  change to `%APPDATA%\Osdrop\settings.json` at once and the engine gets it at once; a new name
+  restarts the engine, as the Mac restarts its mesh.
+- **Engine calls.** `Native.Run` puts every call on one queue of thread-pool threads, so the UI
+  thread never waits for native code and calls never overlap; the engine's callback posts events
+  to the dispatcher. The engine reports the input state (`osdrop_engine_get_input_state`: whether
+  OsdropInput answers, the lock, who controls this PC, where the cursor is, why it came back)
+  and an INPUT_CHANGED event when it changes; LAYOUT_CHANGED when the arrangement does.
+- **Input service.** While OsdropInput does not answer, the panel says whether the service is
+  missing, stopped or not answering (from the service manager) and offers to repair it:
+  `OsdropService.exe --install` from Osdrop's folder, elevated.
+- **Errors.** `LocalizedText.Error` gives every core error a localized message that says what to do.
+
 ## macOS input layer
 
 Built in Phase 1 (`macos/Osdrop/Services/Input`):

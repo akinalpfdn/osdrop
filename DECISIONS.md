@@ -643,3 +643,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Only the hook sees keys while they are swallowed, and the way out must work when the engine or core hangs, as the Mac's tap and capture guard do.
 **Trade-offs:** The chords are fixed until the Windows settings (Phase 17).
 **Revisit if:** Users report clashes with Ctrl+Alt+Win+K or Esc.
+
+---
+
+## 2026-11-09 — The Windows interface follows Osplay's shell; the engine reports the input state
+**Chosen:** The shell is Osplay's: WPF-UI following the system theme live, a tray icon whose click opens a panel above the taskbar, a tabbed Settings window, settings in `%APPDATA%\Osdrop\settings.json`, one instance per session. Its contents are the Mac's, tab for tab. The engine reports what the panel needs from its own state (`osdrop_engine_get_input_state` and INPUT_CHANGED) instead of passing core's control callbacks through; a new name restarts the engine, as the Mac restarts its mesh. While OsdropInput does not answer, the panel names the cause from the service manager and repairs it by running `OsdropService.exe --install` elevated. The tray icon is the Mac menu bar glyph, drawn into .ico files by a script, and filled while another computer controls the PC.
+**Alternatives:** A main window instead of a tray panel; core's callbacks forwarded one by one to C#; a repair that starts the service through the service manager (needs the same elevation, cannot install a missing one).
+**Why:** The two Osdrop apps and the two sibling products should look and behave alike. The shell must read the state again after it starts or restarts the engine, which events alone cannot give; one state call can.
+**Trade-offs:** Renaming drops every session for a moment. The chords are still fixed on a PC; Settings shows them.
+**Revisit if:** Users want the PC's chords changeable (needs a request in the input pipe and a recorder in Settings).
