@@ -148,6 +148,8 @@ public:
     void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
     void controlled(bool /*controlled*/) override {}
     void inject(const osdrop_input& /*input*/) override {}
+    void capture_began(const std::vector<osdrop_input>& /*release_here*/) override {}
+    void capture_ended(const osdrop::win::CaptureEnd& /*end*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);

@@ -92,6 +92,17 @@ struct EngineInfo {
     std::uint16_t listen_port = 0;
 };
 
+/// How the cursor came back to this PC, as osdrop_mesh_callbacks.capture_ended reports it.
+struct CaptureEnd {
+    DeviceIdBytes device{};
+    std::int32_t x = 0; ///< where the cursor shows, in 1/16 physical pixel
+    std::int32_t y = 0;
+    std::uint8_t reason = 0;  ///< 1 pushed back, 2 hotkey, 3 capture lost, 4 refused, 5 someone
+                              ///< used the other computer, 6 it stopped answering or left
+    std::uint8_t refused = 0; ///< reason 4: 1 locked, 2 asleep, 3 not permitted, 4 busy
+    bool caps_lock = false;   ///< as the user left it on the other computers
+};
+
 /// What the shell hears, on core's or DNS-SD's threads. Callbacks must return quickly and must
 /// not call the engine back; queue the work instead.
 class EngineEvents {
@@ -122,6 +133,11 @@ public:
     virtual void controlled(bool controlled) = 0;
     /// Input from the controlling computer, to inject here.
     virtual void inject(const osdrop_input& input) = 0;
+    /// The cursor went to another computer: capture this PC's input. The keys in `release_here`
+    /// (KEY inputs, action 2) went down here; their release now goes to the other computer.
+    virtual void capture_began(const std::vector<osdrop_input>& release_here) = 0;
+    /// The cursor came back: give this PC its input again.
+    virtual void capture_ended(const CaptureEnd& end) = 0;
 };
 
 /// What a PC can do so far: be controlled through the input process (DEVPLAN Phase 3), share the
@@ -170,10 +186,15 @@ public:
     [[nodiscard]] osdrop_result leave_group();
     [[nodiscard]] osdrop_result set_screens(std::span<const osdrop_monitor> monitors);
     /// As osdrop_mesh_input, osdrop_mesh_set_unavailable and osdrop_mesh_cursor_moved: this PC's
-    /// own input, whether it can be controlled, and where something else moved its cursor.
-    void physical_input(const osdrop_input& input);
+    /// own input, captured `age_us` ago, whether it can be controlled, and where something else
+    /// moved its cursor.
+    void physical_input(const osdrop_input& input, std::uint64_t age_us);
     void set_unavailable(std::uint8_t reason);
     void cursor_moved(std::int32_t x, std::int32_t y);
+    /// As osdrop_mesh_return_home, osdrop_mesh_lock_input and osdrop_mesh_set_caps_lock.
+    void return_home(bool input_lost);
+    void lock_input(bool locked);
+    void set_caps_lock(bool on);
     /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.
     void close_all(bool sleeping);
     /// After waking: browses again, so members are found and dialled again.
@@ -195,6 +216,8 @@ private:
     void found(const DiscoveredComputer& computer);
     void lost(const std::string& label);
     [[nodiscard]] osdrop_mesh_callbacks callbacks();
+    /// Core's callbacks for the cursor and keyboard across computers.
+    static void control_callbacks(osdrop_mesh_callbacks& result);
 
     Config config_;
     StateStore& store_;

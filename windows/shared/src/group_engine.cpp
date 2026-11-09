@@ -297,6 +297,17 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
             engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
         }
     };
+    control_callbacks(result);
+    result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
+        auto* engine = static_cast<GroupEngine*>(context);
+        if (engine->clipboard_ && progress != nullptr) {
+            engine->clipboard_->transfer_progress(progress->transfer_id, progress->bytes_done);
+        }
+    };
+    return result;
+}
+
+void GroupEngine::control_callbacks(osdrop_mesh_callbacks& result) {
     result.controlled = [](void* context, const std::uint8_t* controller) {
         static_cast<GroupEngine*>(context)->events_.controlled(controller != nullptr);
     };
@@ -305,13 +316,23 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
             static_cast<GroupEngine*>(context)->events_.inject(*input);
         }
     };
-    result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
-        auto* engine = static_cast<GroupEngine*>(context);
-        if (engine->clipboard_ && progress != nullptr) {
-            engine->clipboard_->transfer_progress(progress->transfer_id, progress->bytes_done);
-        }
+    result.capture_began = [](void* context, const std::uint8_t* /*device*/,
+                              const osdrop_input* release_here, std::size_t count) {
+        const auto keys = std::span(release_here, release_here == nullptr ? 0 : count);
+        static_cast<GroupEngine*>(context)->events_.capture_began(
+            std::vector<osdrop_input>(keys.begin(), keys.end()));
     };
-    return result;
+    result.capture_ended = [](void* context, const std::uint8_t* device, std::int32_t x,
+                              std::int32_t y, std::uint8_t reason, std::uint8_t refused,
+                              std::uint8_t caps_lock) {
+        static_cast<GroupEngine*>(context)->events_.capture_ended(
+            {.device = bytes_of<OSDROP_DEVICE_ID_SIZE>(device),
+             .x = x,
+             .y = y,
+             .reason = reason,
+             .refused = refused,
+             .caps_lock = caps_lock == 1});
+    };
 }
 
 // --- Discovery -----------------------------------------------------------------------------------
@@ -489,8 +510,20 @@ osdrop_result GroupEngine::leave_group() {
     return osdrop_mesh_leave_group(mesh_);
 }
 
-void GroupEngine::physical_input(const osdrop_input& input) {
-    static_cast<void>(osdrop_mesh_input(mesh_, &input, 0)); // fails only for invalid input
+void GroupEngine::physical_input(const osdrop_input& input, std::uint64_t age_us) {
+    static_cast<void>(osdrop_mesh_input(mesh_, &input, age_us)); // fails only for invalid input
+}
+
+void GroupEngine::return_home(bool input_lost) {
+    static_cast<void>(osdrop_mesh_return_home(mesh_, input_lost ? 1 : 0));
+}
+
+void GroupEngine::lock_input(bool locked) {
+    static_cast<void>(osdrop_mesh_lock_input(mesh_, locked ? 1 : 0));
+}
+
+void GroupEngine::set_caps_lock(bool on) {
+    static_cast<void>(osdrop_mesh_set_caps_lock(mesh_, on ? 1 : 0));
 }
 
 void GroupEngine::set_unavailable(std::uint8_t reason) {
