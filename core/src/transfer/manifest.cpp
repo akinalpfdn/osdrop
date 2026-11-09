@@ -282,19 +282,15 @@ Status<Error> ManifestCollector::add(const protocol::Manifest& part) {
     return Status<Error>::ok();
 }
 
-std::optional<std::string> mapped_link_target(const ReceivePlan& plan, std::size_t link,
-                                              std::string_view target) {
-    std::string text(target);
-    std::ranges::replace(text, '\\', '/'); // a target written on Windows
-    const bool drive = text.size() >= 2 && text[1] == ':' &&
-                       ((text[0] >= 'A' && text[0] <= 'Z') || (text[0] >= 'a' && text[0] <= 'z'));
-    if (text.empty() || text.front() == '/' || drive) {
-        return std::nullopt;
-    }
+namespace {
+
+/// The entry `target` leads to from `link`, inside the link's own item; nullopt for none.
+std::optional<std::size_t> resolved_entry(const ReceivePlan& plan, std::size_t link,
+                                          std::string_view target) {
     const PlannedEntry& entry = plan.entries.at(link);
     std::vector<std::string> resolved = split(entry.entry.path);
     resolved.pop_back();
-    for (const std::string& part : split(text)) {
+    for (const std::string& part : split(target)) {
         if (part.empty() || part == ".") {
             continue;
         }
@@ -315,9 +311,34 @@ std::optional<std::string> mapped_link_target(const ReceivePlan& plan, std::size
     if (found == plan.index_of.end() || found->second == link) {
         return std::nullopt;
     }
-    std::vector<std::string> from = split(entry.target);
+    return found->second;
+}
+
+} // namespace
+
+std::optional<std::string> mapped_link_target(const ReceivePlan& plan, std::size_t link,
+                                              std::string_view target) {
+    const bool drive =
+        target.size() >= 2 && target[1] == ':' &&
+        ((target[0] >= 'A' && target[0] <= 'Z') || (target[0] >= 'a' && target[0] <= 'z'));
+    if (target.empty() || target.front() == '/' || target.front() == '\\' || drive) {
+        return std::nullopt;
+    }
+    // A backslash is part of a name on a Mac and a separator on Windows, where no name has one:
+    // the target is read as it is first, and with backslashes as separators only when that
+    // leads nowhere.
+    std::optional<std::size_t> found = resolved_entry(plan, link, target);
+    if (!found && target.find('\\') != std::string_view::npos) {
+        std::string separated(target);
+        std::ranges::replace(separated, '\\', '/');
+        found = resolved_entry(plan, link, separated);
+    }
+    if (!found) {
+        return std::nullopt;
+    }
+    std::vector<std::string> from = split(plan.entries.at(link).target);
     from.pop_back();
-    const std::vector<std::string> to = split(plan.entries.at(found->second).target);
+    const std::vector<std::string> to = split(plan.entries.at(*found).target);
     const auto [from_end, to_end] = std::ranges::mismatch(from, to);
     std::vector<std::string> relative(static_cast<std::size_t>(from.end() - from_end), "..");
     relative.insert(relative.end(), to_end, to.end());
