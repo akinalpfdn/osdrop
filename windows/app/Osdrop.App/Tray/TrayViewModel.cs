@@ -2,27 +2,15 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Osdrop.App.Tray;
 
-/// <summary>Commands behind the tray icon's context menu.</summary>
-public sealed partial class TrayViewModel(Action openComputers, Action openMesh, Action shutdown)
+/// <summary>What the tray icon does: a click opens the panel; its menu has the quick actions.</summary>
+public sealed partial class TrayViewModel(Action togglePanel, Action openSettings, Func<Task> quit)
 {
-    private readonly Action _openComputers = openComputers;
-    private readonly Action _openMesh = openMesh;
-    private readonly Action _shutdown = shutdown;
-
-    /// <summary>The mesh window is a developer tool.</summary>
-    public static bool ShowsMesh =>
-#if DEBUG
-        true;
-#else
-        false;
-#endif
+    [RelayCommand]
+    private void TogglePanel() => togglePanel();
 
     [RelayCommand]
-    private void OpenComputers() => _openComputers();
+    private void OpenSettings() => openSettings();
 
     [RelayCommand]
-    private void OpenMesh() => _openMesh();
-
-    [RelayCommand]
-    private void Quit() => _shutdown();
+    private Task QuitAsync() => quit();
 }

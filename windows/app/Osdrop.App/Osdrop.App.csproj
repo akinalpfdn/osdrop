@@ -9,11 +9,19 @@
     <SatelliteResourceLanguages>en;tr</SatelliteResourceLanguages>
     <!-- Function pointers and fixed buffers for the engine's C API (Interop/). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\Osdrop.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="H.NotifyIcon.Wpf" />
+    <PackageReference Include="WPF-UI" />
+  </ItemGroup>
+
+  <!-- Drawn by scripts/windows/make_icons.py from the Mac menu bar icon. -->
+  <ItemGroup>
+    <Resource Include="Assets\Osdrop.ico" />
+    <Resource Include="Assets\Tray-*.ico" />
   </ItemGroup>
 
   <ItemGroup>

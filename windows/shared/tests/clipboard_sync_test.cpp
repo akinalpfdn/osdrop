@@ -67,10 +67,12 @@ public:
     std::vector<std::tuple<std::uint64_t, std::string, std::uint64_t>> receives;
     osdrop_result refusal = OSDROP_OK;
 
-    osdrop_result copied(const ClipData& data) override {
+    osdrop_result copied(const ClipData& data, std::uint64_t& clip_id) override {
         copies.push_back(data);
+        clip_id = 100 + copies.size();
         return OSDROP_OK;
     }
+    void withdraw(std::uint64_t clip_id) override { withdrawn.push_back(clip_id); }
     osdrop_result fetch_content(const ClipDevice& /*device*/, const osdrop_object_ref& item,
                                 std::uint64_t max_bytes, std::uint64_t& id) override {
         if (refusal != OSDROP_OK) {
@@ -90,6 +92,7 @@ public:
     void cancel(std::uint64_t id) override { cancelled.push_back(id); }
 
     std::vector<std::uint64_t> cancelled;
+    std::vector<std::uint64_t> withdrawn;
 
 private:
     std::uint64_t next_ = 1;
@@ -279,6 +282,44 @@ TEST_F(ClipboardSyncTest, ANewerCopyReplacesOneStillOnItsWay) {
     sync.content_received(std::get<0>(mesh.fetches[2]), OSDROP_OK, bytes("late"));
     host.drain();
     EXPECT_EQ(host.written.size(), 1U);
+}
+
+TEST_F(ClipboardSyncTest, SharingTurnedOffWithdrawsThisCopyDropsTheFetchAndStopsBothWays) {
+    connect();
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("mine")}}, .files = {}});
+    ASSERT_EQ(mesh.copies.size(), 1U);
+    announce(8, {{.format = OSDROP_CLIPBOARD_FILES, .byte_count = 500}});
+    ASSERT_EQ(mesh.receives.size(), 1U);
+
+    sync.set_sharing(false, 1000);
+    host.drain();
+    EXPECT_EQ(mesh.withdrawn, std::vector<std::uint64_t>{101});
+    EXPECT_EQ(mesh.cancelled, std::vector<std::uint64_t>{std::get<0>(mesh.receives[0])});
+    ASSERT_FALSE(fetches.empty());
+    EXPECT_FALSE(fetches.back().has_value()) << "its files no longer come";
+
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("later")}}, .files = {}});
+    announce(9, {{.format = OSDROP_CLIPBOARD_TEXT, .byte_count = 5}});
+    EXPECT_EQ(mesh.copies.size(), 1U) << "not offered";
+    EXPECT_TRUE(mesh.fetches.empty()) << "not fetched";
+
+    sync.set_sharing(true, 1000);
+    host.drain();
+    sync.copied(
+        {.contents = {{.format = OSDROP_CLIPBOARD_TEXT, .bytes = bytes("again")}}, .files = {}});
+    EXPECT_EQ(mesh.copies.size(), 2U);
+}
+
+TEST_F(ClipboardSyncTest, ANewFilesLimitAppliesToTheNextCopy) {
+    connect();
+    sync.set_sharing(true, 400);
+    host.drain();
+    announce(10, {{.format = OSDROP_CLIPBOARD_FILES, .byte_count = 500}});
+    EXPECT_TRUE(mesh.receives.empty());
+    ASSERT_EQ(notices.size(), 1U);
+    EXPECT_EQ(std::get<0>(notices[0]), ClipboardNotice::TooLarge);
 }
 
 } // namespace

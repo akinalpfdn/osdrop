@@ -24,6 +24,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -35,7 +36,13 @@ namespace osdrop::engine {
 
 class InputBridge {
 public:
-    explicit InputBridge(win::GroupEngine& group);
+    /// What the shell shows; called on the bridge's threads, so they must return quickly.
+    struct Listener {
+        std::function<void(bool reachable)> reachable; ///< whether OsdropInput answers
+        std::function<void(bool locked)> locked;       ///< "lock input here"
+    };
+
+    InputBridge(win::GroupEngine& group, Listener listener);
     ~InputBridge();
     InputBridge(const InputBridge&) = delete;
     InputBridge& operator=(const InputBridge&) = delete;
@@ -52,6 +59,8 @@ public:
     void set_watching(bool watching);
     /// This PC's monitors, which a watched cursor stays on. Any thread.
     void set_monitors(std::vector<win::PhysicalMonitor> monitors);
+    /// "Lock input here", from the shell or the lock hotkey. Any thread.
+    void set_locked(bool locked);
 
     /// Ends the bridge's thread; what arrives later is dropped. Before the group engine goes.
     void stop();
@@ -90,6 +99,7 @@ private:
     [[nodiscard]] std::uint64_t age_us(std::uint64_t ticks) const;
 
     win::GroupEngine& group_;
+    const Listener listener_;
     const LARGE_INTEGER frequency_;
     std::mutex mutex_;
     std::condition_variable wake_;
@@ -107,7 +117,7 @@ private:
     // Read on the reader thread.
     std::atomic<bool> capturing_{false};
     std::atomic<bool> closed_{false};
-    bool locked_ = false; // "lock input here"; the reader thread only
+    std::atomic<bool> locked_{false}; // "lock input here"
 
     // The bridge's thread only.
     std::unique_ptr<sys::InputClient> client_;

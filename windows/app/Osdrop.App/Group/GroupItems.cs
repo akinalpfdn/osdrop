@@ -5,16 +5,33 @@ using Osdrop.App.Interop;
 
 namespace Osdrop.App.Group;
 
-/// <summary>A member as the group window and the mesh window show it.</summary>
+/// <summary>How a member's status dot is drawn.</summary>
+public enum MemberState
+{
+    /// <summary>This PC, or connected and answering.</summary>
+    Good,
+    /// <summary>Connected but not answering.</summary>
+    Warning,
+    /// <summary>Not connected.</summary>
+    Inactive,
+}
+
+/// <summary>A member as the panel, Settings and the mesh window show it.</summary>
 public sealed partial class MemberItem : ObservableObject
 {
-    internal MemberItem(GroupMember member)
+    private readonly Action<MemberItem>? _permissionsChanged;
+
+    internal MemberItem(GroupMember member, Action<MemberItem>? permissionsChanged = null)
     {
         DeviceId = member.DeviceId;
         Name = member.Name;
         IsSelf = member.IsSelf;
         IsConnected = member.IsConnected;
         IsWindows = member.Platform == Platform.Windows;
+        AllowsControl = member.Permissions.Control;
+        AllowsFiles = member.Permissions.Files;
+        AllowsClipboard = member.Permissions.Clipboard;
+        _permissionsChanged = permissionsChanged; // set last: loading the permissions is no change
     }
 
     public string DeviceId { get; }
@@ -25,8 +42,32 @@ public sealed partial class MemberItem : ObservableObject
     public bool CanRemove => !IsSelf;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Status))]
+    [NotifyPropertyChangedFor(nameof(Status), nameof(State))]
     public partial bool IsResponsive { get; set; } = true;
+
+    /// <summary>May control this PC.</summary>
+    [ObservableProperty]
+    public partial bool AllowsControl { get; set; }
+
+    /// <summary>May send files to this PC.</summary>
+    [ObservableProperty]
+    public partial bool AllowsFiles { get; set; }
+
+    /// <summary>Shares the clipboard with this PC, both ways.</summary>
+    [ObservableProperty]
+    public partial bool AllowsClipboard { get; set; }
+
+    internal Permissions Permissions => new(AllowsControl, AllowsFiles, AllowsClipboard);
+
+    public MemberState State => IsSelf || (IsConnected && IsResponsive) ? MemberState.Good
+        : IsConnected ? MemberState.Warning
+        : MemberState.Inactive;
+
+    partial void OnAllowsControlChanged(bool value) => _permissionsChanged?.Invoke(this);
+
+    partial void OnAllowsFilesChanged(bool value) => _permissionsChanged?.Invoke(this);
+
+    partial void OnAllowsClipboardChanged(bool value) => _permissionsChanged?.Invoke(this);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RoundTrip), nameof(ClockOffset), nameof(Rejected))]

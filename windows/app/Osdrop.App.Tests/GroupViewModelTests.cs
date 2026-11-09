@@ -125,8 +125,8 @@ public sealed class GroupViewModelTests
     public async Task MembersAndNearbyComputersFollowTheEngine()
     {
         var engine = new FakeEngine { Info = new EngineInfo(_self, "47474747474747474747474747474747", 50_000) };
-        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false));
-        engine.Members.Add(new GroupMember(_laptop, "Laptop", Platform.MacOS, IsSelf: false, IsConnected: true));
+        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false, FakeEngine.AllAllowed));
+        engine.Members.Add(new GroupMember(_laptop, "Laptop", Platform.MacOS, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
         var group = new GroupViewModel(engine);
         await group.RefreshAsync();
         Assert.True(group.IsInGroup);
@@ -156,8 +156,8 @@ public sealed class GroupViewModelTests
         Assert.Equal([_laptop], engine.BlockedIds);
         Assert.Empty(engine.Answers);
 
-        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false));
-        engine.Members.Add(new GroupMember(_other, "Other PC", Platform.Windows, IsSelf: false, IsConnected: true));
+        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false, FakeEngine.AllAllowed));
+        engine.Members.Add(new GroupMember(_other, "Other PC", Platform.Windows, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
         await group.RefreshAsync();
         await group.BlockCommand.ExecuteAsync(group.Members[0]);
         Assert.Equal([_laptop], engine.BlockedIds);
@@ -180,65 +180,22 @@ public sealed class GroupViewModelTests
     [Fact]
     public void CodesKeepLeadingZeros() => Assert.Equal("000 042", PairingViewModel.Display(42));
 
-    private sealed class FakeEngine : IGroupEngine
+    [Fact]
+    public async Task APermissionSwitchedInSettingsReachesTheEngine()
     {
-        public event Action<EngineEvent>? EventReceived;
+        var engine = new FakeEngine();
+        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false, FakeEngine.AllAllowed));
+        engine.Members.Add(new GroupMember(_laptop, "Laptop", Platform.MacOS, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
+        var group = new GroupViewModel(engine);
+        await group.RefreshAsync();
+        Assert.Empty(engine.PermissionChanges);
+        MemberItem laptop = Assert.Single(group.Others);
+        Assert.True(laptop.AllowsFiles);
 
-        public EngineInfo? Info { get; set; }
-        public List<GroupMember> Members { get; } = [];
-        public List<NearbyComputer> Nearby { get; } = [];
-        public List<string> Paired { get; } = [];
-        public List<(ulong Connection, bool Accepted)> Answers { get; } = [];
-        public List<string> Revoked { get; } = [];
-        public List<BlockedComputer> Blocked { get; } = [];
-        public List<string> BlockedIds { get; } = [];
-        public List<string> Unblocked { get; } = [];
-
-        public void Raise(EngineEvent received) => EventReceived?.Invoke(received);
-
-        public Task<EngineInfo?> GetInfoAsync() => Task.FromResult(Info);
-        public Task<IReadOnlyList<GroupMember>> GetMembersAsync() => Task.FromResult<IReadOnlyList<GroupMember>>([.. Members]);
-        public Task<IReadOnlyList<NearbyComputer>> GetNearbyAsync() => Task.FromResult<IReadOnlyList<NearbyComputer>>([.. Nearby]);
-        public Task<IReadOnlyList<BlockedComputer>> GetBlockedAsync() => Task.FromResult<IReadOnlyList<BlockedComputer>>([.. Blocked]);
-
-        public Task<(CoreResult Result, ulong Connection)> PairAsync(string deviceId)
-        {
-            Paired.Add(deviceId);
-            return Task.FromResult((CoreResult.Ok, 5UL));
-        }
-
-        public Task<CoreResult> ConfirmPairingAsync(ulong connection, bool accepted)
-        {
-            Answers.Add((connection, accepted));
-            return Task.FromResult(CoreResult.Ok);
-        }
-
-        public Task<CoreResult> RevokeAsync(string deviceId)
-        {
-            Revoked.Add(deviceId);
-            return Task.FromResult(CoreResult.Ok);
-        }
-
-        public Task<CoreResult> BlockAsync(string deviceId)
-        {
-            BlockedIds.Add(deviceId);
-            return Task.FromResult(CoreResult.Ok);
-        }
-
-        public Task<CoreResult> UnblockAsync(string deviceId)
-        {
-            Unblocked.Add(deviceId);
-            return Task.FromResult(CoreResult.Ok);
-        }
-
-        public Task<CoreResult> LeaveGroupAsync() => Task.FromResult(CoreResult.Ok);
-
-        public int FetchCancels { get; private set; }
-
-        public Task CancelClipboardFetchAsync()
-        {
-            FetchCancels++;
-            return Task.CompletedTask;
-        }
+        laptop.AllowsFiles = false;
+        Assert.Equal([(_laptop, new Permissions(Control: true, Files: false, Clipboard: true))], engine.PermissionChanges);
+        Assert.Equal("Laptop", group.NameOf(_laptop));
+        Assert.Equal(Localization.Strings.ClipboardOtherComputer, group.NameOf(_other));
+        Assert.True(group.HasConnectedOthers);
     }
 }

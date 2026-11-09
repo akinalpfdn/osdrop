@@ -105,9 +105,9 @@ struct Overloaded : Visitors... { // NOLINT(misc-multiple-inheritance): the stan
 
 } // namespace
 
-InputBridge::InputBridge(win::GroupEngine& group)
-    : group_(group), frequency_(performance_frequency()), forwarder_(click_settings()),
-      thread_([this] { run(); }) {}
+InputBridge::InputBridge(win::GroupEngine& group, Listener listener)
+    : group_(group), listener_(std::move(listener)), frequency_(performance_frequency()),
+      forwarder_(click_settings()), thread_([this] { run(); }) {}
 
 InputBridge::~InputBridge() {
     stop();
@@ -229,6 +229,9 @@ void InputBridge::connect() {
     if (reachable_ != reachable) {
         reachable_ = reachable;
         group_.set_unavailable(reachable ? kAvailable : kCannotInject);
+        if (listener_.reachable) {
+            listener_.reachable(reachable);
+        }
     }
     if (reachable && controlled_) {
         static_cast<void>(client_->send(protocol::BeginControl{}));
@@ -419,9 +422,18 @@ void InputBridge::hotkey(protocol::Hotkey hotkey) {
         group_.return_home(false);
         break;
     case protocol::Hotkey::LockInput:
-        locked_ = !locked_;
-        group_.lock_input(locked_);
+        set_locked(!locked_);
         break;
+    }
+}
+
+void InputBridge::set_locked(bool locked) {
+    if (locked_.exchange(locked) == locked) {
+        return;
+    }
+    group_.lock_input(locked);
+    if (listener_.locked) {
+        listener_.locked(locked);
     }
 }
 

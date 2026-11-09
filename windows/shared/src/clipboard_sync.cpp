@@ -43,7 +43,7 @@ CopySignature CopySignature::of(const ClipData& data) {
     return signature;
 }
 
-osdrop_result CoreClipboardMesh::copied(const ClipData& data) {
+osdrop_result CoreClipboardMesh::copied(const ClipData& data, std::uint64_t& clip_id) {
     std::vector<osdrop_clipboard_content> contents;
     contents.reserve(data.contents.size());
     for (const ClipContent& content : data.contents) {
@@ -55,9 +55,12 @@ osdrop_result CoreClipboardMesh::copied(const ClipData& data) {
     for (const std::string& file : data.files) {
         files.push_back(file.c_str());
     }
-    std::uint64_t clip = 0;
     return osdrop_mesh_clipboard_copied(mesh_, contents.data(), contents.size(), files.data(),
-                                        files.size(), &clip);
+                                        files.size(), &clip_id);
+}
+
+void CoreClipboardMesh::withdraw(std::uint64_t clip_id) {
+    static_cast<void>(osdrop_mesh_withdraw(mesh_, OSDROP_OBJECT_CLIPBOARD, clip_id)); // gone: fine
 }
 
 osdrop_result CoreClipboardMesh::fetch_content(const ClipDevice& device,
@@ -85,7 +88,8 @@ void ClipboardSync::attach(ClipboardMesh& mesh) {
 }
 
 void ClipboardSync::copied(ClipData data) {
-    if (connected_.empty() || mesh_ == nullptr || (data.contents.empty() && data.files.empty())) {
+    if (!shared_ || connected_.empty() || mesh_ == nullptr ||
+        (data.contents.empty() && data.files.empty())) {
         return; // nobody to share with: the copy is not even offered
     }
     std::erase_if(data.contents, [&](const ClipContent& content) {
@@ -100,8 +104,33 @@ void ClipboardSync::copied(ClipData data) {
         last_offered_.reset();
         return;
     }
-    last_offered_ =
-        mesh_->copied(data) == OSDROP_OK ? std::optional(std::move(signature)) : std::nullopt;
+    std::uint64_t clip = 0;
+    const bool offered = mesh_->copied(data, clip) == OSDROP_OK;
+    last_offered_ = offered ? std::optional(std::move(signature)) : std::nullopt;
+    offered_clip_ = offered ? clip : 0;
+}
+
+void ClipboardSync::set_sharing(bool shared, std::uint64_t files_limit) {
+    host_.post([this, shared, files_limit] {
+        limits_.files = files_limit;
+        if (shared_ == shared) {
+            return;
+        }
+        shared_ = shared;
+        if (shared || mesh_ == nullptr) {
+            return;
+        }
+        last_offered_.reset();
+        if (offered_clip_ != 0) {
+            mesh_->withdraw(std::exchange(offered_clip_, 0));
+        }
+        if (incoming_) {
+            for (const auto& [id, format] : incoming_->pending) {
+                mesh_->cancel(id); // its end arrives for a copy no longer waited for
+            }
+            drop_incoming();
+        }
+    });
 }
 
 void ClipboardSync::cancel_fetch() {
@@ -135,6 +164,9 @@ void ClipboardSync::peer_disconnected(const ClipDevice& device) {
 void ClipboardSync::clipboard_changed(const ClipDevice& device, std::uint64_t clip_id,
                                       std::vector<osdrop_announced_format> formats) {
     host_.post([this, device, clip_id, formats = std::move(formats)] {
+        if (!shared_) {
+            return; // sharing turned off in Settings
+        }
         last_offered_.reset(); // a copy here, even the same one, is newer than this
         begin(device, clip_id, formats);
     });

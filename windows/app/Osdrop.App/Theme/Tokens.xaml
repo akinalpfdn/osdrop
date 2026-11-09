@@ -1,37 +1,60 @@
-<!-- Single source of visual values for the shell. Light/dark dictionaries arrive with the shell UI. -->
+<!-- Single source of visual values for the shell. Colors come from WPF-UI's theme resources, which
+     follow the system light/dark setting; reference them with DynamicResource so a switch shows live. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
-  <Color x:Key="Osdrop.Color.Accent">#FF1E8E5A</Color>
-  <Color x:Key="Osdrop.Color.OnAccent">#FFFFFFFF</Color>
-  <Color x:Key="Osdrop.Color.Warning">#FFB35C00</Color>
-
-  <SolidColorBrush x:Key="Osdrop.Brush.TrayIconBackground" Color="{StaticResource Osdrop.Color.Accent}" />
-  <SolidColorBrush x:Key="Osdrop.Brush.TrayIconForeground" Color="{StaticResource Osdrop.Color.OnAccent}" />
-  <SolidColorBrush x:Key="Osdrop.Brush.Warning" Color="{StaticResource Osdrop.Color.Warning}" />
-  <SolidColorBrush x:Key="Osdrop.Brush.Secondary" Color="{x:Static SystemColors.GrayTextColor}" />
-
-  <sys:Double x:Key="Osdrop.FontSize.TrayIconGlyph">96</sys:Double>
-  <FontWeight x:Key="Osdrop.FontWeight.TrayIconGlyph">Bold</FontWeight>
-  <sys:String x:Key="Osdrop.Tray.IconGlyph">O</sys:String>
-
   <sys:Double x:Key="Osdrop.FontSize.Title">16</sys:Double>
   <sys:Double x:Key="Osdrop.FontSize.Body">14</sys:Double>
   <sys:Double x:Key="Osdrop.FontSize.Caption">12</sys:Double>
+  <sys:Double x:Key="Osdrop.FontSize.Icon">20</sys:Double>
+  <sys:Double x:Key="Osdrop.FontSize.SmallIcon">16</sys:Double>
   <!-- The six-digit pairing code, large enough to compare across the desk. -->
   <sys:Double x:Key="Osdrop.FontSize.PairingCode">36</sys:Double>
   <FontFamily x:Key="Osdrop.Font.Monospace">Cascadia Mono, Consolas</FontFamily>
   <FontWeight x:Key="Osdrop.FontWeight.Emphasis">SemiBold</FontWeight>
 
-  <sys:Double x:Key="Osdrop.Width.GroupWindow">380</sys:Double>
-  <sys:Double x:Key="Osdrop.Width.PairingWindow">340</sys:Double>
-  <sys:Double x:Key="Osdrop.Width.FetchWindow">320</sys:Double>
-  <sys:Double x:Key="Osdrop.Height.ProgressBar">8</sys:Double>
-  <sys:Double x:Key="Osdrop.Width.MeshWindow">520</sys:Double>
-  <sys:Double x:Key="Osdrop.Width.Button">88</sys:Double>
-  <Thickness x:Key="Osdrop.Thickness.WindowPadding">20</Thickness>
-  <Thickness x:Key="Osdrop.Thickness.SectionGap">0,16,0,0</Thickness>
-  <Thickness x:Key="Osdrop.Thickness.ItemGap">0,8,0,0</Thickness>
+  <!-- Tray panel (the Mac menu's counterpart) -->
+  <sys:Double x:Key="Osdrop.Width.Panel">340</sys:Double>
+  <sys:Double x:Key="Osdrop.Panel.EdgeMargin">12</sys:Double>
+  <Thickness x:Key="Osdrop.Thickness.PanelPadding">16</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.SectionGap">0,12,0,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.ItemGap">0,6,0,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.IconGap">0,0,10,0</Thickness>
   <Thickness x:Key="Osdrop.Thickness.ButtonGap">0,0,8,0</Thickness>
-  <Thickness x:Key="Osdrop.Thickness.ButtonPadding">12,4</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.Divider">0,1,0,0</Thickness>
+  <!-- A member's state: connected, not responding, not connected. -->
+  <sys:Double x:Key="Osdrop.Size.StatusDot">8</sys:Double>
+  <Thickness x:Key="Osdrop.Thickness.StatusDot">0,6,10,0</Thickness>
+  <sys:Double x:Key="Osdrop.Height.ProgressBar">6</sys:Double>
+
+  <!-- Windows -->
+  <sys:Double x:Key="Osdrop.Width.SettingsWindow">640</sys:Double>
+  <sys:Double x:Key="Osdrop.Height.SettingsWindow">600</sys:Double>
+  <Thickness x:Key="Osdrop.Thickness.PagePadding">20,12,20,20</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.TabContent">0,0,8,0</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.WindowPadding">20</Thickness>
+  <Thickness x:Key="Osdrop.Thickness.NestedGap">24,6,0,0</Thickness>
+  <sys:Double x:Key="Osdrop.Width.PairingWindow">360</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.FetchWindow">320</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.MeshWindow">520</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.Button">96</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.Setting">220</sys:Double>
+
+  <!-- Arrangement editor: every member's monitors to scale. -->
+  <sys:Double x:Key="Osdrop.Arrangement.Height">280</sys:Double>
+  <!-- Room around the computers to drag into, as a share of the larger side. -->
+  <sys:Double x:Key="Osdrop.Arrangement.MarginFraction">0.15</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.CornerRadius">4</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.BorderWidth">1</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.LabelPadding">4</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.ThisPcOpacity">0.45</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.MemberOpacity">0.9</sys:Double>
+  <sys:Double x:Key="Osdrop.Arrangement.OfflineOpacity">0.45</sys:Double>
+
+  <!-- Tray icons: a dark glyph for a light taskbar, a light glyph for a dark one; the filled ones
+       while another computer controls this PC (scripts/windows/make_icons.py draws them). -->
+  <sys:String x:Key="Osdrop.Tray.IconForLightTaskbar">pack://application:,,,/Assets/Tray-black.ico</sys:String>
+  <sys:String x:Key="Osdrop.Tray.IconForDarkTaskbar">pack://application:,,,/Assets/Tray-white.ico</sys:String>
+  <sys:String x:Key="Osdrop.Tray.ControlledIconForLightTaskbar">pack://application:,,,/Assets/Tray-controlled-black.ico</sys:String>
+  <sys:String x:Key="Osdrop.Tray.ControlledIconForDarkTaskbar">pack://application:,,,/Assets/Tray-controlled-white.ico</sys:String>
 </ResourceDictionary>

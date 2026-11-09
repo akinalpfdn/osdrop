@@ -4,7 +4,7 @@ using System.Windows;
 namespace Osdrop.App.Group;
 
 /// <summary>Copied files on their way from another computer, in the corner above the taskbar.</summary>
-public partial class ClipboardFetchWindow : Window
+public partial class ClipboardFetchWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly GroupViewModel _group;
     private bool _closingFromModel;
@@ -35,8 +35,9 @@ public partial class ClipboardFetchWindow : Window
     private void PlaceInCorner()
     {
         Rect area = SystemParameters.WorkArea;
-        Left = area.Right - ActualWidth;
-        Top = area.Bottom - ActualHeight;
+        double margin = (double)FindResource("Osdrop.Panel.EdgeMargin");
+        Left = area.Right - ActualWidth - margin;
+        Top = area.Bottom - ActualHeight - margin;
     }
 }
 

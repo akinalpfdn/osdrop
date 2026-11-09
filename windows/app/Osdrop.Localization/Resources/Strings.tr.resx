@@ -18,9 +18,6 @@
   <data name="TrayQuit" xml:space="preserve">
     <value>Osdrop'tan Çık</value>
   </data>
-  <data name="TrayComputers" xml:space="preserve">
-    <value>Bilgisayarlar…</value>
-  </data>
   <data name="TrayMesh" xml:space="preserve">
     <value>Mesh…</value>
   </data>
@@ -31,10 +28,7 @@
     <value>Grup daha yeni bir Osdrop tarafından kaydedilmiş. Bu PC'deki Osdrop'u güncelleyin.</value>
   </data>
   <data name="EngineStarting" xml:space="preserve">
-    <value>Osdrop hâlâ başlıyor. Biraz sonra yeniden deneyin.</value>
-  </data>
-  <data name="GroupWindowTitle" xml:space="preserve">
-    <value>Osdrop</value>
+    <value>Osdrop başlıyor…</value>
   </data>
   <data name="GroupMembers" xml:space="preserve">
     <value>Bu gruptakiler</value>
@@ -215,5 +209,308 @@
   </data>
   <data name="PairingFailedRefused" xml:space="preserve">
     <value>Bu bilgisayarla eşleşmeyi kabul etmiyor.</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Osdrop'u aç</value>
+  </data>
+  <data name="PanelSettings" xml:space="preserve">
+    <value>Ayarlar</value>
+  </data>
+  <data name="PanelVersion" xml:space="preserve">
+    <value>Sürüm {0}</value>
+  </data>
+  <data name="PanelInputElsewhere" xml:space="preserve">
+    <value>Fare ve klavye {0} üzerinde.</value>
+  </data>
+  <data name="PanelInputHere" xml:space="preserve">
+    <value>Fare ve klavye bu bilgisayarda.</value>
+  </data>
+  <data name="PanelLockInput" xml:space="preserve">
+    <value>İmleci bulunduğu yerde tut ({0})</value>
+  </data>
+  <data name="PanelShareClipboard" xml:space="preserve">
+    <value>Panoyu paylaş</value>
+  </data>
+  <data name="ControlControlledBy" xml:space="preserve">
+    <value>{0} bu bilgisayarı kontrol ediyor.</value>
+  </data>
+  <data name="ControlHint" xml:space="preserve">
+    <value>Yanındaki bilgisayara geçmek için imleci bir kenara doğru itin. {0} geri getirir.</value>
+  </data>
+  <data name="ControlLocked" xml:space="preserve">
+    <value>İmleç bulunduğu bilgisayarda kalıyor. {0} yeniden geçmesine izin verir.</value>
+  </data>
+  <data name="ControlLost" xml:space="preserve">
+    <value>{0} yanıt vermeyi bıraktı, imleç geri geldi.</value>
+  </data>
+  <data name="ControlRefusedLocked" xml:space="preserve">
+    <value>{0} kilitli.</value>
+  </data>
+  <data name="ControlRefusedAsleep" xml:space="preserve">
+    <value>{0} uykuda.</value>
+  </data>
+  <data name="ControlRefusedNotPermitted" xml:space="preserve">
+    <value>{0} bu bilgisayardan kontrolü kabul etmiyor.</value>
+  </data>
+  <data name="ControlRefusedBusy" xml:space="preserve">
+    <value>{0} başka bir bilgisayar tarafından kullanılıyor.</value>
+  </data>
+  <data name="ServiceTitle" xml:space="preserve">
+    <value>Fare ve klavye</value>
+  </data>
+  <data name="ServiceNotInstalled" xml:space="preserve">
+    <value>Osdrop Input hizmeti kurulu değil; bu yüzden bu PC'nin faresi ve klavyesi diğer bilgisayarlara geçemiyor, diğer bilgisayarlar da bu PC'yi kontrol edemiyor. Onar düğmesi hizmeti kurar; Windows izin ister.</value>
+  </data>
+  <data name="ServiceStopped" xml:space="preserve">
+    <value>Osdrop Input hizmeti durdurulmuş; bu yüzden bu PC'nin faresi ve klavyesi diğer bilgisayarlara geçemiyor, diğer bilgisayarlar da bu PC'yi kontrol edemiyor. Onar düğmesi hizmeti başlatır; Windows izin ister.</value>
+  </data>
+  <data name="ServiceNotAnswering" xml:space="preserve">
+    <value>Osdrop Input hizmeti yanıt vermiyor; bu yüzden bu PC'nin faresi ve klavyesi diğer bilgisayarlara geçemiyor. Genellikle birkaç saniyede düzelir; bu uyarı kalırsa onarın.</value>
+  </data>
+  <data name="ServiceRepair" xml:space="preserve">
+    <value>Onar</value>
+  </data>
+  <data name="ServiceRepairFailed" xml:space="preserve">
+    <value>Hizmet onarılamadı. Osdrop'u yeniden yükleyin ya da Ayarlar › Gelişmiş'ten girdi hizmeti günlüklerini açın.</value>
+  </data>
+  <data name="UpdatesTitle" xml:space="preserve">
+    <value>Güncellemeler</value>
+  </data>
+  <data name="UpdatesDaily" xml:space="preserve">
+    <value>Güncellemeleri günde bir kez denetle</value>
+  </data>
+  <data name="UpdatesCheck" xml:space="preserve">
+    <value>Şimdi denetle</value>
+  </data>
+  <data name="UpdatesChecking" xml:space="preserve">
+    <value>Denetleniyor…</value>
+  </data>
+  <data name="UpdatesUpToDate" xml:space="preserve">
+    <value>Osdrop güncel.</value>
+  </data>
+  <data name="UpdatesFailed" xml:space="preserve">
+    <value>Denetim başarısız oldu. Daha sonra yeniden deneyin.</value>
+  </data>
+  <data name="UpdatesAvailable" xml:space="preserve">
+    <value>Osdrop {0} çıktı.</value>
+  </data>
+  <data name="UpdatesDownload" xml:space="preserve">
+    <value>İndir</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Osdrop Ayarları</value>
+  </data>
+  <data name="SettingsGeneral" xml:space="preserve">
+    <value>Genel</value>
+  </data>
+  <data name="SettingsArrangement" xml:space="preserve">
+    <value>Yerleşim</value>
+  </data>
+  <data name="SettingsDevices" xml:space="preserve">
+    <value>Aygıtlar</value>
+  </data>
+  <data name="SettingsInput" xml:space="preserve">
+    <value>Girdi</value>
+  </data>
+  <data name="SettingsClipboard" xml:space="preserve">
+    <value>Pano ve Dosyalar</value>
+  </data>
+  <data name="SettingsAdvanced" xml:space="preserve">
+    <value>Gelişmiş</value>
+  </data>
+  <data name="SettingsStartWithWindows" xml:space="preserve">
+    <value>Windows ile başlat</value>
+  </data>
+  <data name="SettingsStartWithWindowsFailed" xml:space="preserve">
+    <value>Windows, Osdrop'un oturum açılışında başlamasına izin vermedi.</value>
+  </data>
+  <data name="SettingsArrangementDescription" xml:space="preserve">
+    <value>Bir bilgisayarı sürükleyip başka birinin yanına bırakın. İmleç kenarlarının buluştuğu yerden geçer. Gruptaki her bilgisayar yeni yerleşimi hemen alır.</value>
+  </data>
+  <data name="SettingsArrangementEmpty" xml:space="preserve">
+    <value>Yerleşim, gruba başka bir bilgisayar katıldığında görünür.</value>
+  </data>
+  <data name="SettingsArrangementHint" xml:space="preserve">
+    <value>Bir bilgisayarı başka birinin yanına yerleştirmek için sürükleyin.</value>
+  </data>
+  <data name="SettingsThisComputer" xml:space="preserve">
+    <value>Bu bilgisayar</value>
+  </data>
+  <data name="SettingsName" xml:space="preserve">
+    <value>Ad</value>
+  </data>
+  <data name="SettingsNameDescription" xml:space="preserve">
+    <value>Diğer bilgisayarların gösterdiği ad. Kaydetmek bağlantıları yeniden başlatır.</value>
+  </data>
+  <data name="SettingsNameSave" xml:space="preserve">
+    <value>Kaydet</value>
+  </data>
+  <data name="SettingsMembers" xml:space="preserve">
+    <value>Gruptaki bilgisayarlar</value>
+  </data>
+  <data name="SettingsAllowControl" xml:space="preserve">
+    <value>Bu bilgisayarı kontrol edebilir</value>
+  </data>
+  <data name="SettingsAllowFiles" xml:space="preserve">
+    <value>Bu bilgisayara dosya gönderebilir</value>
+  </data>
+  <data name="SettingsAllowClipboard" xml:space="preserve">
+    <value>Bu bilgisayarla panoyu paylaşır</value>
+  </data>
+  <data name="SettingsRemove" xml:space="preserve">
+    <value>Çıkar</value>
+  </data>
+  <data name="SettingsBlock" xml:space="preserve">
+    <value>Çıkar ve engelle</value>
+  </data>
+  <data name="SettingsCrossing" xml:space="preserve">
+    <value>Geçiş</value>
+  </data>
+  <data name="SettingsImmediate" xml:space="preserve">
+    <value>İmleç kenara varır varmaz geç</value>
+  </data>
+  <data name="SettingsPush" xml:space="preserve">
+    <value>Kenara {0} sn itin</value>
+  </data>
+  <data name="SettingsCrossingModifier" xml:space="preserve">
+    <value>Yalnızca şu basılıyken geç</value>
+  </data>
+  <data name="SettingsModifierNone" xml:space="preserve">
+    <value>Hiçbiri</value>
+  </data>
+  <data name="SettingsModifierControl" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="SettingsModifierAlt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="SettingsModifierWindows" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="SettingsModifierShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="SettingsKeys" xml:space="preserve">
+    <value>Mac ile PC arasında tuşlar</value>
+  </data>
+  <data name="SettingsMapping" xml:space="preserve">
+    <value>Değiştirici tuşlar</value>
+  </data>
+  <data name="SettingsMappingShortcuts" xml:space="preserve">
+    <value>Kısayollar yerinde kalır (⌘C PC'de kopyalar)</value>
+  </data>
+  <data name="SettingsMappingPositions" xml:space="preserve">
+    <value>Her tuş olduğu gibi (⌘ Windows tuşudur)</value>
+  </data>
+  <data name="SettingsMappingDescription" xml:space="preserve">
+    <value>Bir sonraki geçişten itibaren geçerli. İki Mac ya da iki PC arasında tuşlar hiç değişmez.</value>
+  </data>
+  <data name="SettingsSpeed" xml:space="preserve">
+    <value>Diğer bilgisayarlarda imleç hızı</value>
+  </data>
+  <data name="SettingsHotkeys" xml:space="preserve">
+    <value>Kısayollar</value>
+  </data>
+  <data name="SettingsReturnHotkey" xml:space="preserve">
+    <value>İmleci geri getir: {0}</value>
+  </data>
+  <data name="SettingsLockHotkey" xml:space="preserve">
+    <value>İmleci bulunduğu yerde tut: {0}</value>
+  </data>
+  <data name="SettingsHotkeysDescription" xml:space="preserve">
+    <value>PC'de bu kısayollar sabittir: Ctrl, Alt ve Windows tuşlarını birlikte kullanırlar; hiçbir uygulama bunu yapmaz.</value>
+  </data>
+  <data name="SettingsClipboardTitle" xml:space="preserve">
+    <value>Pano</value>
+  </data>
+  <data name="SettingsShareClipboardDescription" xml:space="preserve">
+    <value>Bir bilgisayarda kopyalayın, diğerinde yapıştırın. Parola yöneticilerinden kopyalanan parolalar bu bilgisayarda kalır.</value>
+  </data>
+  <data name="SettingsFilesLimit" xml:space="preserve">
+    <value>Kopyalanan dosyalar en fazla</value>
+  </data>
+  <data name="SettingsDiagnostics" xml:space="preserve">
+    <value>Tanılama</value>
+  </data>
+  <data name="SettingsDiagnosticsCopyTitle" xml:space="preserve">
+    <value>Hata raporu için tanılama</value>
+  </data>
+  <data name="SettingsDiagnosticsCopy" xml:space="preserve">
+    <value>Kopyala</value>
+  </data>
+  <data name="SettingsDiagnosticsCopied" xml:space="preserve">
+    <value>Kopyalandı. Raporunuza yapıştırın.</value>
+  </data>
+  <data name="SettingsDiagnosticsDescription" xml:space="preserve">
+    <value>Sürümler, ayarlar ve son günlük; adlar, adresler, tuş vuruşları ve pano içeriği olmadan.</value>
+  </data>
+  <data name="SettingsLogs" xml:space="preserve">
+    <value>Osdrop günlüğü</value>
+  </data>
+  <data name="SettingsServiceLogs" xml:space="preserve">
+    <value>Girdi hizmeti günlükleri</value>
+  </data>
+  <data name="SettingsLogsOpen" xml:space="preserve">
+    <value>Klasörü aç</value>
+  </data>
+  <data name="ErrorUnsupportedVersion" xml:space="preserve">
+    <value>Diğer bilgisayarda Osdrop'un başka bir sürümü var. İkisini de aynı sürüme güncelleyin.</value>
+  </data>
+  <data name="ErrorTooLarge" xml:space="preserve">
+    <value>Ayarlarda belirlenen sınırdan büyük.</value>
+  </data>
+  <data name="ErrorSecure" xml:space="preserve">
+    <value>Bağlantı güvenli kurulamadı. Yeniden deneyin; tekrarlanırsa bilgisayarları yeniden eşleştirin.</value>
+  </data>
+  <data name="ErrorTimedOut" xml:space="preserve">
+    <value>Diğer bilgisayar zamanında yanıt vermedi. Uyanık ve aynı ağda olduğunu kontrol edin.</value>
+  </data>
+  <data name="ErrorNetwork" xml:space="preserve">
+    <value>Bağlantı koptu. İki bilgisayarın ağını da kontrol edin.</value>
+  </data>
+  <data name="ErrorPeer" xml:space="preserve">
+    <value>Diğer bilgisayar bir sorun bildirdi. İki bilgisayarı da Osdrop'un son sürümüne güncelleyin.</value>
+  </data>
+  <data name="ErrorNotTrusted" xml:space="preserve">
+    <value>Diğer bilgisayar artık bu bilgisayara güvenmiyor. Yeniden eşleştirin.</value>
+  </data>
+  <data name="ErrorPairingRejected" xml:space="preserve">
+    <value>Diğer bilgisayarın kullanıcısı reddetti.</value>
+  </data>
+  <data name="ErrorPeerBusy" xml:space="preserve">
+    <value>Diğer bilgisayar meşgul. Birazdan yeniden deneyin.</value>
+  </data>
+  <data name="ErrorPeerSleeping" xml:space="preserve">
+    <value>Diğer bilgisayar uykuda.</value>
+  </data>
+  <data name="ErrorNotPermitted" xml:space="preserve">
+    <value>Diğer bilgisayar buna izin vermiyor. İzinleri onun Ayarlar › Aygıtlar bölümünde.</value>
+  </data>
+  <data name="ErrorGroupFull" xml:space="preserve">
+    <value>Grup dolu. Yeni bir bilgisayar eklemeden önce birini çıkarın.</value>
+  </data>
+  <data name="ErrorInAnotherGroup" xml:space="preserve">
+    <value>Diğer bilgisayar başka bir grupta. Önce orada o gruptan çıkın.</value>
+  </data>
+  <data name="ErrorInvalidLayout" xml:space="preserve">
+    <value>Bilgisayarlar üst üste binemez ve her biri bir başkasına değmeli.</value>
+  </data>
+  <data name="ErrorCancelled" xml:space="preserve">
+    <value>İptal edildi.</value>
+  </data>
+  <data name="ErrorIoFailure" xml:space="preserve">
+    <value>Bir dosya okunamadı ya da yazılamadı.</value>
+  </data>
+  <data name="ErrorNoSpace" xml:space="preserve">
+    <value>Yeterli boş disk alanı yok.</value>
+  </data>
+  <data name="ErrorIntegrityFailed" xml:space="preserve">
+    <value>Dosya bozuk geldi ve silindi. Yeniden deneyin.</value>
+  </data>
+  <data name="ErrorNotFound" xml:space="preserve">
+    <value>Diğer bilgisayarda artık yok.</value>
+  </data>
+  <data name="ErrorInternal" xml:space="preserve">
+    <value>Osdrop içinde bir hata oldu. Ayarlar › Gelişmiş'ten tanılamayı kopyalayıp bildirin.</value>
   </data>
 </root>
