@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -17,6 +18,7 @@ namespace osdrop::input {
 namespace {
 
 namespace protocol = win::input;
+using Clock = protocol::InputSession::Clock;
 
 constexpr DWORD kPipeBufferBytes = 64 * 1024;
 constexpr DWORD kWriteTimeoutMilliseconds = 1000;
@@ -132,7 +134,7 @@ bool PipeServer::accepted(HANDLE pipe) {
         return false;
     }
     if (*sid != user_sid_) {
-        log_.warning("Refused a client running as " + sys::ascii(*sid));
+        log_.warning("Refused a client running as " + sys::log_text(*sid));
         return false;
     }
     ULONG process_id = 0;
@@ -148,7 +150,7 @@ bool PipeServer::accepted(HANDLE pipe) {
             return true;
         }
     }
-    log_.warning("Refused a client run from " + sys::ascii(*image));
+    log_.warning("Refused a client run from " + sys::log_text(*image));
     return false;
 }
 
@@ -165,22 +167,44 @@ void PipeServer::serve(HANDLE pipe) {
         if (!reading.pending && !read_next(pipe, reading)) {
             return;
         }
-        const std::array<HANDLE, 3> handles{reading.done.get(), reports_ready_, stop_};
-        const DWORD signaled = WaitForMultipleObjects(static_cast<DWORD>(handles.size()),
-                                                      handles.data(), FALSE, INFINITE);
-        bool going_on = false; // stopping, unless a read or reports arrived
-        if (signaled == WAIT_OBJECT_0) {
-            going_on = answer(pipe, reading);
-        } else if (signaled == WAIT_OBJECT_0 + 1) {
-            going_on = forward_reports(pipe);
-        }
-        if (!going_on) {
+        if (!step(pipe, reading)) {
             if (reading.pending) {
                 cancel(pipe, reading.overlapped);
             }
             return;
         }
     }
+}
+
+bool PipeServer::step(HANDLE pipe, Reading& reading) {
+    // A capture the client stopped confirming ends here first.
+    if (const auto released = session_.expire(Clock::now())) {
+        if (!write(pipe, protocol::encode(*released))) {
+            return false;
+        }
+    }
+    const std::array<HANDLE, 3> handles{reading.done.get(), reports_ready_, stop_};
+    const DWORD signaled = WaitForMultipleObjects(static_cast<DWORD>(handles.size()),
+                                                  handles.data(), FALSE, wait_time());
+    switch (signaled) {
+    case WAIT_TIMEOUT:
+        return true; // the capture's deadline
+    case WAIT_OBJECT_0:
+        return answer(pipe, reading);
+    case WAIT_OBJECT_0 + 1:
+        return forward_reports(pipe);
+    default:
+        return false; // stopping
+    }
+}
+
+DWORD PipeServer::wait_time() const {
+    const auto deadline = session_.deadline();
+    if (!deadline) {
+        return INFINITE;
+    }
+    const auto left = std::chrono::ceil<std::chrono::milliseconds>(*deadline - Clock::now());
+    return static_cast<DWORD>(std::max<std::chrono::milliseconds::rep>(left.count(), 0));
 }
 
 bool PipeServer::read_next(HANDLE pipe, Reading& reading) {
@@ -213,13 +237,14 @@ bool PipeServer::answer(HANDLE pipe, Reading& reading) {
         }
         return false;
     }
-    const auto reply =
-        session_.handle(std::span<const std::uint8_t>(reading.buffer.data(), received));
+    const auto reply = session_.handle(
+        std::span<const std::uint8_t>(reading.buffer.data(), received), Clock::now());
     return !reply || write(pipe, protocol::encode(*reply));
 }
 
 bool PipeServer::forward_reports(HANDLE pipe) {
     return std::ranges::all_of(reports_.take(), [&](const protocol::Report& report) {
+        session_.forwarding(report);                  // the return chord ends the capture here
         return write(pipe, protocol::encode(report)); // stops at the first that fails
     });
 }

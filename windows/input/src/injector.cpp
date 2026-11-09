@@ -24,6 +24,19 @@ void send_mouse(DWORD flags, LONG dx = 0, LONG dy = 0, DWORD data = 0) {
     SendInput(1, &input, sizeof(INPUT));
 }
 
+/// A virtual key Windows leaves unassigned: pressing it is a key between a modifier's press and
+/// release that no app acts on.
+constexpr WORD kMaskKey = 0xE8;
+
+void send_virtual_key(WORD key, bool down) {
+    INPUT input{};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = key;
+    input.ki.dwFlags = down ? 0U : KEYEVENTF_KEYUP;
+    input.ki.dwExtraInfo = kInjectedTag;
+    SendInput(1, &input, sizeof(INPUT));
+}
+
 void send_key(win::ScanCode scan, bool down) {
     INPUT input{};
     input.type = INPUT_KEYBOARD;
@@ -94,20 +107,30 @@ void Injector::key(win::ScanCode scan, bool down) {
 }
 
 void Injector::start_capture(std::int32_t park_x, std::int32_t park_y) {
-    const POINT park{.x = park_x, .y = park_y};
-    hooks_.capture(park);
-    SetCursorPos(park.x, park.y);
+    hooks_.capture();
+    hooks_.warping();
+    SetCursorPos(park_x, park_y);
     cursors_.hide();
 }
 
 void Injector::stop_capture(std::int32_t x, std::int32_t y) {
     hooks_.release();
+    hooks_.warping();
     SetCursorPos(x, y);
     cursors_.restore();
 }
 
 void Injector::set_controlled(bool controlled) {
     hooks_.set_controlled(controlled);
+}
+
+void Injector::set_watching(bool watching) {
+    hooks_.set_watching(watching);
+}
+
+void Injector::mask_menu_keys() {
+    send_virtual_key(kMaskKey, true);
+    send_virtual_key(kMaskKey, false);
 }
 
 protocol::Stats Injector::stats() const {

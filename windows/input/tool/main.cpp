@@ -2,8 +2,8 @@
 // input process of this session through the input pipe, as the engine will.
 //   OsdropInputTool.exe stats            the hook callbacks' timings since OsdropInput started
 //   OsdropInputTool.exe capture [s]      capture this PC's input for up to s seconds (1-60,
-//                                        default 10; Esc ends it), then play it back here at the
-//                                        same pace
+//                                        default 10; Esc or Ctrl+Alt+Win+Esc ends it), then play
+//                                        it back here at the same pace
 #include <osdrop/sys/input_client.hpp>
 #include <osdrop/win/input_protocol.hpp>
 
@@ -39,15 +39,22 @@ struct Recorded {
     protocol::Report report;
 };
 
+enum class CaptureState : std::uint8_t {
+    Going,
+    Ended,  ///< Escape, or OsdropInput ended it (the return chord, a missed heartbeat)
+    Closed, ///< OsdropInput went away
+};
+
 /// What the pipe brought in, for the main thread.
 class Inbox {
 public:
     void add(const protocol::Report& report) {
         const std::scoped_lock lock(mutex_);
-        if (const auto* key = std::get_if<protocol::CapturedKey>(&report);
-            key != nullptr && key->scan.code == kEscape && !key->scan.extended) {
-            escape_ = true;
-        } else if (!escape_) {
+        const auto* key = std::get_if<protocol::PhysicalKey>(&report);
+        const bool escape = key != nullptr && key->scan.code == kEscape && !key->scan.extended;
+        if (escape || std::holds_alternative<protocol::Released>(report)) {
+            ended_ = true;
+        } else if (!ended_) {
             recorded_.push_back({.at = Clock::now() - started_, .report = report});
         }
         if (const auto* stats = std::get_if<protocol::Stats>(&report)) {
@@ -64,11 +71,14 @@ public:
         const std::scoped_lock lock(mutex_);
         started_ = Clock::now();
     }
-    /// Waits until `deadline`, Escape, or the pipe closing; true unless the pipe closed.
-    bool wait_capture(Clock::time_point deadline) {
+    /// Waits until `until`, the capture's end or the pipe closing.
+    CaptureState wait_capture(Clock::time_point until) {
         std::unique_lock lock(mutex_);
-        changed_.wait_until(lock, deadline, [this] { return escape_ || closed_; });
-        return !closed_;
+        changed_.wait_until(lock, until, [this] { return ended_ || closed_; });
+        if (closed_) {
+            return CaptureState::Closed;
+        }
+        return ended_ ? CaptureState::Ended : CaptureState::Going;
     }
     std::optional<protocol::Stats> wait_stats(Clock::duration timeout) {
         std::unique_lock lock(mutex_);
@@ -90,7 +100,7 @@ private:
     Clock::time_point started_ = Clock::now();
     std::vector<Recorded> recorded_;
     std::optional<protocol::Stats> stats_;
-    bool escape_ = false;
+    bool ended_ = false;
     bool closed_ = false;
 };
 
@@ -135,9 +145,9 @@ Counts count(const std::vector<Recorded>& recorded) {
             [&counts](const auto& report) {
                 using T = std::decay_t<decltype(report)>;
                 counts.motions += std::is_same_v<T, protocol::CapturedMotion> ? 1 : 0;
-                counts.presses += std::is_same_v<T, protocol::CapturedPress> ? 1 : 0;
-                counts.scrolls += std::is_same_v<T, protocol::CapturedScroll> ? 1 : 0;
-                counts.keys += std::is_same_v<T, protocol::CapturedKey> ? 1 : 0;
+                counts.presses += std::is_same_v<T, protocol::PhysicalPress> ? 1 : 0;
+                counts.scrolls += std::is_same_v<T, protocol::PhysicalScroll> ? 1 : 0;
+                counts.keys += std::is_same_v<T, protocol::PhysicalKey> ? 1 : 0;
             },
             entry.report);
     }
@@ -165,17 +175,34 @@ bool replay(osdrop::sys::InputClient& client, Inbox& inbox, const std::vector<Re
             cursor.x = std::clamp(cursor.x + motion->dx, desktop.left, desktop.right);
             cursor.y = std::clamp(cursor.y + motion->dy, desktop.top, desktop.bottom);
             ok = client.send(protocol::Move{.x = cursor.x, .y = cursor.y});
-        } else if (const auto* press = std::get_if<protocol::CapturedPress>(&entry.report)) {
+        } else if (const auto* press = std::get_if<protocol::PhysicalPress>(&entry.report)) {
             ok = client.send(protocol::Press{.button = press->button, .down = press->down});
-        } else if (const auto* scroll = std::get_if<protocol::CapturedScroll>(&entry.report)) {
+        } else if (const auto* scroll = std::get_if<protocol::PhysicalScroll>(&entry.report)) {
             ok = client.send(
                 protocol::Scroll{.vertical = scroll->vertical, .horizontal = scroll->horizontal});
-        } else if (const auto* key = std::get_if<protocol::CapturedKey>(&entry.report)) {
+        } else if (const auto* key = std::get_if<protocol::PhysicalKey>(&entry.report)) {
             ok = client.send(protocol::Key{.scan = key->scan, .down = key->down});
         }
     }
     // Releases whatever the recording left down.
     return client.send(protocol::EndControl{}) && ok;
+}
+
+/// Confirms the capture until `deadline` or its end; false when OsdropInput went away.
+bool wait_capture(osdrop::sys::InputClient& client, Inbox& inbox, Clock::time_point deadline) {
+    while (true) {
+        const auto until = std::min(deadline, Clock::now() + protocol::kHeartbeatInterval);
+        const CaptureState state = inbox.wait_capture(until);
+        if (state != CaptureState::Going) {
+            return state == CaptureState::Ended;
+        }
+        if (Clock::now() >= deadline) {
+            return true;
+        }
+        if (!client.send(protocol::Heartbeat{})) {
+            return false;
+        }
+    }
 }
 
 int capture(int seconds) {
@@ -193,10 +220,11 @@ int capture(int seconds) {
     std::cout << "Capturing for " << seconds
               << " s: this PC's mouse and keyboard act nowhere until then. Esc ends it early.\n";
     inbox.start();
-    if (!client->send(protocol::StartCapture{.park_x = park.x, .park_y = park.y})) {
+    if (!client->send(protocol::StartCapture{
+            .park_x = park.x, .park_y = park.y, .home_x = before.x, .home_y = before.y})) {
         return 1;
     }
-    const bool intact = inbox.wait_capture(Clock::now() + std::chrono::seconds(seconds));
+    const bool intact = wait_capture(*client, inbox, Clock::now() + std::chrono::seconds(seconds));
     static_cast<void>(client->send(protocol::StopCapture{.x = before.x, .y = before.y}));
     if (!intact) {
         // OsdropInput went while the cursors were hidden: this user's own scheme comes back.

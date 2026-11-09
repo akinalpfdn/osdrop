@@ -3,7 +3,8 @@
 // OsdropInput's end of the input pipe (DEVPLAN Phase 3): one pipe for this session, readable and
 // writable only by SYSTEM and the session's user, one client at a time. A client is accepted only
 // when it runs in this session as its user, from Osdrop's own executables next to OsdropInput.
-// Requests go to the session; captured input goes back as it arrives.
+// Requests go to the session; this PC's input goes back as it arrives, and a capture whose client
+// stops confirming it ends here.
 
 #include <osdrop/sys/file_log.hpp>
 #include <osdrop/sys/handles.hpp>
@@ -37,6 +38,11 @@ private:
 
     [[nodiscard]] bool accepted(HANDLE pipe);
     void serve(HANDLE pipe);
+    /// Waits for a request, reports or the capture's deadline and handles what came; false when
+    /// the client went or the server stops.
+    [[nodiscard]] bool step(HANDLE pipe, Reading& reading);
+    /// Until the capture's deadline; INFINITE without a capture.
+    [[nodiscard]] DWORD wait_time() const;
     /// Starts reading the next request; false when the client went.
     [[nodiscard]] bool read_next(HANDLE pipe, Reading& reading);
     /// The request that arrived, carried out; false when the client went.

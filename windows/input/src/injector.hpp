@@ -27,6 +27,8 @@ public:
     void start_capture(std::int32_t park_x, std::int32_t park_y) override;
     void stop_capture(std::int32_t x, std::int32_t y) override;
     void set_controlled(bool controlled) override;
+    void set_watching(bool watching) override;
+    void mask_menu_keys() override;
     [[nodiscard]] win::input::Stats stats() const override;
 
 private:

@@ -14,15 +14,8 @@ namespace protocol = win::input;
 std::atomic<Hooks*> g_hooks{nullptr}; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 constexpr std::int64_t kLocalInputIntervalMs = 100;
-
-std::int64_t pack(POINT point) {
-    return (static_cast<std::int64_t>(point.x) << 32) | static_cast<std::uint32_t>(point.y);
-}
-
-POINT unpack(std::int64_t packed) {
-    return {.x = static_cast<LONG>(packed >> 32),
-            .y = static_cast<LONG>(static_cast<std::int32_t>(packed))};
-}
+/// After Osdrop moves the cursor, movement is not reported for this long (1/500 s).
+constexpr std::int64_t kWarpSettleDivisor = 500;
 
 bool injected_by_osdrop(DWORD flags, DWORD injected_flag, ULONG_PTR extra) {
     return (flags & injected_flag) != 0 && extra == kInjectedTag;
@@ -74,8 +67,7 @@ void Hooks::run() {
     }
 }
 
-void Hooks::capture(POINT park) {
-    park_ = pack(park);
+void Hooks::capture() {
     capturing_ = true;
 }
 
@@ -87,13 +79,24 @@ void Hooks::set_controlled(bool controlled) {
     controlled_ = controlled;
 }
 
+void Hooks::set_watching(bool watching) {
+    watching_ = watching;
+}
+
+void Hooks::warping() {
+    LARGE_INTEGER now{};
+    QueryPerformanceCounter(&now);
+    warped_ = now.QuadPart;
+}
+
 LRESULT CALLBACK Hooks::on_mouse(int code, WPARAM message, LPARAM data) {
     Hooks* hooks = g_hooks.load(std::memory_order_acquire);
     if (code == HC_ACTION && hooks != nullptr) {
         LARGE_INTEGER started{};
         QueryPerformanceCounter(&started);
         // NOLINTNEXTLINE(performance-no-int-to-ptr): the hook's data is a pointer in an LPARAM
-        const bool swallow = hooks->mouse(message, *reinterpret_cast<const MSLLHOOKSTRUCT*>(data));
+        const auto& event = *reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        const bool swallow = hooks->mouse(message, event, started.QuadPart);
         hooks->record(started);
         if (swallow) {
             return 1;
@@ -117,33 +120,35 @@ LRESULT CALLBACK Hooks::on_keyboard(int code, WPARAM message, LPARAM data) {
     return CallNextHookEx(nullptr, code, message, data);
 }
 
-bool Hooks::mouse(WPARAM message, const MSLLHOOKSTRUCT& event) {
+bool Hooks::mouse(WPARAM message, const MSLLHOOKSTRUCT& event, std::int64_t ticks) {
     if (injected_by_osdrop(event.flags, LLMHF_INJECTED, event.dwExtraInfo)) {
         return false;
     }
-    if (!capturing_.load(std::memory_order_relaxed)) {
-        if (controlled_.load(std::memory_order_relaxed) && (event.flags & LLMHF_INJECTED) == 0) {
+    if (capturing_.load(std::memory_order_relaxed)) {
+        report(message, event, ticks, true);
+        return true;
+    }
+    if (controlled_.load(std::memory_order_relaxed)) {
+        if ((event.flags & LLMHF_INJECTED) == 0) {
             local_input();
         }
-        return false;
+    } else if (watching_.load(std::memory_order_relaxed)) {
+        report(message, event, ticks, false);
     }
+    return false;
+}
+
+void Hooks::report(WPARAM message, const MSLLHOOKSTRUCT& event, std::int64_t ticks, bool captured) {
     const auto press = [&](protocol::Button button, bool down) {
-        reports_.push(protocol::CapturedPress{.button = button, .down = down});
+        reports_.push(protocol::PhysicalPress{.button = button, .down = down});
     };
     // The wheel's delta is the high word of mouseData, signed.
     const auto wheel = static_cast<std::int16_t>(HIWORD(event.mouseData));
     const bool first_x = HIWORD(event.mouseData) == XBUTTON1;
     switch (message) {
-    case WM_MOUSEMOVE: {
-        // Swallowed moves leave the cursor at the park point; the event says where it would go.
-        const POINT park = unpack(park_.load(std::memory_order_relaxed));
-        const std::int32_t dx = event.pt.x - park.x;
-        const std::int32_t dy = event.pt.y - park.y;
-        if (dx != 0 || dy != 0) {
-            reports_.push(protocol::CapturedMotion{.dx = dx, .dy = dy});
-        }
+    case WM_MOUSEMOVE:
+        report_motion(event.pt, ticks, captured);
         break;
-    }
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
         press(protocol::Button::Left, message == WM_LBUTTONDOWN);
@@ -161,33 +166,94 @@ bool Hooks::mouse(WPARAM message, const MSLLHOOKSTRUCT& event) {
         press(first_x ? protocol::Button::X1 : protocol::Button::X2, message == WM_XBUTTONDOWN);
         break;
     case WM_MOUSEWHEEL:
-        reports_.push(protocol::CapturedScroll{.vertical = wheel, .horizontal = 0});
+        reports_.push(protocol::PhysicalScroll{.vertical = wheel, .horizontal = 0});
         break;
     case WM_MOUSEHWHEEL:
-        reports_.push(protocol::CapturedScroll{.vertical = 0, .horizontal = wheel});
+        reports_.push(protocol::PhysicalScroll{.vertical = 0, .horizontal = wheel});
         break;
     default:
         break;
     }
-    return true;
+}
+
+void Hooks::report_motion(POINT to, std::int64_t ticks, bool captured) {
+    // The cursor has not moved yet: Windows moves it once the hooks let the event through. A
+    // swallowed move leaves it where it is, so captured movement never runs out at an edge.
+    POINT from{};
+    if (ticks - warped_.load(std::memory_order_relaxed) <
+            frequency_.QuadPart / kWarpSettleDivisor ||
+        GetCursorPos(&from) == FALSE) {
+        return; // measured from before Osdrop moved the cursor, or another desktop's
+    }
+    const std::int32_t dx = to.x - from.x;
+    const std::int32_t dy = to.y - from.y;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    const auto time = static_cast<std::uint64_t>(ticks);
+    if (captured) {
+        reports_.push(protocol::CapturedMotion{.dx = dx, .dy = dy, .ticks = time});
+    } else {
+        reports_.push(
+            protocol::WatchedMotion{.x = to.x, .y = to.y, .dx = dx, .dy = dy, .ticks = time});
+    }
 }
 
 bool Hooks::keyboard(const KBDLLHOOKSTRUCT& event) {
     if (injected_by_osdrop(event.flags, LLKHF_INJECTED, event.dwExtraInfo)) {
         return false;
     }
-    if (!capturing_.load(std::memory_order_relaxed)) {
-        if (controlled_.load(std::memory_order_relaxed) && (event.flags & LLKHF_INJECTED) == 0) {
-            local_input();
-        }
-        return false;
-    }
     const win::ScanCode scan{.code = static_cast<std::uint16_t>(event.scanCode),
                              .extended = (event.flags & LLKHF_EXTENDED) != 0};
-    if (win::usage_of(scan)) { // keys without a place in the table are swallowed, not sent
-        reports_.push(protocol::CapturedKey{.scan = scan, .down = (event.flags & LLKHF_UP) == 0});
+    const bool down = (event.flags & LLKHF_UP) == 0;
+    const bool capturing = capturing_.load(std::memory_order_relaxed);
+    if (chord(scan, down, capturing)) {
+        return true;
     }
-    return true;
+    // Keys without a place in the table are not reported (and swallowed while captured).
+    const bool known = win::usage_of(scan).has_value();
+    if (capturing) {
+        if (known) {
+            reports_.push(protocol::PhysicalKey{.scan = scan, .down = down});
+        }
+        return true;
+    }
+    if (controlled_.load(std::memory_order_relaxed)) {
+        if ((event.flags & LLKHF_INJECTED) == 0) {
+            local_input();
+        }
+    } else if (known && watching_.load(std::memory_order_relaxed)) {
+        reports_.push(protocol::PhysicalKey{.scan = scan, .down = down});
+    }
+    return false;
+}
+
+bool Hooks::chord(win::ScanCode scan, bool down, bool capturing) {
+    // The chords are Osdrop's while it watches or captures this PC's input; while another
+    // computer controls this PC, its keyboard takes control back instead.
+    const bool active = capturing || (watching_.load(std::memory_order_relaxed) &&
+                                      !controlled_.load(std::memory_order_relaxed));
+    using Outcome = protocol::ChordMatcher::Outcome;
+    switch (chords_.key(scan, down, active)) {
+    case Outcome::Pass:
+        return false;
+    case Outcome::Swallow:
+        return true;
+    case Outcome::ReturnHome:
+        if (capturing) {
+            // Input acts here again at once, whatever the client does; the pipe thread shows the
+            // cursor.
+            capturing_ = false;
+            reports_.push(protocol::Released{.reason = protocol::ReleaseReason::ReturnChord});
+        } else {
+            reports_.push(protocol::HotkeyPressed{.hotkey = protocol::Hotkey::ReturnHome});
+        }
+        return true;
+    case Outcome::LockInput:
+        reports_.push(protocol::HotkeyPressed{.hotkey = protocol::Hotkey::LockInput});
+        return true;
+    }
+    return false;
 }
 
 void Hooks::local_input() {
