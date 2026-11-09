@@ -41,9 +41,6 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.core == 'true' || needs.changes.outputs.macos == 'true' || needs.changes.outputs.windows == 'true') }}
     runs-on: macos-26
-    env:
-      CORE: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' }}
-      MAC: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' || needs.changes.outputs.macos == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -53,7 +50,7 @@ jobs:
         run: brew install cmake ninja xcodegen
 
       - name: Core — configure, build, test
-        if: env.CORE == 'true'
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' }}
         working-directory: core
         run: |
           cmake --preset debug
@@ -71,11 +68,11 @@ jobs:
         run: scripts/lint.sh
 
       - name: Swift package — build and test
-        if: env.MAC == 'true'
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' || needs.changes.outputs.macos == 'true' }}
         run: swift test
 
       - name: macOS app — generate, build, test
-        if: env.MAC == 'true'
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' || needs.changes.outputs.macos == 'true' }}
         working-directory: macos
         run: |
           xcodegen generate
