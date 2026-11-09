@@ -670,3 +670,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The low-level hook sees where the cursor would go before Windows applies the rectangle, so a held cursor still pushed past the edge and crossed. Holding the cursor is exactly how a game says it should not leave; full-screen detection misses borderless games and catches videos.
 **Trade-offs:** Games in a window that do not hold the cursor still let it cross (the lock chord covers them). Up to 100 ms after a game takes the cursor, a push can still cross.
 **Revisit if:** A game holds the cursor in a way GetClipCursor does not show, or users report Mac games letting the cursor cross.
+
+---
+
+## 2026-11-09 — The PC's drags are virtual files; its drop targets show while the left button is down
+**Chosen:** A drag Osdrop starts on the PC offers its files as virtual files (FILEGROUPDESCRIPTORW and one FILECONTENTS stream per file) with IDataObjectAsyncCapability, plus CF_HDROP to staged copies up to 64 MB. The drop targets along the edges are shown while the left button is down, polled every 30 ms, instead of only during an OLE drag.
+**Alternatives:** CF_HDROP only, staging everything at the drop; detecting OLE drags (Windows has no drag pasteboard to watch); a shell extension.
+**Why:** Virtual files let Explorer pull the content as it copies, with its own progress and without Osdrop holding the drop, which the 10 GB criterion needs; CF_HDROP alone would stage everything before Explorer can start. Windows gives no notice that an OLE drag began, but every drag holds the left button, and the targets take nothing but drops.
+**Trade-offs:** A descriptor holds 259 characters of path, so deeper files are left out of a drag (counted). Folder trees from other computers need their manifest before the drop (Phase 14). While the left button is down, a 6-pixel strip at an outer edge belongs to Osdrop.
+**Revisit if:** Users report the strips getting in the way of something done at a screen edge with the button held.

@@ -207,6 +207,22 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 | CL8 | Clipboard history (PC) | With Windows clipboard history on (Win+V), copy on the Mac | The copy appears once in the history; nothing else is fetched |
 | CL9 | The same copy again | Copy a file, wait until the other computer says it can be pasted, then copy the same file again | Nothing is fetched again: no progress window, no notification |
 
+### Windows drag bridge (Phase 4)
+
+On the PC with a Debug build of the shell: open the panel and turn on "Drag loopback (developer)".
+A drag dropped at an outer edge of a monitor comes back at its left edge, held by Osdrop; move the
+mouse and click where it should drop. Esc cancels it.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| DW1 | One file | Drag a file from Explorer to the right edge and let go; click inside an Explorer window | The file is copied there; the original stays where it was |
+| DW2 | Many files and a folder | As DW1 with several files and a folder with subfolders, dropped on the desktop | Everything arrives with the same tree; Explorer shows its progress |
+| DW3 | Large file | As DW1 with a 10 GB file | Explorer's progress dialog shows; Explorer keeps responding during the copy |
+| DW4 | Apps | As DW1, dropping into a browser upload field, Teams and an Outlook message | Each one takes the file |
+| DW5 | Virtual sources | Drag an Outlook attachment and a file out of a zip folder to the edge | They come back as files and drop as in DW1 |
+| DW6 | Cancel | Start a loopback drag and press Esc; drop one on a place that takes nothing | The drag ends with nothing copied; Osdrop's log (Settings › Advanced) says cancelled |
+| DW7 | Elevated source | Drag a file from an Explorer window opened by an app run as administrator | The edge takes nothing (TROUBLESHOOTING.md); nothing breaks |
+
 ### Windows input (Phase 3)
 
 On the PC, with the service installed from the shell's output folder (BUILDING.md › Input service

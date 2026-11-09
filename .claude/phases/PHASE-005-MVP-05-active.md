@@ -1,5 +1,5 @@
 # Phase 005 (MVP-05) — Windows drag bridge
-Status: PENDING
+Status: ACTIVE — code on `feature/phase-04-windows-drag`; the loopback runs on the PC next (TESTING DW1–DW7)
 
 DEVPLAN reference: Phase 4 (go/no-go gate). Depends on: Phase 3
 
@@ -7,11 +7,11 @@ DEVPLAN reference: Phase 4 (go/no-go gate). Depends on: Phase 3
 On one PC, a file dragged to a screen edge is captured, and Osdrop can start a virtual-file drag from injected input that drops into Explorer or an app.
 
 ## Tasks
-- [ ] Edge drop targets (topmost, layered, non-activating, STA thread) shown while the left button is held near a crossing edge; reading `CF_HDROP` and virtual files; ending the source drag as a copy or rejecting it.
-- [ ] Drag start: helper window receiving an injected button-down; `DoDragDrop` on a dedicated STA thread; data object with `CFSTR_FILEDESCRIPTORW` and `CFSTR_FILECONTENTS` (one stream per file, read through `PromisedContentReading`), `IDataObjectAsyncCapability`; delayed `CF_HDROP` to staged copies below a size cap; drag image through `IDragSourceHelper`.
-- [ ] Name and path mapping used by the descriptors (long paths, reserved names, invalid characters) as a portable function, later moved into `core` in Phase 13.
+- [x] Edge drop targets (topmost, layered, non-activating, STA thread) shown while the left button is held near a crossing edge; reading `CF_HDROP` and virtual files; ending the source drag as a copy or rejecting it.
+- [x] Drag start: helper window receiving an injected button-down; `DoDragDrop` on a dedicated STA thread; data object with `CFSTR_FILEDESCRIPTORW` and `CFSTR_FILECONTENTS` (one stream per file, read through `PromisedContentReading`), `IDataObjectAsyncCapability`; delayed `CF_HDROP` to staged copies below a size cap; drag image through `IDragSourceHelper`.
+- [x] Name and path mapping used by the descriptors (long paths, reserved names, invalid characters) as a portable function, later moved into `core` in Phase 13.
 - [ ] UIPI limits measured and recorded (drags from elevated apps).
-- [ ] Debug-only loopback as in Phase 2.
+- [x] Debug-only loopback as in Phase 2.
 - [ ] Announce `OSDROP_FEATURE_DRAG_SOURCE` and `OSDROP_FEATURE_DRAG_TARGET` in `windows/shared` (`kAvailableFeatures`) once drags work both ways.
 
 ## Acceptance Criteria
@@ -25,3 +25,6 @@ On one PC, a file dragged to a screen edge is captured, and Osdrop can start a v
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- 2026-11-09: virtual files with async capability, CF_HDROP staged up to 64 MB; strips shown while
+  the left button is down. Name mapping: local names already fit; names from other computers are
+  mapped by core (Phase 13's `map_name`), wired in Phase 14.
