@@ -322,6 +322,7 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU6 | Devices and input settings | Turn off "Can control this computer" for the Mac on the Mac, then rename the PC and save; change the push time and the pointer speed on the PC | The PC's cursor no longer crosses to the Mac; the Mac shows the PC's new name after it reconnects; push time and speed apply at once |
 | WU7 | Clipboard and Advanced | Turn sharing off in the panel, copy on the Mac and paste on the PC; turn it on again; press Copy in Settings › Advanced and paste it into Notepad | Nothing comes over while off; the pasted diagnostics have no computer names or addresses |
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
+| WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 
 ### Runs
 

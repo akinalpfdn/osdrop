@@ -661,3 +661,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Both apps should work the same way, and a chord can clash with an app the user relies on.
 **Trade-offs:** A combination Windows takes for itself (Win+L, some Win+letter shortcuts) never reaches the recorder, so it cannot be chosen.
 **Revisit if:** Users need a chord with a key outside the key table.
+
+---
+
+## 2026-11-09 — No crossing while a game holds the cursor
+**Chosen:** User decision: while an application holds the cursor in a rectangle smaller than the desktop (ClipCursor, as full-screen games do to keep it on their monitor), the PC's cursor crosses to no other computer. The engine reads the rectangle every 100 ms while watching; the forwarder then keeps positions in it and reports only the movement inside it, so a push at its edge moves nothing and core sees no crossing. A setting in Settings › Input turns it off; it is on by default.
+**Alternatives:** Detecting full-screen applications (QUNS states); a list of games; leaving it to the lock chord.
+**Why:** The low-level hook sees where the cursor would go before Windows applies the rectangle, so a held cursor still pushed past the edge and crossed. Holding the cursor is exactly how a game says it should not leave; full-screen detection misses borderless games and catches videos.
+**Trade-offs:** Games in a window that do not hold the cursor still let it cross (the lock chord covers them). Up to 100 ms after a game takes the cursor, a push can still cross.
+**Revisit if:** A game holds the cursor in a way GetClipCursor does not show, or users report Mac games letting the cursor cross.

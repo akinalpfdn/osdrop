@@ -331,7 +331,8 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
   check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
   permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds,
   the two chords with a recorder; the engine checks them as the hook matches them and sends them
-  to OsdropInput after every reconnect), Clipboard and Files, Advanced (diagnostics without
+  to OsdropInput after every reconnect; no crossing while a game holds the cursor, below),
+  Clipboard and Files, Advanced (diagnostics without
   names or addresses, the shell's and the input service's log folders). `AppSettings` saves every
   change to `%APPDATA%\Osdrop\settings.json` at once and the engine gets it at once; a new name
   restarts the engine, as the Mac restarts its mesh.
@@ -343,6 +344,10 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
 - **Input service.** While OsdropInput does not answer, the panel says whether the service is
   missing, stopped or not answering (from the service manager) and offers to repair it:
   `OsdropService.exe --install` from Osdrop's folder, elevated.
+- **Games.** While an application holds the cursor in a rectangle smaller than the desktop
+  (ClipCursor, as full-screen games do), the bridge gives the rectangle to the `InputForwarder`,
+  which keeps positions in it and reports only the movement inside it: a push at its edge moves
+  nothing, so core never crosses. The bridge reads the rectangle every 100 ms while watching.
 - **Errors.** `LocalizedText.Error` gives every core error a localized message that says what to do.
 
 ## macOS input layer
