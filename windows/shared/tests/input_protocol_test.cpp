@@ -24,9 +24,12 @@ TEST(InputProtocol, EveryRequestRoundTrips) {
         input::Press{.button = input::Button::X2, .down = true},
         input::Scroll{.vertical = -input::kMaxScroll, .horizontal = 30},
         input::Key{.scan = kRightArrow, .down = true},
-        input::StartCapture{.park_x = 1280, .park_y = 720},
+        input::StartCapture{.park_x = 1280, .park_y = 720, .home_x = 2559, .home_y = -40},
         input::StopCapture{.x = -1920, .y = 0},
         input::QueryStats{},
+        input::Watch{.on = true},
+        input::Watch{.on = false},
+        input::Heartbeat{},
     };
     for (const input::Request& request : requests) {
         const auto bytes = input::encode(request);
@@ -40,13 +43,16 @@ TEST(InputProtocol, EveryRequestRoundTrips) {
 
 TEST(InputProtocol, EveryReportRoundTrips) {
     const std::vector<input::Report> reports{
-        input::CapturedMotion{.dx = -3, .dy = 12},
-        input::CapturedPress{.button = input::Button::Middle, .down = false},
-        input::CapturedScroll{.vertical = 120, .horizontal = -40},
-        input::CapturedKey{.scan = kA, .down = true},
+        input::CapturedMotion{.dx = -3, .dy = 12, .ticks = 1ULL << 50U},
+        input::WatchedMotion{.x = 2565, .y = -1, .dx = 7, .dy = -2, .ticks = 123'456'789},
+        input::PhysicalPress{.button = input::Button::Middle, .down = false},
+        input::PhysicalScroll{.vertical = 120, .horizontal = -40},
+        input::PhysicalKey{.scan = kA, .down = true},
         input::LocalInput{},
         input::Stats{.events = 1ULL << 40U, .p50_us = 4, .p99_us = 90, .max_us = 2'000},
         input::Rejected{.type = 3, .reason = input::Refusal::NotControlling},
+        input::HotkeyPressed{.hotkey = input::Hotkey::LockInput},
+        input::Released{.reason = input::ReleaseReason::Watchdog},
     };
     for (const input::Report& report : reports) {
         const auto bytes = input::encode(report);
@@ -109,6 +115,20 @@ TEST(InputProtocol, ValuesOutOfRangeAreRefused) {
     auto rejected = input::encode(input::Report(input::Rejected{.type = 3}));
     rejected[input::kHeaderSize + 2] = 9;
     EXPECT_FALSE(input::decode_report(rejected).has_value());
+    auto watch = input::encode(input::Request(input::Watch{.on = true}));
+    watch[input::kHeaderSize] = 2;
+    EXPECT_EQ(request_error(watch), DecodeError::ValueOutOfRange);
+    for (const std::uint8_t code : {std::uint8_t{0}, std::uint8_t{3}}) {
+        auto hotkey = input::encode(input::Report(input::HotkeyPressed{}));
+        hotkey[input::kHeaderSize] = code;
+        EXPECT_FALSE(input::decode_report(hotkey).has_value()) << "hotkey " << int{code};
+        auto released = input::encode(input::Report(input::Released{}));
+        released[input::kHeaderSize] = code;
+        EXPECT_FALSE(input::decode_report(released).has_value()) << "release reason " << int{code};
+    }
+    EXPECT_FALSE(input::decode_report(input::encode(input::Report(
+                                          input::WatchedMotion{.x = input::kMaxCoordinate + 1})))
+                     .has_value());
 }
 
 TEST(InputProtocol, TypesHaveNamesForTheLog) {

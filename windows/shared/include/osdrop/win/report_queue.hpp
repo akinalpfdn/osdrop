@@ -1,9 +1,9 @@
 #pragma once
 
 // Reports from OsdropInput's hook thread to its pipe thread (DEVPLAN Phase 3: hook callbacks only
-// enqueue). Motion that piles up while the pipe is busy is added into one report; keys, buttons
-// and scrolling are never dropped, so a key never stays down on the other computer. Past the limit
-// the oldest motion goes first.
+// enqueue). Motion that piles up while the pipe is busy is added into one report; keys, buttons,
+// scrolling and the rest are never dropped, so a key never stays down on the other computer. Past
+// the limit the oldest motion goes first.
 
 #include <osdrop/win/input_protocol.hpp>
 

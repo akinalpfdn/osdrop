@@ -18,13 +18,18 @@ enum class Type : std::uint8_t {
     StartCapture = 7,
     StopCapture = 8,
     QueryStats = 9,
+    Watch = 10,
+    Heartbeat = 11,
     CapturedMotion = 101,
-    CapturedPress = 102,
-    CapturedScroll = 103,
-    CapturedKey = 104,
+    PhysicalPress = 102,
+    PhysicalScroll = 103,
+    PhysicalKey = 104,
     LocalInput = 105,
     Stats = 106,
     Rejected = 107,
+    WatchedMotion = 108,
+    HotkeyPressed = 109,
+    Released = 110,
 };
 
 template <typename... Visitors>
@@ -177,6 +182,66 @@ Field<std::pair<ScanCode, bool>> read_key(Reader& r) {
     return std::pair(scan, **down);
 }
 
+/// A one-byte enum whose values run from 1 to `last`.
+template <typename E>
+Field<E> read_code(Reader& r, E last) {
+    const auto code = r.u8();
+    if (!code) {
+        return Field<E>::failure(DecodeError::Truncated);
+    }
+    if (*code < 1 || *code > static_cast<std::uint8_t>(last)) {
+        return Field<E>::failure(DecodeError::ValueOutOfRange);
+    }
+    return static_cast<E>(*code);
+}
+
+Field<StartCapture> read_start_capture(Reader& r) {
+    const auto park = read_point(r, kMaxCoordinate);
+    if (!park) {
+        return Field<StartCapture>::failure(park.error());
+    }
+    const auto home = read_point(r, kMaxCoordinate);
+    if (!home) {
+        return Field<StartCapture>::failure(home.error());
+    }
+    return StartCapture{.park_x = park.value().x,
+                        .park_y = park.value().y,
+                        .home_x = home.value().x,
+                        .home_y = home.value().y};
+}
+
+Field<CapturedMotion> read_captured_motion(Reader& r) {
+    const auto delta = read_point(r, kMaxCoordinate);
+    if (!delta) {
+        return Field<CapturedMotion>::failure(delta.error());
+    }
+    const auto ticks = r.u64();
+    if (!ticks) {
+        return Field<CapturedMotion>::failure(DecodeError::Truncated);
+    }
+    return CapturedMotion{.dx = delta.value().x, .dy = delta.value().y, .ticks = *ticks};
+}
+
+Field<WatchedMotion> read_watched_motion(Reader& r) {
+    const auto position = read_point(r, kMaxCoordinate);
+    if (!position) {
+        return Field<WatchedMotion>::failure(position.error());
+    }
+    const auto delta = read_point(r, kMaxCoordinate);
+    if (!delta) {
+        return Field<WatchedMotion>::failure(delta.error());
+    }
+    const auto ticks = r.u64();
+    if (!ticks) {
+        return Field<WatchedMotion>::failure(DecodeError::Truncated);
+    }
+    return WatchedMotion{.x = position.value().x,
+                         .y = position.value().y,
+                         .dx = delta.value().x,
+                         .dy = delta.value().y,
+                         .ticks = *ticks};
+}
+
 Field<Stats> read_stats(Reader& r) {
     const auto events = r.u64();
     const auto p50 = r.u32();
@@ -278,6 +343,7 @@ Bytes encode(const Request& request) {
                                      },
                                      [&](const StartCapture& m) {
                                          write_point(w, m.park_x, m.park_y);
+                                         write_point(w, m.home_x, m.home_y);
                                          return Type::StartCapture;
                                      },
                                      [&](const StopCapture& m) {
@@ -285,6 +351,11 @@ Bytes encode(const Request& request) {
                                          return Type::StopCapture;
                                      },
                                      [](const QueryStats&) { return Type::QueryStats; },
+                                     [&](const Watch& m) {
+                                         w.flag(m.on);
+                                         return Type::Watch;
+                                     },
+                                     [](const Heartbeat&) { return Type::Heartbeat; },
                                  },
                                  request);
     return w.message(type);
@@ -295,19 +366,34 @@ Bytes encode(const Report& report) {
     const Type type = std::visit(Overloaded{
                                      [&](const CapturedMotion& m) {
                                          write_point(w, m.dx, m.dy);
+                                         w.u64(m.ticks);
                                          return Type::CapturedMotion;
                                      },
-                                     [&](const CapturedPress& m) {
+                                     [&](const WatchedMotion& m) {
+                                         write_point(w, m.x, m.y);
+                                         write_point(w, m.dx, m.dy);
+                                         w.u64(m.ticks);
+                                         return Type::WatchedMotion;
+                                     },
+                                     [&](const PhysicalPress& m) {
                                          write_press(w, m.button, m.down);
-                                         return Type::CapturedPress;
+                                         return Type::PhysicalPress;
                                      },
-                                     [&](const CapturedScroll& m) {
+                                     [&](const PhysicalScroll& m) {
                                          write_point(w, m.vertical, m.horizontal);
-                                         return Type::CapturedScroll;
+                                         return Type::PhysicalScroll;
                                      },
-                                     [&](const CapturedKey& m) {
+                                     [&](const PhysicalKey& m) {
                                          write_key(w, m.scan, m.down);
-                                         return Type::CapturedKey;
+                                         return Type::PhysicalKey;
+                                     },
+                                     [&](const HotkeyPressed& m) {
+                                         w.u8(static_cast<std::uint8_t>(m.hotkey));
+                                         return Type::HotkeyPressed;
+                                     },
+                                     [&](const Released& m) {
+                                         w.u8(static_cast<std::uint8_t>(m.reason));
+                                         return Type::Released;
                                      },
                                      [](const LocalInput&) { return Type::LocalInput; },
                                      [&](const Stats& m) {
@@ -341,6 +427,17 @@ Expected<Request, DecodeError> decode_request(std::span<const std::uint8_t> mess
         return empty<Request, EndControl>(bytes);
     case Type::QueryStats:
         return empty<Request, QueryStats>(bytes);
+    case Type::Heartbeat:
+        return empty<Request, Heartbeat>(bytes);
+    case Type::Watch:
+        return body<Request, Watch>(bytes, [](Reader& r) {
+            const auto on = r.flag();
+            if (!on) {
+                return Field<Watch>::failure(DecodeError::Truncated);
+            }
+            return *on ? Field<Watch>(Watch{.on = **on})
+                       : Field<Watch>::failure(DecodeError::ValueOutOfRange);
+        });
     case Type::Move:
         return body<Request, Move>(bytes, [](Reader& r) {
             const auto p = read_point(r, kMaxCoordinate);
@@ -348,12 +445,7 @@ Expected<Request, DecodeError> decode_request(std::span<const std::uint8_t> mess
                      : Field<Move>::failure(p.error());
         });
     case Type::StartCapture:
-        return body<Request, StartCapture>(bytes, [](Reader& r) {
-            const auto p = read_point(r, kMaxCoordinate);
-            return p ? Field<StartCapture>(
-                           StartCapture{.park_x = p.value().x, .park_y = p.value().y})
-                     : Field<StartCapture>::failure(p.error());
-        });
+        return body<Request, StartCapture>(bytes, read_start_capture);
     case Type::StopCapture:
         return body<Request, StopCapture>(bytes, [](Reader& r) {
             const auto p = read_point(r, kMaxCoordinate);
@@ -394,31 +486,41 @@ Expected<Report, DecodeError> decode_report(std::span<const std::uint8_t> messag
     case Type::LocalInput:
         return empty<Report, LocalInput>(bytes);
     case Type::CapturedMotion:
-        return body<Report, CapturedMotion>(bytes, [](Reader& r) {
-            const auto p = read_point(r, kMaxCoordinate);
-            return p ? Field<CapturedMotion>(CapturedMotion{.dx = p.value().x, .dy = p.value().y})
-                     : Field<CapturedMotion>::failure(p.error());
-        });
-    case Type::CapturedScroll:
-        return body<Report, CapturedScroll>(bytes, [](Reader& r) {
+        return body<Report, CapturedMotion>(bytes, read_captured_motion);
+    case Type::WatchedMotion:
+        return body<Report, WatchedMotion>(bytes, read_watched_motion);
+    case Type::PhysicalScroll:
+        return body<Report, PhysicalScroll>(bytes, [](Reader& r) {
             const auto p = read_point(r, kMaxScroll);
-            return p ? Field<CapturedScroll>(
-                           CapturedScroll{.vertical = p.value().x, .horizontal = p.value().y})
-                     : Field<CapturedScroll>::failure(p.error());
+            return p ? Field<PhysicalScroll>(
+                           PhysicalScroll{.vertical = p.value().x, .horizontal = p.value().y})
+                     : Field<PhysicalScroll>::failure(p.error());
         });
-    case Type::CapturedPress:
-        return body<Report, CapturedPress>(bytes, [](Reader& r) {
+    case Type::PhysicalPress:
+        return body<Report, PhysicalPress>(bytes, [](Reader& r) {
             const auto p = read_press(r);
-            return p ? Field<CapturedPress>(
-                           CapturedPress{.button = p.value().first, .down = p.value().second})
-                     : Field<CapturedPress>::failure(p.error());
+            return p ? Field<PhysicalPress>(
+                           PhysicalPress{.button = p.value().first, .down = p.value().second})
+                     : Field<PhysicalPress>::failure(p.error());
         });
-    case Type::CapturedKey:
-        return body<Report, CapturedKey>(bytes, [](Reader& r) {
+    case Type::PhysicalKey:
+        return body<Report, PhysicalKey>(bytes, [](Reader& r) {
             const auto k = read_key(r);
-            return k ? Field<CapturedKey>(
-                           CapturedKey{.scan = k.value().first, .down = k.value().second})
-                     : Field<CapturedKey>::failure(k.error());
+            return k ? Field<PhysicalKey>(
+                           PhysicalKey{.scan = k.value().first, .down = k.value().second})
+                     : Field<PhysicalKey>::failure(k.error());
+        });
+    case Type::HotkeyPressed:
+        return body<Report, HotkeyPressed>(bytes, [](Reader& r) {
+            const auto hotkey = read_code(r, Hotkey::LockInput);
+            return hotkey ? Field<HotkeyPressed>(HotkeyPressed{.hotkey = hotkey.value()})
+                          : Field<HotkeyPressed>::failure(hotkey.error());
+        });
+    case Type::Released:
+        return body<Report, Released>(bytes, [](Reader& r) {
+            const auto reason = read_code(r, ReleaseReason::Watchdog);
+            return reason ? Field<Released>(Released{.reason = reason.value()})
+                          : Field<Released>::failure(reason.error());
         });
     case Type::Stats:
         return body<Report, Stats>(bytes, read_stats);
@@ -448,13 +550,15 @@ std::uint16_t type_of(const Request& request) {
                                      [](const StartCapture&) { return Type::StartCapture; },
                                      [](const StopCapture&) { return Type::StopCapture; },
                                      [](const QueryStats&) { return Type::QueryStats; },
+                                     [](const Watch&) { return Type::Watch; },
+                                     [](const Heartbeat&) { return Type::Heartbeat; },
                                  },
                                  request);
     return static_cast<std::uint16_t>(type);
 }
 
 std::string_view type_name(std::uint16_t type) {
-    static constexpr std::array<std::pair<Type, std::string_view>, 16> kNames{{
+    static constexpr std::array<std::pair<Type, std::string_view>, 21> kNames{{
         {Type::BeginControl, "BeginControl"},
         {Type::EndControl, "EndControl"},
         {Type::Move, "Move"},
@@ -464,13 +568,18 @@ std::string_view type_name(std::uint16_t type) {
         {Type::StartCapture, "StartCapture"},
         {Type::StopCapture, "StopCapture"},
         {Type::QueryStats, "QueryStats"},
+        {Type::Watch, "Watch"},
+        {Type::Heartbeat, "Heartbeat"},
         {Type::CapturedMotion, "CapturedMotion"},
-        {Type::CapturedPress, "CapturedPress"},
-        {Type::CapturedScroll, "CapturedScroll"},
-        {Type::CapturedKey, "CapturedKey"},
+        {Type::PhysicalPress, "PhysicalPress"},
+        {Type::PhysicalScroll, "PhysicalScroll"},
+        {Type::PhysicalKey, "PhysicalKey"},
         {Type::LocalInput, "LocalInput"},
         {Type::Stats, "Stats"},
         {Type::Rejected, "Rejected"},
+        {Type::WatchedMotion, "WatchedMotion"},
+        {Type::HotkeyPressed, "HotkeyPressed"},
+        {Type::Released, "Released"},
     }};
     for (const auto& [known, name] : kNames) {
         if (static_cast<std::uint16_t>(known) == type) {

@@ -1,10 +1,12 @@
-// OsdropInput's handling of one client (DEVPLAN Phase 3): injection only while the client
-// controls this PC, invalid messages refused and logged, and nothing left pressed or captured
-// when control ends or the client goes.
+// OsdropInput's handling of one client (DEVPLAN Phases 3 and 11): injection only while the
+// client controls this PC or captures its input, invalid messages refused and logged, a capture
+// that ends here when its heartbeat stops or the return chord is pressed, and nothing left pressed
+// or captured when control ends or the client goes.
 #include <osdrop/win/input_session.hpp>
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -41,6 +43,8 @@ struct FakeDevice final : input::InputDevice {
         calls.push_back("release " + std::to_string(x) + "," + std::to_string(y));
     }
     void set_controlled(bool on) override { controlled = on; }
+    void set_watching(bool on) override { calls.push_back(on ? "watch" : "unwatch"); }
+    void mask_menu_keys() override { calls.emplace_back("mask"); }
     bool controlled = false;
     [[nodiscard]] input::Stats stats() const override {
         return {.events = 5, .p50_us = 1, .p99_us = 3, .max_us = 4};
@@ -53,12 +57,15 @@ struct FakeLog final : input::InputLog {
     void warning(std::string_view message) override { warnings.emplace_back(message); }
 };
 
+using Clock = input::InputSession::Clock;
+
 class InputSessionTest : public ::testing::Test {
 protected:
     std::optional<input::Report> send(const input::Request& request) {
-        return session.handle(input::encode(request));
+        return session.handle(input::encode(request), now);
     }
 
+    Clock::time_point now = Clock::time_point(std::chrono::hours(1));
     FakeDevice device;
     FakeLog log;
     input::InputSession session{device, log};
@@ -103,15 +110,18 @@ TEST_F(InputSessionTest, EndingControlReleasesWhatIsStillDown) {
 }
 
 TEST_F(InputSessionTest, AClientThatGoesLeavesNothingPressedOrCaptured) {
+    send(input::Watch{.on = true});
     send(input::BeginControl{});
     send(input::Press{.button = input::Button::Middle, .down = true});
-    send(input::StartCapture{.park_x = 100, .park_y = 200});
+    send(input::StartCapture{.park_x = 100, .park_y = 200, .home_x = 1919, .home_y = 300});
     EXPECT_TRUE(session.capturing());
     device.calls.clear();
     session.reset();
-    EXPECT_EQ(device.calls, (std::vector<std::string>{"release 100,200", "press 2 up"}));
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"release 1919,300", "press 2 up", "unwatch"}))
+        << "the cursor shows where it left";
     EXPECT_FALSE(session.capturing());
     EXPECT_FALSE(session.controlling());
+    EXPECT_FALSE(session.watching());
     EXPECT_FALSE(device.controlled);
 }
 
@@ -120,6 +130,68 @@ TEST_F(InputSessionTest, CaptureStartsAndStopsWithoutControl) {
     send(input::StopCapture{.x = 30, .y = 40});
     send(input::StopCapture{.x = 50, .y = 60}); // not capturing any more: nothing to do
     EXPECT_EQ(device.calls, (std::vector<std::string>{"capture 1,2", "release 30,40"}));
+}
+
+TEST_F(InputSessionTest, CapturingMayReleaseKeysHereAndSetCapsLock) {
+    send(input::StartCapture{.park_x = 1, .park_y = 2});
+    EXPECT_FALSE(send(input::Key{.scan = kShift, .down = false}).has_value());
+    EXPECT_FALSE(send(input::Key{.scan = kA, .down = true}).has_value());
+    send(input::StopCapture{.x = 3, .y = 4});
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"capture 1,2", "key 42 up", "key 30 down",
+                                                      "release 3,4", "key 30 up"}))
+        << "what the capture pressed is released with it";
+    ASSERT_TRUE(send(input::Key{.scan = kA, .down = false}).has_value())
+        << "refused once the capture is over";
+}
+
+TEST_F(InputSessionTest, ACaptureWithoutHeartbeatEndsWhereTheCursorLeft) {
+    send(input::StartCapture{.park_x = 960, .park_y = 540, .home_x = 1919, .home_y = 200});
+    ASSERT_EQ(session.deadline(), now + input::kHeartbeatTimeout);
+    now += input::kHeartbeatInterval;
+    send(input::Heartbeat{});
+    EXPECT_FALSE(session.expire(now + input::kHeartbeatTimeout - std::chrono::milliseconds(1)));
+    device.calls.clear();
+    const auto released = session.expire(now + input::kHeartbeatTimeout);
+    ASSERT_TRUE(released.has_value());
+    EXPECT_EQ(std::get<input::Released>(*released).reason, input::ReleaseReason::Watchdog);
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"release 1919,200"}));
+    EXPECT_FALSE(session.capturing());
+    EXPECT_FALSE(session.deadline().has_value());
+    EXPECT_FALSE(session.expire(now + std::chrono::hours(1)).has_value()) << "once";
+    EXPECT_EQ(log.warnings.size(), 1U);
+
+    send(input::Heartbeat{}); // late: no error
+    send(input::StopCapture{.x = 1919, .y = 210});
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"release 1919,200", "release 1919,210"}))
+        << "the client's StopCapture still places the cursor";
+}
+
+TEST_F(InputSessionTest, TheReturnChordEndsTheCaptureHere) {
+    send(input::StartCapture{.park_x = 960, .park_y = 540, .home_x = 0, .home_y = 700});
+    device.calls.clear();
+    session.forwarding(input::Released{.reason = input::ReleaseReason::ReturnChord});
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"release 0,700"}));
+    EXPECT_FALSE(session.capturing());
+    session.forwarding(input::Released{.reason = input::ReleaseReason::ReturnChord});
+    EXPECT_EQ(device.calls.size(), 1U) << "a second one has nothing to end";
+    EXPECT_FALSE(session.expire(now + std::chrono::hours(1)).has_value());
+}
+
+TEST_F(InputSessionTest, HotkeysOutsideCaptureMaskTheMenuKeys) {
+    session.forwarding(input::HotkeyPressed{.hotkey = input::Hotkey::LockInput});
+    send(input::StartCapture{.park_x = 1, .park_y = 2});
+    session.forwarding(input::HotkeyPressed{.hotkey = input::Hotkey::LockInput});
+    session.forwarding(input::PhysicalKey{.scan = kA, .down = true});
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"mask", "capture 1,2"}))
+        << "during capture no modifier reached an app";
+}
+
+TEST_F(InputSessionTest, WatchingFollowsTheClient) {
+    send(input::Watch{.on = true});
+    send(input::Watch{.on = true});
+    EXPECT_TRUE(session.watching());
+    send(input::Watch{.on = false});
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"watch", "unwatch"}));
 }
 
 TEST_F(InputSessionTest, StatsAreAnswered) {
@@ -131,13 +203,13 @@ TEST_F(InputSessionTest, StatsAreAnswered) {
 TEST_F(InputSessionTest, BrokenMessagesAreRefusedAndLogged) {
     auto newer = input::encode(input::Request(input::BeginControl{}));
     newer[4] = input::kVersion + 1;
-    const auto version = session.handle(newer);
+    const auto version = session.handle(newer, now);
     ASSERT_TRUE(version.has_value());
     EXPECT_EQ(std::get<input::Rejected>(*version).reason, input::Refusal::UnsupportedVersion);
     EXPECT_FALSE(session.controlling());
 
     const std::vector<std::uint8_t> garbage{1, 2, 3};
-    const auto malformed = session.handle(garbage);
+    const auto malformed = session.handle(garbage, now);
     ASSERT_TRUE(malformed.has_value());
     EXPECT_EQ(std::get<input::Rejected>(*malformed).reason, input::Refusal::Malformed);
     EXPECT_EQ(std::get<input::Rejected>(*malformed).type, 0);

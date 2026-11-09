@@ -11,6 +11,20 @@ struct Overloaded : Visitors... { // NOLINT(misc-multiple-inheritance): the stan
     using Visitors::operator()...;
 };
 
+bool injects(const Request& request) {
+    return std::holds_alternative<Move>(request) || std::holds_alternative<Press>(request) ||
+           std::holds_alternative<Scroll>(request) || std::holds_alternative<Key>(request);
+}
+
+template <typename T>
+void track(std::set<T>& held, T value, bool down) {
+    if (down) {
+        held.insert(value);
+    } else {
+        held.erase(value);
+    }
+}
+
 std::string_view describe(DecodeError error) {
     switch (error) {
     case DecodeError::Truncated:
@@ -33,7 +47,8 @@ std::string_view describe(DecodeError error) {
 
 InputSession::InputSession(InputDevice& device, InputLog& log) : device_(device), log_(log) {}
 
-std::optional<Report> InputSession::handle(std::span<const std::uint8_t> message) {
+std::optional<Report> InputSession::handle(std::span<const std::uint8_t> message,
+                                           Clock::time_point now) {
     const std::uint16_t type = type_of(message);
     const auto request = decode_request(message);
     if (!request) {
@@ -42,87 +57,134 @@ std::optional<Report> InputSession::handle(std::span<const std::uint8_t> message
                                    : Refusal::Malformed;
         return refuse(type, reason, describe(request.error()));
     }
-    return carry_out(request.value());
+    return carry_out(request.value(), now);
 }
 
-std::optional<Report> InputSession::carry_out(const Request& request) {
-    const auto injecting = [&]() -> std::optional<Report> {
-        return controlling_
-                   ? std::nullopt
-                   : refuse(type_of(request), Refusal::NotControlling, "injection without control");
-    };
-    return std::visit(
-        Overloaded{
-            [&](const BeginControl&) -> std::optional<Report> {
-                if (!controlling_) {
-                    controlling_ = true;
-                    device_.set_controlled(true);
-                    log_.info("Control began");
-                }
-                return std::nullopt;
-            },
-            [&](const EndControl&) -> std::optional<Report> {
-                if (controlling_) {
-                    release_all();
-                    controlling_ = false;
-                    device_.set_controlled(false);
-                    log_.info("Control ended");
-                }
-                return std::nullopt;
-            },
-            [&](const Move& m) -> std::optional<Report> {
-                if (auto refused = injecting()) {
-                    return refused;
-                }
-                device_.move(m.x, m.y);
-                return std::nullopt;
-            },
-            [&](const Press& m) -> std::optional<Report> {
-                if (auto refused = injecting()) {
-                    return refused;
-                }
-                if (m.down) {
-                    buttons_down_.insert(m.button);
-                } else {
-                    buttons_down_.erase(m.button);
-                }
-                device_.press(m.button, m.down);
-                return std::nullopt;
-            },
-            [&](const Scroll& m) -> std::optional<Report> {
-                if (auto refused = injecting()) {
-                    return refused;
-                }
-                device_.scroll(m.vertical, m.horizontal);
-                return std::nullopt;
-            },
-            [&](const Key& m) -> std::optional<Report> {
-                if (auto refused = injecting()) {
-                    return refused;
-                }
-                if (m.down) {
-                    keys_down_.insert(m.scan);
-                } else {
-                    keys_down_.erase(m.scan);
-                }
-                device_.key(m.scan, m.down);
-                return std::nullopt;
-            },
-            [&](const StartCapture& m) -> std::optional<Report> {
-                capture_ = Park{.x = m.park_x, .y = m.park_y};
-                device_.start_capture(m.park_x, m.park_y);
-                return std::nullopt;
-            },
-            [&](const StopCapture& m) -> std::optional<Report> {
-                if (capture_) {
-                    capture_.reset();
-                    device_.stop_capture(m.x, m.y);
-                }
-                return std::nullopt;
-            },
-            [&](const QueryStats&) -> std::optional<Report> { return device_.stats(); },
-        },
-        request);
+std::optional<Report> InputSession::carry_out(const Request& request, Clock::time_point now) {
+    if (injects(request)) {
+        // Capturing injects too: keys whose release now goes elsewhere, and Caps Lock.
+        if (!controlling_ && !capture_) {
+            return refuse(type_of(request), Refusal::NotControlling,
+                          "injection without control or capture");
+        }
+        inject(request);
+        return std::nullopt;
+    }
+    return std::visit(Overloaded{
+                          [&](const BeginControl&) { return set_control(true); },
+                          [&](const EndControl&) { return set_control(false); },
+                          [&](const StartCapture& m) { return start_capture(m, now); },
+                          [&](const StopCapture& m) { return stop_capture(m); },
+                          [&](const Heartbeat&) { return heartbeat(now); },
+                          [&](const Watch& m) { return watch(m.on); },
+                          [&](const QueryStats&) { return std::optional<Report>(device_.stats()); },
+                          [](const auto&) { return std::optional<Report>(); }, // injection
+                      },
+                      request);
+}
+
+void InputSession::inject(const Request& request) {
+    std::visit(Overloaded{
+                   [&](const Move& m) { device_.move(m.x, m.y); },
+                   [&](const Press& m) {
+                       track(buttons_down_, m.button, m.down);
+                       device_.press(m.button, m.down);
+                   },
+                   [&](const Scroll& m) { device_.scroll(m.vertical, m.horizontal); },
+                   [&](const Key& m) {
+                       track(keys_down_, m.scan, m.down);
+                       device_.key(m.scan, m.down);
+                   },
+                   [](const auto&) {},
+               },
+               request);
+}
+
+std::optional<Report> InputSession::set_control(bool controlling) {
+    if (controlling_ == controlling) {
+        return std::nullopt;
+    }
+    if (!controlling) {
+        release_all();
+    }
+    controlling_ = controlling;
+    device_.set_controlled(controlling);
+    log_.info(controlling ? "Control began" : "Control ended");
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::start_capture(const StartCapture& start,
+                                                  Clock::time_point now) {
+    capture_ = Capture{.home_x = start.home_x,
+                       .home_y = start.home_y,
+                       .deadline = now + kHeartbeatTimeout,
+                       .released = false};
+    device_.start_capture(start.park_x, start.park_y);
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::stop_capture(const StopCapture& stop) {
+    if (!capture_) {
+        return std::nullopt;
+    }
+    capture_.reset();
+    device_.stop_capture(stop.x, stop.y);
+    if (!controlling_) {
+        release_all(); // what the capture pressed here
+    }
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::heartbeat(Clock::time_point now) {
+    if (capture_ && !capture_->released) {
+        capture_->deadline = now + kHeartbeatTimeout;
+    }
+    return std::nullopt; // a late one, after the capture ended here, is no error
+}
+
+std::optional<Report> InputSession::watch(bool on) {
+    if (watching_ != on) {
+        watching_ = on;
+        device_.set_watching(on);
+        log_.info(on ? "Watching input" : "Not watching input");
+    }
+    return std::nullopt;
+}
+
+void InputSession::forwarding(const Report& report) {
+    if (const auto* released = std::get_if<Released>(&report)) {
+        // The hooks already let input through; the cursor shows where it left.
+        if (released->reason == ReleaseReason::ReturnChord && end_capture_here()) {
+            log_.info("Capture ended by the return chord");
+        }
+    } else if (std::holds_alternative<HotkeyPressed>(report) && !capturing()) {
+        device_.mask_menu_keys(); // its modifiers reached the apps; the key did not
+    }
+}
+
+std::optional<InputSession::Clock::time_point> InputSession::deadline() const {
+    if (capture_ && !capture_->released) {
+        return capture_->deadline;
+    }
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::expire(Clock::time_point now) {
+    if (!capture_ || capture_->released || now < capture_->deadline) {
+        return std::nullopt;
+    }
+    log_.warning("Capture ended: the client stopped confirming it");
+    end_capture_here();
+    return Released{.reason = ReleaseReason::Watchdog};
+}
+
+bool InputSession::end_capture_here() {
+    if (!capture_ || capture_->released) {
+        return false;
+    }
+    capture_->released = true;
+    device_.stop_capture(capture_->home_x, capture_->home_y);
+    return true;
 }
 
 std::optional<Report> InputSession::refuse(std::uint16_t type, Refusal reason,
@@ -133,14 +195,16 @@ std::optional<Report> InputSession::refuse(std::uint16_t type, Refusal reason,
 }
 
 void InputSession::reset() {
-    if (const auto park = capture_) {
-        capture_.reset();
-        device_.stop_capture(park->x, park->y);
-    }
+    end_capture_here();
+    capture_.reset();
     release_all();
     if (controlling_) {
         controlling_ = false;
         device_.set_controlled(false);
+    }
+    if (watching_) {
+        watching_ = false;
+        device_.set_watching(false);
     }
 }
 
