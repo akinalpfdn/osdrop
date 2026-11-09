@@ -30,15 +30,6 @@ struct Pixel {
     bool operator==(const Pixel&) const = default;
 };
 
-/// A rectangle of physical pixels; right and bottom are outside it.
-struct PixelRect {
-    std::int32_t left = 0;
-    std::int32_t top = 0;
-    std::int32_t right = 0;
-    std::int32_t bottom = 0;
-    bool operator==(const PixelRect&) const = default;
-};
-
 /// GetDoubleClickTime and SM_CXDOUBLECLK, SM_CYDOUBLECLK: a press continues a double click within
 /// the interval and the rectangle centred on the previous press.
 struct ClickSettings {

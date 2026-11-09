@@ -546,4 +546,7 @@
   <data name="SettingsGameCursorDescription" xml:space="preserve">
     <value>A game that keeps the cursor on its monitor keeps it on this PC too. Games in a window that do not hold the cursor still let it cross.</value>
   </data>
+  <data name="PanelDragLoopback" xml:space="preserve">
+    <value>Drag loopback (developer)</value>
+  </data>
 </root>

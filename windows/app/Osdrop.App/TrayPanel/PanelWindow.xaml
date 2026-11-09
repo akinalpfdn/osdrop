@@ -227,9 +227,15 @@
         </ItemsControl>
       </StackPanel>
 
-      <ui:Button Margin="{StaticResource Osdrop.Thickness.SectionGap}" Content="{x:Static res:Strings.TrayMesh}"
-                 Command="{Binding OpenMeshCommand}"
-                 Visibility="{Binding Source={x:Static panel:PanelViewModel.ShowsMesh}, Converter={StaticResource Osdrop.Converter.Visible}}" />
+      <StackPanel Visibility="{Binding Source={x:Static panel:PanelViewModel.ShowsMesh}, Converter={StaticResource Osdrop.Converter.Visible}}">
+        <ui:Button Margin="{StaticResource Osdrop.Thickness.SectionGap}" Content="{x:Static res:Strings.TrayMesh}"
+                   Command="{Binding OpenMeshCommand}" />
+        <ui:ToggleSwitch Margin="{StaticResource Osdrop.Thickness.ItemGap}" IsChecked="{Binding IsDragLoopback}"
+                         IsEnabled="{Binding IsRunning}"
+                         AutomationProperties.Name="{x:Static res:Strings.PanelDragLoopback}">
+          <TextBlock Text="{x:Static res:Strings.PanelDragLoopback}" Style="{StaticResource Osdrop.Text.Body}" />
+        </ui:ToggleSwitch>
+      </StackPanel>
     </StackPanel>
   </ScrollViewer>
 </ui:FluentWindow>

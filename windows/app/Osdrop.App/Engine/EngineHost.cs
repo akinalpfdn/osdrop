@@ -138,6 +138,9 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     public Task<CoreResult> SetRespectsGameCursorAsync(bool respects) =>
         Native.Run(() => NativeMethods.SetRespectsCursorClip(_engine, respects ? (byte)1 : (byte)0));
 
+    public Task<CoreResult> SetDragLoopbackAsync(bool enabled) =>
+        Native.Run(() => NativeMethods.SetDragLoopback(_engine, enabled ? (byte)1 : (byte)0));
+
     public Task<CoreResult> LockInputAsync(bool locked) =>
         Native.Run(() => NativeMethods.LockInput(_engine, locked ? (byte)1 : (byte)0));
 
