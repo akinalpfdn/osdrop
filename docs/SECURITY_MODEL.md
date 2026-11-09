@@ -111,12 +111,20 @@ own process but needs an Authenticode-signed binary, which the project does not 
   `OsdropInput`'s own folder (checked by the client's process image), which only an administrator
   can write to once installed under Program Files.
 - **Requests** are a small versioned set with every value bounds-checked (positions, buttons,
-  wheel amounts, scan codes that exist on a keyboard). Injection is accepted only between
-  BeginControl and EndControl, and whatever the client pressed is released when control ends or
-  the client goes. Invalid requests are refused and logged.
+  wheel amounts, scan codes that exist on a keyboard). Injection is accepted only while the client
+  controls this PC or captures its input, and whatever the client pressed is released when control
+  or capture ends or the client goes. Invalid requests are refused and logged.
+- **Capture safety.** A capture lasts only while the client confirms it every 250 ms; after a
+  second without, or when the user presses Ctrl+Alt+Win+Esc, OsdropInput gives the input back by
+  itself, so a hung Osdrop never keeps the mouse and keyboard.
+- **Watching.** While a member is connected, Osdrop asks OsdropInput to report the PC's input as
+  it happens, keys included, because core needs all of it to decide crossings and hold keys. This
+  reaches Osdrop's own process, which runs as the user: keys typed into elevated windows, which a
+  process of the user could not otherwise read, come to it too. Nothing is logged or stored, and
+  the secure desktop (the UAC prompt, Ctrl+Alt+Del) is never seen.
 - **Residual risk.** Malware running as the signed-in user that can write into the install folder
   (it cannot without administrator rights), or that controls Osdrop's own process, could drive
-  elevated windows through the pipe. Ctrl+Alt+Del and the secure desktop stay out of reach: Windows
+  elevated windows through the pipe and read the keys typed into them. Ctrl+Alt+Del and the secure desktop stay out of reach: Windows
   does not let any process inject them. Revisit with code signing, which would allow `uiAccess`
   and drop the SYSTEM process altogether.
 - **Logging.** `%ProgramData%\Osdrop\logs\input.log` and `service.log` record starts, stops,

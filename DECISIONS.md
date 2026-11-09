@@ -625,3 +625,21 @@ choices the plan leaves open are logged here.
 **Trade-offs:** Until then a PC's own mouse cannot cross to a Mac.
 **Revisit if:** The user wants both directions in one step.
 User decision (same day): after the hardware rows pass, the PC controlling others is added to the Phase 3 PR.
+
+---
+
+## 2026-11-09 — The PC watches its own input through OsdropInput, measured from where the cursor is
+**Chosen:** While a member is connected, the engine asks OsdropInput to watch (Watch): the hooks report every movement as where Windows takes the cursor and how far it moved from where it is when the hook runs, and every button, wheel and key, without swallowing them. The engine keeps the position on a monitor and hands it all to core. While captured, movement is measured the same way, so the park point and apps that move the cursor do not matter; for 2 ms after Osdrop moves the cursor itself, movement is not reported.
+**Alternatives:** Hooks in the engine (medium integrity); Raw Input for movement; deltas from one hook position to the next.
+**Why:** A medium-integrity hook hears nothing while an elevated window has the keyboard, so crossings and held keys would fail over Task Manager or an administrator terminal. A low-level hook sees where the cursor would go before Windows keeps it on a monitor, so a push against an outer edge still moves, as core's edge push needs; position-to-position deltas would be zero there. Raw Input gives device counts without the pointer settings and arrives apart from the hooks.
+**Trade-offs:** Osdrop's own process now receives keys typed into elevated windows while a member is connected (SECURITY_MODEL.md). Absolute pointing devices (pen tablets, remote sessions) cannot push past an edge, as on any system that reads positions.
+**Revisit if:** A hook ever reports positions already kept on a monitor; then Raw Input would carry the push.
+
+---
+
+## 2026-11-09 — PC chords: Ctrl+Alt+Win with Esc returns, with K locks; OsdropInput ends a capture by itself
+**Chosen:** The Mac's ⌃⌥⌘ chords on the same physical keys: Ctrl+Alt+Win+Esc brings the cursor home, Ctrl+Alt+Win+K locks it (L belongs to Windows: Win+L locks the PC and no hook can take it). OsdropInput's hook matches them while it watches or captures and swallows the completing key; at home it then presses an unassigned key (VK 0xE8) so releasing Win or Alt opens no menu. During capture the return chord, or a heartbeat missing for 1 s (the engine sends one every 250 ms), ends the capture inside OsdropInput, with the cursor where it left; the engine then brings the cursor home in core.
+**Alternatives:** Chords in the engine; RegisterHotKey; ending a capture only when core says so.
+**Why:** Only the hook sees keys while they are swallowed, and the way out must work when the engine or core hangs, as the Mac's tap and capture guard do.
+**Trade-offs:** The chords are fixed until the Windows settings (Phase 17).
+**Revisit if:** Users report clashes with Ctrl+Alt+Win+K or Esc.

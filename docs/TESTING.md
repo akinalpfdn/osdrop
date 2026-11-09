@@ -212,7 +212,9 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 On the PC, with the service installed from the shell's output folder (BUILDING.md › Input service
 for development). Quit Osdrop before the tool rows: the input process serves one client at a time.
 The tool's capture starts 5 seconds after the command, so the window to try it on can be clicked
-first, and takes the PC's mouse and keyboard for up to the seconds given; Esc ends it.
+first, and takes the PC's mouse and keyboard for up to the seconds given; Esc ends it. W8 onwards
+run with Osdrop on the PC and a Mac in the group, the PC to the Mac's side; Ctrl+Alt+Win+Esc
+always brings the PC's cursor home.
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
@@ -224,6 +226,12 @@ first, and takes the PC's mouse and keyboard for up to the seconds given; Esc en
 | W6 | Pipe access | Copy `OsdropInputTool.exe` to the desktop and run `stats` there; run `runas /user:<another user> <Osdrop's folder>\OsdropInputTool.exe stats` | Both are refused; `input.log` names the refused client; nothing is injected |
 | W7 | User switching | Sign in as a second user with fast user switching, then switch back | OsdropInput follows the active session each time (Task Manager › Details › Session ID) |
 | W8 | Mac → PC | With Osdrop on both and the service running, push the Mac's cursor into the PC; type in Notepad, click, scroll, use an elevated window; then move the PC's own mouse. Stop the service and push again | The cursor crosses and input lands on the PC, elevated windows included; moving the PC's mouse brings the Mac's cursor home. With the service stopped the PC's edge is a wall and the Mac says the PC does not accept control |
+| W9 | PC → Mac | With Osdrop on both and the service running, push the PC's cursor through its edge towards the Mac; type in TextEdit, double-click a word, click two different words quickly, scroll, right-click; push back | The PC's cursor hides and the Mac's moves; input lands on the Mac; the double click selects the word, the two quick clicks on different words select nothing; scrolling goes the way it goes on the PC; pushing back shows the PC's cursor at that edge |
+| W10 | From an elevated window | Click into a PowerShell run as administrator, then push the cursor to the Mac and type | The cursor crosses as from any window; the PowerShell gets none of the keys |
+| W11 | Return chord | While on the Mac, press Ctrl+Alt+Win+Esc | The cursor is back on the PC where it left; no Start menu opens; the Mac gets no Esc |
+| W12 | Lock chord | On the PC press Ctrl+Alt+Win+K, push against the Mac's edge; press it again and push | While locked the edge is a wall; no Start menu or app menu opens and no K is typed; unlocked, it crosses |
+| W13 | Held keys and Caps Lock | Hold Shift on the PC, cross, type, release Shift, type; then turn Caps Lock on while on the Mac, come back and type on the PC | Capitals while Shift is held, then lower case, nothing stuck on either computer; Caps Lock is on when typing on the PC |
+| W14 | Osdrop stops during capture | While on the Mac, end Osdrop in Task Manager (Details › Osdrop.exe › End task) | Within a second the PC's cursor shows where it left and its mouse and keyboard work; nothing stays pressed on the Mac |
 
 ### Cursor and keyboard (Phase 11)
 
@@ -304,6 +312,7 @@ these tests take over input on every computer they cross.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-09 | Phase 3 branch (779a4dd), PC debug engine and Release shell, M3 Air | W1–W6, W8 | Pass. Hook p99 7 µs over 70 424 events (longest 1918 µs); the service restarted a killed OsdropInput within 3 ms. W7 not run: the PC has no second Windows user |
 | 2026-11-08 | Phase 14 branch (fdb0e04), Debug, M3 Air + PC (Release shell, debug engine) | G4, G8 | Pass. G4 first failed: the member that removed a computer refused it before any code, so it could never pair again; fixed, then blocking was added (G8) |
 | 2026-11-08 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | CL5, CL6, CL9 | Pass. CL6 on the Mac showed no notification until Osdrop's notifications were allowed in System Settings › Notifications: they had been refused at macOS's first prompt |
 | 2026-11-07 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | G1, CL1–CL8 | G1 pass after the Mac's pairing window was fixed (it hid when Osdrop went to the background). CL1–CL4, CL7, CL8 pass. CL5: a paste before the files arrived gave the old clipboard with no progress shown; CL6: the notice was only inside the menu and the Computers window. Both now show a progress window and notifications; to run again |

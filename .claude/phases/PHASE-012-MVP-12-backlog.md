@@ -1,6 +1,6 @@
 # Phase 012 (MVP-12) — Cursor and keyboard across computers
-Status: BACKLOG — core and Mac done (PR #14, draft, CI green); TESTING I1–I9 wait for two
-computers, the Windows side for Phase 3
+Status: BACKLOG — core and Mac done (PR #14, merged); the Windows controller and endpoint are in
+the Phase 3 PR (#18); TESTING I1–I9 and W8–W14 wait for the devices
 
 DEVPLAN reference: Phase 11. Depends on: Phases 1, 3, 10
 
@@ -8,7 +8,7 @@ DEVPLAN reference: Phase 11. Depends on: Phases 1, 3, 10
 One computer's mouse and keyboard move across every computer in the arrangement, in every direction.
 
 ## Tasks
-- [x] Controller orchestration (core and Mac; Windows with Phase 3): capture on crossing, virtual cursor, Enter and Leave, motion datagrams, keys, buttons and scroll with positions, held-key ledger and release-all on every exit path.
+- [x] Controller orchestration (core and Mac; Windows in the Phase 3 PR): capture on crossing, virtual cursor, Enter and Leave, motion datagrams, keys, buttons and scroll with positions, held-key ledger and release-all on every exit path.
 - [x] Endpoint orchestration (core and Mac): injection, refusals (locked, asleep, not permitted), cursor reports.
 - [x] Safety (core and Mac): input returns home within one second on peer loss; local input on a controlled computer takes it back; hotkeys for "return to this computer" and "lock input here"; a visible indicator on a computer while it is being controlled.
 - [x] A default side-by-side arrangement (members place themselves beside the others since Phase 9) until the arrangement editor exists (Phases 16 and 17).
