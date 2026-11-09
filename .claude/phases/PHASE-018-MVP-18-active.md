@@ -1,6 +1,6 @@
 # Phase 018 (MVP-18) — Windows app UI
 Status: ACTIVE — code done on `feature/phase-17-windows-ui` (stacked on Phase 3's branch); the UI is
-tried on the PC next (TESTING WU1–WU7)
+tried on the PC next (TESTING WU1–WU8)
 
 DEVPLAN reference: Phase 17. Depends on: Phases 12, 14, 15
 
@@ -13,7 +13,7 @@ A simple, clean, finished Windows interface that works the same way as the Mac a
 - [x] P/Invoke layer with one serial queue for engine calls and callback marshaling to the dispatcher.
 - [x] Complete English and Turkish resources, theme dictionaries following the system theme.
 - [x] Osdrop's icon on Windows: app icon and tray icons drawn from the Mac menu bar glyph (`scripts/windows/make_icons.py`).
-- [ ] The PC's chords as settings (asked, 2026-11-09).
+- [x] The PC's chords as settings (user decision, 2026-11-09): recorder, SetChords in the input pipe.
 
 ## Acceptance Criteria
 - [x] No hardcoded strings or visual values in XAML or code-behind (lint).
@@ -24,3 +24,4 @@ A simple, clean, finished Windows interface that works the same way as the Mac a
 (append as you go; full entries go to DECISIONS.md)
 - 2026-11-09: Osplay's shell pattern; the engine reports the input state; a new name restarts the
   engine; repair runs the service's installer elevated (DECISIONS.md).
+- 2026-11-09 (user): the PC's chords are settings, as on the Mac (DECISIONS.md).

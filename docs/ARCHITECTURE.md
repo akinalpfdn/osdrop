@@ -329,8 +329,9 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
   A second start of Osdrop opens the running one's panel (`SingleInstance`).
 - **Settings.** The Mac's tabs: General (start with Windows through the Run key, daily update
   check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
-  permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds;
-  the chords are fixed on a PC and shown), Clipboard and Files, Advanced (diagnostics without
+  permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds,
+  the two chords with a recorder; the engine checks them as the hook matches them and sends them
+  to OsdropInput after every reconnect), Clipboard and Files, Advanced (diagnostics without
   names or addresses, the shell's and the input service's log folders). `AppSettings` saves every
   change to `%APPDATA%\Osdrop\settings.json` at once and the engine gets it at once; a new name
   restarts the engine, as the Mac restarts its mesh.
@@ -420,7 +421,9 @@ process").
   version u16 (1), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
   (x, y i32 pixels), Press (button u8 0-4, down u8), Scroll (vertical, horizontal i32 in
   WHEEL_DELTA units), Key (scan code u16, extended u8, down u8), StartCapture (park x, y, home
-  x, y), StopCapture (x, y), QueryStats, Watch (on u8), Heartbeat. Reports: CapturedMotion (dx,
+  x, y), StopCapture (x, y), QueryStats, Watch (on u8), Heartbeat, SetChords (return, lock: each
+  modifiers u8, scan code u16, extended u8; the defaults until a client sends them and after it
+  goes). Reports: CapturedMotion (dx,
   dy i32, ticks u64), PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64,
   p50, p99, max u32 in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version,
   3 injection without control or capture), WatchedMotion (x, y, dx, dy i32, ticks u64),

@@ -650,5 +650,14 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Chosen:** The shell is Osplay's: WPF-UI following the system theme live, a tray icon whose click opens a panel above the taskbar, a tabbed Settings window, settings in `%APPDATA%\Osdrop\settings.json`, one instance per session. Its contents are the Mac's, tab for tab. The engine reports what the panel needs from its own state (`osdrop_engine_get_input_state` and INPUT_CHANGED) instead of passing core's control callbacks through; a new name restarts the engine, as the Mac restarts its mesh. While OsdropInput does not answer, the panel names the cause from the service manager and repairs it by running `OsdropService.exe --install` elevated. The tray icon is the Mac menu bar glyph, drawn into .ico files by a script, and filled while another computer controls the PC.
 **Alternatives:** A main window instead of a tray panel; core's callbacks forwarded one by one to C#; a repair that starts the service through the service manager (needs the same elevation, cannot install a missing one).
 **Why:** The two Osdrop apps and the two sibling products should look and behave alike. The shell must read the state again after it starts or restarts the engine, which events alone cannot give; one state call can.
-**Trade-offs:** Renaming drops every session for a moment. The chords are still fixed on a PC; Settings shows them.
-**Revisit if:** Users want the PC's chords changeable (needs a request in the input pipe and a recorder in Settings).
+**Trade-offs:** Renaming drops every session for a moment.
+**Revisit if:** The panel grows past what a tray panel holds; then a main window.
+
+---
+
+## 2026-11-09 — The PC's chords are settings, as on the Mac
+**Chosen:** User decision: the return and lock chords can be changed in Settings › Input. The shell records a key by its scan code with Ctrl, Alt, Shift and Windows; the engine refuses a pair the hook cannot match (no Ctrl, Alt or Windows, a modifier as the key, a key without a place in the key table, the same chord twice) and sends the pair to OsdropInput in a SetChords request, again after every reconnect. OsdropInput uses the defaults until a client sends chords and after it goes. With the same key, the chord with more modifiers is matched first, so both stay reachable. In the recorder Escape alone cancels; with modifiers it is recorded.
+**Alternatives:** Fixed chords shown in Settings (the earlier entry's trade-off).
+**Why:** Both apps should work the same way, and a chord can clash with an app the user relies on.
+**Trade-offs:** A combination Windows takes for itself (Win+L, some Win+letter shortcuts) never reaches the recorder, so it cannot be chosen.
+**Revisit if:** Users need a chord with a key outside the key table.
