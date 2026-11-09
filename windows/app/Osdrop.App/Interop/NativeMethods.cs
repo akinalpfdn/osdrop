@@ -15,7 +15,8 @@ internal static unsafe partial class NativeMethods
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_create")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult Create(
-        delegate* unmanaged[Cdecl]<nint, NativeEngineEvent*, void> callback, nint context, nint* engine);
+        NativeEngineConfig* config, delegate* unmanaged[Cdecl]<nint, NativeEngineEvent*, void> callback,
+        nint context, nint* engine);
 
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_destroy")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
@@ -78,4 +79,49 @@ internal static unsafe partial class NativeMethods
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_resume")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult Resume(nint engine);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_clipboard")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetClipboard(nint engine, byte shared, ulong filesLimit);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_permissions")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetPermissions(nint engine, byte* deviceId, NativePermissions* permissions);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_layout")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult Layout(
+        nint engine, NativeLayoutComputer* computers, nuint capacity, nuint* count);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_layout")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetLayout(nint engine, NativePlacement* placements, nuint count);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_input_settings")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetInputSettings(nint engine, NativeInputSettings* settings);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_pointer_speed")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetPointerSpeed(nint engine, byte* deviceId, uint permille);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_hotkeys")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetHotkeys(nint engine, NativeHotkey* returnHotkey, NativeHotkey* lockHotkey);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_respects_cursor_clip")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetRespectsCursorClip(nint engine, byte respects);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_lock_input")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult LockInput(nint engine, byte locked);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_get_input_state")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult GetInputState(nint engine, NativeEngineInputState* state);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_dismiss_input_notice")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult DismissInputNotice(nint engine);
 }

@@ -146,9 +146,14 @@ dotnet test --solution Osdrop.slnx -c Release --no-build
 dotnet run --project Osdrop.App -c Release
 ```
 
-The shell starts without a window and shows an "O" icon in the notification area; right-click it
-for **Computers…** (members and nearby computers, pairing), **Mesh…** in Debug builds, and to quit.
+The shell starts without a window and shows Osdrop's icon (a screen edge with a half arrow
+crossing it each way) in the notification area. A click opens the panel: where the mouse and
+keyboard are, quick switches, the group and nearby computers, and the way to Settings; **Mesh…**
+sits at its bottom in Debug builds. Right-click the icon to open the panel or Settings, or to quit.
 Windows may hide new icons in the overflow menu (the `^` arrow on the taskbar).
+
+The icons in `windows/app/Osdrop.App/Assets` are drawn from the Mac menu bar icon's geometry by
+`uvx --with pillow python scripts/windows/make_icons.py`; run it again after changing that icon.
 
 Native binaries land in `windows/build/<preset>/bin/`; .NET builds land in `bin/` folders. The
 shell build copies `OsdropEngine.dll`, `OsdropInput.exe`, `OsdropService.exe` and

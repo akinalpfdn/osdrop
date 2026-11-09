@@ -18,9 +18,6 @@
   <data name="TrayQuit" xml:space="preserve">
     <value>Quit Osdrop</value>
   </data>
-  <data name="TrayComputers" xml:space="preserve">
-    <value>Computers…</value>
-  </data>
   <data name="TrayMesh" xml:space="preserve">
     <value>Mesh…</value>
   </data>
@@ -31,10 +28,7 @@
     <value>The group was saved by a newer Osdrop. Update Osdrop on this PC.</value>
   </data>
   <data name="EngineStarting" xml:space="preserve">
-    <value>Osdrop is still starting. Try again in a moment.</value>
-  </data>
-  <data name="GroupWindowTitle" xml:space="preserve">
-    <value>Osdrop</value>
+    <value>Osdrop is starting…</value>
   </data>
   <data name="GroupMembers" xml:space="preserve">
     <value>In this group</value>
@@ -215,5 +209,341 @@
   </data>
   <data name="PairingFailedRefused" xml:space="preserve">
     <value>It does not accept pairing with this computer.</value>
+  </data>
+  <data name="TrayOpen" xml:space="preserve">
+    <value>Open Osdrop</value>
+  </data>
+  <data name="PanelSettings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="PanelVersion" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="PanelInputElsewhere" xml:space="preserve">
+    <value>The mouse and keyboard are on {0}.</value>
+  </data>
+  <data name="PanelInputHere" xml:space="preserve">
+    <value>The mouse and keyboard are on this computer.</value>
+  </data>
+  <data name="PanelLockInput" xml:space="preserve">
+    <value>Keep the cursor where it is ({0})</value>
+  </data>
+  <data name="PanelShareClipboard" xml:space="preserve">
+    <value>Share the clipboard</value>
+  </data>
+  <data name="ControlControlledBy" xml:space="preserve">
+    <value>{0} is controlling this computer.</value>
+  </data>
+  <data name="ControlHint" xml:space="preserve">
+    <value>Push the cursor against an edge to move to the computer beside it. {0} brings it back.</value>
+  </data>
+  <data name="ControlLocked" xml:space="preserve">
+    <value>The cursor stays on the computer it is on. {0} lets it cross again.</value>
+  </data>
+  <data name="ControlLost" xml:space="preserve">
+    <value>{0} stopped answering, so the cursor came back.</value>
+  </data>
+  <data name="ControlRefusedLocked" xml:space="preserve">
+    <value>{0} is locked.</value>
+  </data>
+  <data name="ControlRefusedAsleep" xml:space="preserve">
+    <value>{0} is asleep.</value>
+  </data>
+  <data name="ControlRefusedNotPermitted" xml:space="preserve">
+    <value>{0} does not accept control from this computer.</value>
+  </data>
+  <data name="ControlRefusedBusy" xml:space="preserve">
+    <value>{0} is in use by another computer.</value>
+  </data>
+  <data name="ServiceTitle" xml:space="preserve">
+    <value>Mouse and keyboard</value>
+  </data>
+  <data name="ServiceNotInstalled" xml:space="preserve">
+    <value>The Osdrop Input service is not installed, so this PC's mouse and keyboard cannot move to other computers and other computers cannot control this PC. Repair installs it; Windows asks for permission.</value>
+  </data>
+  <data name="ServiceStopped" xml:space="preserve">
+    <value>The Osdrop Input service is stopped, so this PC's mouse and keyboard cannot move to other computers and other computers cannot control this PC. Repair starts it; Windows asks for permission.</value>
+  </data>
+  <data name="ServiceNotAnswering" xml:space="preserve">
+    <value>The Osdrop Input service is not answering, so this PC's mouse and keyboard cannot move to other computers. It usually recovers within a few seconds; if this stays, repair it.</value>
+  </data>
+  <data name="ServiceRepair" xml:space="preserve">
+    <value>Repair</value>
+  </data>
+  <data name="ServiceRepairFailed" xml:space="preserve">
+    <value>The service could not be repaired. Reinstall Osdrop, or open the input service logs in Settings › Advanced.</value>
+  </data>
+  <data name="UpdatesTitle" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="UpdatesDaily" xml:space="preserve">
+    <value>Check for updates once a day</value>
+  </data>
+  <data name="UpdatesCheck" xml:space="preserve">
+    <value>Check now</value>
+  </data>
+  <data name="UpdatesChecking" xml:space="preserve">
+    <value>Checking…</value>
+  </data>
+  <data name="UpdatesUpToDate" xml:space="preserve">
+    <value>Osdrop is up to date.</value>
+  </data>
+  <data name="UpdatesFailed" xml:space="preserve">
+    <value>The check failed. Try again later.</value>
+  </data>
+  <data name="UpdatesAvailable" xml:space="preserve">
+    <value>Osdrop {0} is available.</value>
+  </data>
+  <data name="UpdatesDownload" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Osdrop Settings</value>
+  </data>
+  <data name="SettingsGeneral" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="SettingsArrangement" xml:space="preserve">
+    <value>Arrangement</value>
+  </data>
+  <data name="SettingsDevices" xml:space="preserve">
+    <value>Devices</value>
+  </data>
+  <data name="SettingsInput" xml:space="preserve">
+    <value>Input</value>
+  </data>
+  <data name="SettingsClipboard" xml:space="preserve">
+    <value>Clipboard and Files</value>
+  </data>
+  <data name="SettingsAdvanced" xml:space="preserve">
+    <value>Advanced</value>
+  </data>
+  <data name="SettingsStartWithWindows" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="SettingsStartWithWindowsFailed" xml:space="preserve">
+    <value>Windows did not allow starting Osdrop at sign-in.</value>
+  </data>
+  <data name="SettingsArrangementDescription" xml:space="preserve">
+    <value>Drag a computer to place it beside another one. The cursor crosses where their edges meet. Every computer in the group gets the new arrangement at once.</value>
+  </data>
+  <data name="SettingsArrangementEmpty" xml:space="preserve">
+    <value>The arrangement appears once another computer is in the group.</value>
+  </data>
+  <data name="SettingsArrangementHint" xml:space="preserve">
+    <value>Drag a computer to place it beside another one.</value>
+  </data>
+  <data name="SettingsThisComputer" xml:space="preserve">
+    <value>This computer</value>
+  </data>
+  <data name="SettingsName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="SettingsNameDescription" xml:space="preserve">
+    <value>The name other computers show. Saving restarts the connections.</value>
+  </data>
+  <data name="SettingsNameSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SettingsMembers" xml:space="preserve">
+    <value>Computers in the group</value>
+  </data>
+  <data name="SettingsAllowControl" xml:space="preserve">
+    <value>Can control this computer</value>
+  </data>
+  <data name="SettingsAllowFiles" xml:space="preserve">
+    <value>Can send files to this computer</value>
+  </data>
+  <data name="SettingsAllowClipboard" xml:space="preserve">
+    <value>Shares the clipboard with this computer</value>
+  </data>
+  <data name="SettingsRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="SettingsBlock" xml:space="preserve">
+    <value>Remove and Block</value>
+  </data>
+  <data name="SettingsCrossing" xml:space="preserve">
+    <value>Crossing</value>
+  </data>
+  <data name="SettingsImmediate" xml:space="preserve">
+    <value>Cross as soon as the cursor reaches an edge</value>
+  </data>
+  <data name="SettingsPush" xml:space="preserve">
+    <value>Push against an edge for {0} s</value>
+  </data>
+  <data name="SettingsCrossingModifier" xml:space="preserve">
+    <value>Cross only while holding</value>
+  </data>
+  <data name="SettingsModifierNone" xml:space="preserve">
+    <value>Nothing</value>
+  </data>
+  <data name="SettingsModifierControl" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="SettingsModifierAlt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="SettingsModifierWindows" xml:space="preserve">
+    <value>Windows</value>
+  </data>
+  <data name="SettingsModifierShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="SettingsKeys" xml:space="preserve">
+    <value>Keys between a Mac and a PC</value>
+  </data>
+  <data name="SettingsMapping" xml:space="preserve">
+    <value>Modifier keys</value>
+  </data>
+  <data name="SettingsMappingShortcuts" xml:space="preserve">
+    <value>Shortcuts keep their place (⌘C copies on a PC)</value>
+  </data>
+  <data name="SettingsMappingPositions" xml:space="preserve">
+    <value>Every key as it is (⌘ is the Windows key)</value>
+  </data>
+  <data name="SettingsMappingDescription" xml:space="preserve">
+    <value>Applies from the next crossing. Between two Macs or two PCs keys never change.</value>
+  </data>
+  <data name="SettingsSpeed" xml:space="preserve">
+    <value>Pointer speed on other computers</value>
+  </data>
+  <data name="SettingsHotkeys" xml:space="preserve">
+    <value>Shortcuts</value>
+  </data>
+  <data name="SettingsReturnHotkey" xml:space="preserve">
+    <value>Bring the cursor back</value>
+  </data>
+  <data name="SettingsLockHotkey" xml:space="preserve">
+    <value>Keep the cursor where it is</value>
+  </data>
+  <data name="SettingsClipboardTitle" xml:space="preserve">
+    <value>Clipboard</value>
+  </data>
+  <data name="SettingsShareClipboardDescription" xml:space="preserve">
+    <value>Copy on one computer and paste on another. Passwords copied from password managers stay on this computer.</value>
+  </data>
+  <data name="SettingsFilesLimit" xml:space="preserve">
+    <value>Copied files up to</value>
+  </data>
+  <data name="SettingsDiagnostics" xml:space="preserve">
+    <value>Diagnostics</value>
+  </data>
+  <data name="SettingsDiagnosticsCopyTitle" xml:space="preserve">
+    <value>Diagnostics for a bug report</value>
+  </data>
+  <data name="SettingsDiagnosticsCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="SettingsDiagnosticsCopied" xml:space="preserve">
+    <value>Copied. Paste it into your report.</value>
+  </data>
+  <data name="SettingsDiagnosticsDescription" xml:space="preserve">
+    <value>Versions, settings and the recent log, without names, addresses, keystrokes or clipboard contents.</value>
+  </data>
+  <data name="SettingsLogs" xml:space="preserve">
+    <value>Osdrop's log</value>
+  </data>
+  <data name="SettingsServiceLogs" xml:space="preserve">
+    <value>Input service logs</value>
+  </data>
+  <data name="SettingsLogsOpen" xml:space="preserve">
+    <value>Open the folder</value>
+  </data>
+  <data name="ErrorUnsupportedVersion" xml:space="preserve">
+    <value>The other computer runs another version of Osdrop. Update both to the same version.</value>
+  </data>
+  <data name="ErrorTooLarge" xml:space="preserve">
+    <value>It is larger than the limit set in Settings.</value>
+  </data>
+  <data name="ErrorSecure" xml:space="preserve">
+    <value>The connection could not be secured. Try again; if it repeats, pair the computers again.</value>
+  </data>
+  <data name="ErrorTimedOut" xml:space="preserve">
+    <value>The other computer did not answer in time. Check that it is awake and on the same network.</value>
+  </data>
+  <data name="ErrorNetwork" xml:space="preserve">
+    <value>The connection was lost. Check the network on both computers.</value>
+  </data>
+  <data name="ErrorPeer" xml:space="preserve">
+    <value>The other computer reported a problem. Update both computers to the latest Osdrop.</value>
+  </data>
+  <data name="ErrorNotTrusted" xml:space="preserve">
+    <value>The other computer no longer trusts this one. Pair them again.</value>
+  </data>
+  <data name="ErrorPairingRejected" xml:space="preserve">
+    <value>The other computer's user declined.</value>
+  </data>
+  <data name="ErrorPeerBusy" xml:space="preserve">
+    <value>The other computer is busy. Try again in a moment.</value>
+  </data>
+  <data name="ErrorPeerSleeping" xml:space="preserve">
+    <value>The other computer is asleep.</value>
+  </data>
+  <data name="ErrorNotPermitted" xml:space="preserve">
+    <value>The other computer does not allow this. Its permissions are in its Settings › Devices.</value>
+  </data>
+  <data name="ErrorGroupFull" xml:space="preserve">
+    <value>The group is full. Remove a computer before adding another one.</value>
+  </data>
+  <data name="ErrorInAnotherGroup" xml:space="preserve">
+    <value>The other computer is in another group. Leave that group on it first.</value>
+  </data>
+  <data name="ErrorInvalidLayout" xml:space="preserve">
+    <value>Computers cannot overlap, and each one must touch another one.</value>
+  </data>
+  <data name="ErrorCancelled" xml:space="preserve">
+    <value>Cancelled.</value>
+  </data>
+  <data name="ErrorIoFailure" xml:space="preserve">
+    <value>A file could not be read or written.</value>
+  </data>
+  <data name="ErrorNoSpace" xml:space="preserve">
+    <value>There is not enough free disk space.</value>
+  </data>
+  <data name="ErrorIntegrityFailed" xml:space="preserve">
+    <value>The file arrived damaged and was removed. Try again.</value>
+  </data>
+  <data name="ErrorNotFound" xml:space="preserve">
+    <value>It is no longer available on the other computer.</value>
+  </data>
+  <data name="ErrorInternal" xml:space="preserve">
+    <value>Something went wrong inside Osdrop. Copy diagnostics in Settings › Advanced and report it.</value>
+  </data>
+  <data name="HotkeyRecording" xml:space="preserve">
+    <value>Press keys…</value>
+  </data>
+  <data name="HotkeyHint" xml:space="preserve">
+    <value>Click, then press the new combination. Escape alone cancels.</value>
+  </data>
+  <data name="HotkeyNeedsModifier" xml:space="preserve">
+    <value>Use Ctrl, Alt or Windows with a key.</value>
+  </data>
+  <data name="HotkeyTaken" xml:space="preserve">
+    <value>Each shortcut needs its own combination.</value>
+  </data>
+  <data name="HotkeyInvalid" xml:space="preserve">
+    <value>This key cannot be part of a shortcut. Choose another one.</value>
+  </data>
+  <data name="HotkeyReset" xml:space="preserve">
+    <value>Reset to defaults</value>
+  </data>
+  <data name="KeyControl" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="KeyAlt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="KeyShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="KeyWindows" xml:space="preserve">
+    <value>Win</value>
+  </data>
+  <data name="SettingsGameCursor" xml:space="preserve">
+    <value>Don't cross while a game holds the cursor</value>
+  </data>
+  <data name="SettingsGameCursorDescription" xml:space="preserve">
+    <value>A game that keeps the cursor on its monitor keeps it on this PC too. Games in a window that do not hold the cursor still let it cross.</value>
   </data>
 </root>

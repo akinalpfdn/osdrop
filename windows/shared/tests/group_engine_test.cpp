@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -12,6 +13,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -146,9 +148,13 @@ public:
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
                           const std::string& /*name*/) override {}
     void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
-    void controlled(bool /*controlled*/) override {}
+    void layout_changed() override {
+        change([&] { ++layout_changes_; });
+    }
+    void controlled(const std::optional<DeviceIdBytes>& /*controller*/) override {}
     void inject(const osdrop_input& /*input*/) override {}
-    void capture_began(const std::vector<osdrop_input>& /*release_here*/) override {}
+    void capture_began(const DeviceIdBytes& /*device*/,
+                       const std::vector<osdrop_input>& /*release_here*/) override {}
     void capture_ended(const osdrop::win::CaptureEnd& /*end*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
@@ -169,6 +175,7 @@ public:
         return features_;
     }
     std::size_t codes_unlocked() const { return codes_.size(); }
+    int layout_changes_unlocked() const { return layout_changes_; }
 
 private:
     template <typename Change>
@@ -185,6 +192,7 @@ private:
     int group_changes_ = 0;
     int nearby_changes_ = 0;
     int connected_ = 0;
+    int layout_changes_ = 0;
     std::uint32_t features_ = 0;
     std::vector<osdrop_result> left_;
     std::vector<std::pair<std::uint64_t, std::uint32_t>> codes_;
@@ -441,6 +449,60 @@ TEST(GroupEngine, ACopyOnOnePcIsWrittenToAnothersClipboard) {
         pc_clipboard.stop();
         laptop_clipboard.stop();
     }
+}
+
+osdrop_monitor one_monitor(std::uint8_t key) {
+    constexpr std::int32_t kSixteenths = 16;
+    osdrop_monitor monitor{};
+    monitor.key[0] = key;
+    monitor.frame = {.x = 0, .y = 0, .width = 1920 * kSixteenths, .height = 1080 * kSixteenths};
+    monitor.native = monitor.frame;
+    monitor.pixel_width = 1920;
+    monitor.pixel_height = 1080;
+    monitor.primary = 1;
+    return monitor;
+}
+
+TEST(GroupEngine, MembersShareTheArrangementAndTakePermissionsAndInputSettings) {
+    Computer pc(8, "PC");
+    Computer laptop(9, "Laptop");
+    pc.discovery.report(*laptop.discovery.resolved());
+    laptop.discovery.report(*pc.discovery.resolved());
+    const auto connection = pc.engine->pair(laptop.engine->info().device_id);
+    ASSERT_TRUE(connection.has_value());
+    ASSERT_TRUE(laptop.events.wait_for([&] { return laptop.events.codes_unlocked() > 0; }));
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.codes_unlocked() > 0; }));
+    EXPECT_EQ(pc.engine->confirm_pairing(connection.value(), true), OSDROP_OK);
+    EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.connected_unlocked() == 1; }));
+
+    const osdrop_monitor pc_monitor = one_monitor(1);
+    const osdrop_monitor laptop_monitor = one_monitor(2);
+    EXPECT_EQ(pc.engine->set_screens(std::span(&pc_monitor, 1)), OSDROP_OK);
+    EXPECT_EQ(laptop.engine->set_screens(std::span(&laptop_monitor, 1)), OSDROP_OK);
+    ASSERT_TRUE(wait_until([&] {
+        const auto layout = pc.engine->layout();
+        return layout && layout.value().size() == 2;
+    }));
+    EXPECT_TRUE(pc.events.wait_for([&] { return pc.events.layout_changes_unlocked() > 0; }));
+
+    const auto laptop_id = laptop.engine->info().device_id;
+    EXPECT_EQ(pc.engine->set_permissions(laptop_id, {.control = 1, .files = 0, .clipboard = 1}),
+              OSDROP_OK);
+    const auto members = pc.engine->members();
+    ASSERT_TRUE(members.has_value());
+    const auto member = std::ranges::find_if(members.value(), [&](const osdrop_member& entry) {
+        return std::ranges::equal(entry.device_id, laptop_id);
+    });
+    ASSERT_NE(member, members.value().end());
+    EXPECT_EQ(member->permissions.files, 0);
+    EXPECT_EQ(member->permissions.control, 1);
+
+    EXPECT_EQ(pc.engine->set_input_settings(
+                  {.modifier_mapping = 1, .immediate = 1, .crossing_modifiers = 0, .push_ms = 0}),
+              OSDROP_OK);
+    EXPECT_EQ(pc.engine->set_pointer_speed(laptop_id, 2000), OSDROP_OK);
+    EXPECT_NE(pc.engine->set_pointer_speed(laptop_id, 100), OSDROP_OK) << "below 250";
 }
 
 } // namespace

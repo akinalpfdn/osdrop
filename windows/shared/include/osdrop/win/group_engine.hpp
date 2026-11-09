@@ -129,13 +129,16 @@ public:
                                   const std::string& name) = 0;
     /// Copied files on their way from another computer; nullopt once they no longer are.
     virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
-    /// Another computer controls this one now, or no longer does.
-    virtual void controlled(bool controlled) = 0;
+    /// The arrangement or a member's screens changed: read layout() again.
+    virtual void layout_changed() = 0;
+    /// The member that controls this computer now; nullopt once no member does.
+    virtual void controlled(const std::optional<DeviceIdBytes>& controller) = 0;
     /// Input from the controlling computer, to inject here.
     virtual void inject(const osdrop_input& input) = 0;
-    /// The cursor went to another computer: capture this PC's input. The keys in `release_here`
-    /// (KEY inputs, action 2) went down here; their release now goes to the other computer.
-    virtual void capture_began(const std::vector<osdrop_input>& release_here) = 0;
+    /// The cursor went to `device`: capture this PC's input. The keys in `release_here` (KEY
+    /// inputs, action 2) went down here; their release now goes to the other computer.
+    virtual void capture_began(const DeviceIdBytes& device,
+                               const std::vector<osdrop_input>& release_here) = 0;
     /// The cursor came back: give this PC its input again.
     virtual void capture_ended(const CaptureEnd& end) = 0;
 };
@@ -153,6 +156,9 @@ public:
         osdrop_random_source random{};
         /// The clipboard to share; none: the clipboard is not shared. Outlives the engine.
         ClipboardHost* clipboard = nullptr;
+        /// The user's clipboard settings; set_clipboard_sharing() changes them later.
+        bool shares_clipboard = true;
+        ClipboardLimits clipboard_limits{};
         /// What this computer announces to the members (OSDROP_FEATURE_* bits).
         std::uint32_t features = kAvailableFeatures;
     };
@@ -185,6 +191,19 @@ public:
     [[nodiscard]] osdrop_result unblock(const DeviceIdBytes& device);
     [[nodiscard]] osdrop_result leave_group();
     [[nodiscard]] osdrop_result set_screens(std::span<const osdrop_monitor> monitors);
+    /// As osdrop_mesh_layout and osdrop_mesh_set_layout: the arrangement, and a new one from the
+    /// editor.
+    [[nodiscard]] Expected<std::vector<osdrop_layout_computer>, osdrop_result> layout() const;
+    [[nodiscard]] osdrop_result set_layout(std::span<const osdrop_placement> placements);
+    /// As osdrop_mesh_set_permissions; group_changed follows.
+    [[nodiscard]] osdrop_result set_permissions(const DeviceIdBytes& device,
+                                                const osdrop_permissions& permissions);
+    /// As osdrop_mesh_set_input_settings and osdrop_mesh_set_pointer_speed.
+    [[nodiscard]] osdrop_result set_input_settings(const osdrop_input_settings& settings);
+    [[nodiscard]] osdrop_result set_pointer_speed(const DeviceIdBytes& device,
+                                                  std::uint32_t permille);
+    /// The user's clipboard settings, as ClipboardSync::set_sharing.
+    void set_clipboard_sharing(bool shared, std::uint64_t files_limit);
     /// As osdrop_mesh_input, osdrop_mesh_set_unavailable and osdrop_mesh_cursor_moved: this PC's
     /// own input, captured `age_us` ago, whether it can be controlled, and where something else
     /// moved its cursor.

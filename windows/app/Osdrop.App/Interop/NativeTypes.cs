@@ -1,19 +1,34 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Osdrop.App.Interop;
 
 // Mirrors of the plain C types in osdrop.h and engine.h. Values are stable (never renumbered).
 
-/// <summary>osdrop_result: the codes the shell tells apart; any other value is kept as is.</summary>
+/// <summary>osdrop_result; a value added later is kept as is.</summary>
 internal enum CoreResult
 {
     Ok = 0,
+    InvalidArgument = 1,
     BufferTooSmall = 2,
+    Truncated = 3,
+    BadMagic = 4,
     UnsupportedVersion = 5,
+    UnknownType = 6,
+    TrailingBytes = 7,
+    ValueOutOfRange = 8,
+    InvalidString = 9,
+    TooLarge = 10,
     DecryptionFailed = 11,
+    HandshakeOutOfOrder = 12,
+    Replayed = 13,
+    NonceExhausted = 14,
     InvalidKey = 15,
+    RandomUnavailable = 16,
     TimedOut = 17,
     ConnectionClosed = 18,
+    PeerError = 19,
+    UnexpectedMessage = 20,
     NotTrusted = 21,
     PairingRejected = 22,
     PeerBusy = 23,
@@ -21,8 +36,15 @@ internal enum CoreResult
     Network = 25,
     Internal = 26,
     PeerSleeping = 27,
+    NotPermitted = 28,
     GroupFull = 29,
     InAnotherGroup = 30,
+    InvalidLayout = 31,
+    Cancelled = 32,
+    IoFailure = 33,
+    NoSpace = 34,
+    IntegrityFailed = 35,
+    NotFound = 36,
 }
 
 /// <summary>osdrop_platform.</summary>
@@ -59,6 +81,8 @@ internal enum EngineEventKind
     ClipboardFetching = 13,
     ClipboardFetchEnded = 14,
     ClipboardReady = 15,
+    LayoutChanged = 16,
+    InputChanged = 17,
 }
 
 internal static class NativeSizes
@@ -67,6 +91,8 @@ internal static class NativeSizes
     public const int GroupId = 16;
     public const int Key = 32;
     public const int Name = 65;
+    public const int MonitorKey = 16;
+    public const int MaxMonitors = 16;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -155,4 +181,100 @@ internal unsafe struct NativeMember
     public NativePermissions Permissions;
     public byte Self;
     public byte Connected;
+}
+
+/// <summary>osdrop_input_settings.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeInputSettings
+{
+    public byte ModifierMapping;
+    public byte Immediate;
+    public byte CrossingModifiers;
+    public uint PushMilliseconds;
+}
+
+/// <summary>osdrop_engine_hotkey.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeHotkey
+{
+    public byte Modifiers;
+    public ushort ScanCode;
+    public byte Extended;
+}
+
+/// <summary>osdrop_engine_config.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeEngineConfig
+{
+    public byte* DeviceName;
+    public byte SharesClipboard;
+    public ulong ClipboardFilesLimit;
+    public NativeInputSettings Input;
+    public NativeHotkey ReturnHotkey;
+    public NativeHotkey LockHotkey;
+    public byte RespectsCursorClip;
+}
+
+/// <summary>osdrop_engine_input_state.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeEngineInputState
+{
+    public byte Reachable;
+    public byte Locked;
+    public byte Controlled;
+    public fixed byte ControllerId[NativeSizes.DeviceId];
+    public byte Capturing;
+    public fixed byte TargetId[NativeSizes.DeviceId];
+    public byte NoticeReason;
+    public byte NoticeRefused;
+    public fixed byte NoticeDeviceId[NativeSizes.DeviceId];
+}
+
+/// <summary>osdrop_rect.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeRect
+{
+    public int X;
+    public int Y;
+    public int Width;
+    public int Height;
+}
+
+/// <summary>osdrop_monitor.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeMonitor
+{
+    public fixed byte Key[NativeSizes.MonitorKey];
+    public NativeRect Frame;
+    public NativeRect Native;
+    public ushort PixelWidth;
+    public ushort PixelHeight;
+    public byte Primary;
+}
+
+/// <summary>osdrop_placement.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativePlacement
+{
+    public fixed byte DeviceId[NativeSizes.DeviceId];
+    public int X;
+    public int Y;
+    public byte Detached;
+}
+
+/// <summary>osdrop_layout_computer.monitors.</summary>
+[InlineArray(NativeSizes.MaxMonitors)]
+internal struct NativeMonitors
+{
+    private NativeMonitor _first;
+}
+
+/// <summary>osdrop_layout_computer.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeLayoutComputer
+{
+    public byte Placed;
+    public NativePlacement Placement;
+    public byte MonitorCount;
+    public NativeMonitors Monitors;
 }

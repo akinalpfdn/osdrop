@@ -29,6 +29,8 @@ public:
     void set_controlled(bool controlled) override;
     void set_watching(bool watching) override;
     void mask_menu_keys() override;
+    void set_chords(const win::input::Chord& return_home,
+                    const win::input::Chord& lock_input) override;
     [[nodiscard]] win::input::Stats stats() const override;
 
 private:

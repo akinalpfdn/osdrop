@@ -18,7 +18,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
+#include <optional>
 #include <thread>
+#include <utility>
 
 namespace osdrop::input {
 
@@ -42,6 +45,8 @@ public:
     void release();
     void set_controlled(bool controlled);
     void set_watching(bool watching);
+    /// The chords from now on; the hook thread takes them between two events.
+    void set_chords(const win::input::Chord& return_home, const win::input::Chord& lock_input);
     /// Osdrop moves the cursor itself now: movement measured in the next moments may start from
     /// where the cursor was before, and is not reported.
     void warping();
@@ -58,11 +63,14 @@ private:
     void report_motion(POINT to, std::int64_t ticks, bool captured);
     void local_input();
     void record(LARGE_INTEGER started);
+    void apply_chords();
     void run();
 
     win::input::ReportQueue& reports_;
     win::input::HookTimings timings_;
     win::input::ChordMatcher chords_; // the hook thread only
+    std::mutex chords_mutex_;
+    std::optional<std::pair<win::input::Chord, win::input::Chord>> new_chords_; // chords_mutex_
     LARGE_INTEGER frequency_{};
     std::atomic<bool> capturing_{false};
     std::atomic<bool> controlled_{false};

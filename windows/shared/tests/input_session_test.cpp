@@ -45,6 +45,10 @@ struct FakeDevice final : input::InputDevice {
     void set_controlled(bool on) override { controlled = on; }
     void set_watching(bool on) override { calls.push_back(on ? "watch" : "unwatch"); }
     void mask_menu_keys() override { calls.emplace_back("mask"); }
+    void set_chords(const input::Chord& home, const input::Chord& lock) override {
+        calls.push_back("chords " + std::to_string(home.key.code) + "," +
+                        std::to_string(lock.key.code));
+    }
     bool controlled = false;
     [[nodiscard]] input::Stats stats() const override {
         return {.events = 5, .p50_us = 1, .p99_us = 3, .max_us = 4};
@@ -192,6 +196,17 @@ TEST_F(InputSessionTest, WatchingFollowsTheClient) {
     EXPECT_TRUE(session.watching());
     send(input::Watch{.on = false});
     EXPECT_EQ(device.calls, (std::vector<std::string>{"watch", "unwatch"}));
+}
+
+TEST_F(InputSessionTest, TheClientsChordsLastUntilItGoes) {
+    const input::SetChords chords{.return_home = {.key = kA, .modifiers = input::kControl},
+                                  .lock_input = input::kLockInputChord};
+    EXPECT_FALSE(send(chords).has_value());
+    send(chords);
+    session.reset();
+    session.reset();
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"chords 30,37", "chords 1,37"}))
+        << "set once, and the defaults again for the next client";
 }
 
 TEST_F(InputSessionTest, StatsAreAnswered) {

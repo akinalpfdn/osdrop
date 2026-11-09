@@ -36,6 +36,8 @@ public:
     /// A chord's key was kept from the apps while its modifiers reached them: a key nobody uses is
     /// pressed, so releasing Windows or Alt opens no menu.
     virtual void mask_menu_keys() = 0;
+    /// The chords the hooks match from now on (a valid pair).
+    virtual void set_chords(const Chord& return_home, const Chord& lock_input) = 0;
     [[nodiscard]] virtual Stats stats() const = 0;
 };
 
@@ -91,6 +93,7 @@ private:
     std::optional<Report> stop_capture(const StopCapture& stop);
     std::optional<Report> heartbeat(Clock::time_point now);
     std::optional<Report> watch(bool on);
+    std::optional<Report> set_chords(const SetChords& chords);
     /// Ends a capture that is still on here; whether there was one.
     bool end_capture_here();
     std::optional<Report> refuse(std::uint16_t type, Refusal reason, std::string_view why);
@@ -100,6 +103,7 @@ private:
     InputLog& log_;
     bool controlling_ = false;
     bool watching_ = false;
+    SetChords chords_; ///< as the client last set them; the defaults until then
     std::optional<Capture> capture_;
     std::set<ScanCode> keys_down_;
     std::set<Button> buttons_down_;

@@ -42,6 +42,8 @@ typedef enum osdrop_engine_event_kind {
                                                  copied files on their way, as they come */
     OSDROP_ENGINE_CLIPBOARD_FETCH_ENDED = 14, /* copied files are no longer on their way */
     OSDROP_ENGINE_CLIPBOARD_READY = 15,       /* device_id, name: its copied files can be pasted */
+    OSDROP_ENGINE_LAYOUT_CHANGED = 16,        /* the arrangement changed: read it again */
+    OSDROP_ENGINE_INPUT_CHANGED = 17,         /* the input state changed: read it again */
     OSDROP_ENGINE_EVENT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_engine_event_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -75,6 +77,41 @@ typedef struct osdrop_engine_info {
     uint16_t listen_port;
 } osdrop_engine_info;
 
+/* Where this PC's mouse and keyboard are, and whether other computers can control it. */
+typedef struct osdrop_engine_input_state {
+    uint8_t reachable;  /* 1 while OsdropInput answers; 0: the service is stopped or missing */
+    uint8_t locked;     /* "lock input here" is on */
+    uint8_t controlled; /* 1 while the member `controller_id` controls this PC */
+    uint8_t controller_id[OSDROP_DEVICE_ID_SIZE];
+    uint8_t capturing; /* 1 while the cursor is on the member `target_id` */
+    uint8_t target_id[OSDROP_DEVICE_ID_SIZE];
+    /* How the cursor last came back, as osdrop_mesh_callbacks.capture_ended reports it; 0 while
+       nothing is worth telling (cleared by osdrop_engine_dismiss_input_notice). */
+    uint8_t notice_reason;
+    uint8_t notice_refused;
+    uint8_t notice_device_id[OSDROP_DEVICE_ID_SIZE];
+} osdrop_engine_input_state;
+
+/* A chord: a key by its scan code, with modifiers held (1 Ctrl, 2 Alt, 4 Shift, 8 Windows; Ctrl,
+   Alt or Windows among them). The key must not be a modifier. */
+typedef struct osdrop_engine_hotkey {
+    uint8_t modifiers;
+    uint16_t scan_code;
+    uint8_t extended;
+} osdrop_engine_hotkey;
+
+/* What the shell chose; read when the engine starts. */
+typedef struct osdrop_engine_config {
+    const char* device_name; /* NUL-terminated UTF-8; NULL or empty: this PC's own name */
+    uint8_t shares_clipboard;
+    uint64_t clipboard_files_limit; /* bytes */
+    osdrop_input_settings input;
+    osdrop_engine_hotkey return_hotkey; /* brings the cursor home */
+    osdrop_engine_hotkey lock_hotkey;   /* "lock input here" */
+    uint8_t
+        respects_cursor_clip; /* 1: no crossing while an application (a game) holds the cursor */
+} osdrop_engine_config;
+
 /* A computer nearby that is not a member of this PC's group. */
 typedef struct osdrop_nearby_computer {
     uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
@@ -89,7 +126,8 @@ typedef struct osdrop_nearby_computer {
  * PC's monitors. UNSUPPORTED_VERSION: the stored group was written by a newer Osdrop (it is kept).
  * `context` must stay valid until osdrop_engine_destroy returns.
  */
-OSDROP_ENGINE_API osdrop_result osdrop_engine_create(osdrop_engine_callback callback, void* context,
+OSDROP_ENGINE_API osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
+                                                     osdrop_engine_callback callback, void* context,
                                                      osdrop_engine** out_engine);
 /* Stops DNS-SD and ends every session (Bye: application quit); NULL is ignored. */
 OSDROP_ENGINE_API void osdrop_engine_destroy(osdrop_engine* engine);
@@ -129,6 +167,39 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_close_all(osdrop_engine* engine, u
 OSDROP_ENGINE_API osdrop_result osdrop_engine_resume(osdrop_engine* engine);
 /* Stops fetching copied files from another computer; the clipboard keeps what it had. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine);
+/* The user's clipboard settings. Turned off, this PC's copy is withdrawn and copies are neither
+   offered nor fetched. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_clipboard(osdrop_engine* engine, uint8_t shared,
+                                                            uint64_t files_limit);
+/* As osdrop_mesh_set_permissions; GROUP_CHANGED follows. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_permissions(
+    osdrop_engine* engine, const uint8_t* device_id, const osdrop_permissions* permissions);
+/* As osdrop_mesh_layout and osdrop_mesh_set_layout; LAYOUT_CHANGED follows a change. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_layout(osdrop_engine* engine,
+                                                     osdrop_layout_computer* out, size_t capacity,
+                                                     size_t* out_count);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_layout(osdrop_engine* engine,
+                                                         const osdrop_placement* placements,
+                                                         size_t count);
+/* As osdrop_mesh_set_input_settings and osdrop_mesh_set_pointer_speed. */
+OSDROP_ENGINE_API osdrop_result
+osdrop_engine_set_input_settings(osdrop_engine* engine, const osdrop_input_settings* settings);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_pointer_speed(osdrop_engine* engine,
+                                                                const uint8_t* device_id,
+                                                                uint32_t permille);
+/* The chords; INVALID_ARGUMENT for a chord the hook cannot match, or the same one twice. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
+                                                          const osdrop_engine_hotkey* return_hotkey,
+                                                          const osdrop_engine_hotkey* lock_hotkey);
+/* Whether no crossing happens while an application (a game) holds the cursor in a rectangle. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_respects_cursor_clip(osdrop_engine* engine,
+                                                                       uint8_t respects);
+/* "Lock input here" (also toggled by the lock hotkey); INPUT_CHANGED follows. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_lock_input(osdrop_engine* engine, uint8_t locked);
+OSDROP_ENGINE_API osdrop_result osdrop_engine_get_input_state(osdrop_engine* engine,
+                                                              osdrop_engine_input_state* out_state);
+/* Clears the input state's notice. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_dismiss_input_notice(osdrop_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -1,5 +1,6 @@
 # Phase 004 (MVP-04) — Windows input process and service
-Status: ACTIVE
+Status: DONE — merged with PR #18 (2026-11-09). W1–W6 and W8 passed; W9–W14 work in everyday use
+(user, 2026-11-09); W7 needs a second Windows user account
 
 DEVPLAN reference: Phase 3 (go/no-go gate). Depends on: Phase 0
 

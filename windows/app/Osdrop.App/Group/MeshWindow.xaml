@@ -1,5 +1,6 @@
-<Window x:Class="Osdrop.App.Group.MeshWindow"
+<ui:FluentWindow x:Class="Osdrop.App.Group.MeshWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -10,7 +11,11 @@
         Title="{x:Static res:Strings.MeshWindowTitle}"
         Width="{StaticResource Osdrop.Width.MeshWindow}"
         SizeToContent="Height"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica">
+  <DockPanel>
+  <ui:TitleBar DockPanel.Dock="Top" Title="{x:Static res:Strings.MeshWindowTitle}" ShowMaximize="False" ShowMinimize="False" />
   <StackPanel Margin="{StaticResource Osdrop.Thickness.WindowPadding}">
     <TextBlock Style="{StaticResource Osdrop.Text.Mono}">
       <Run Text="{x:Static res:Strings.MeshDevice}" /> <Run Text="{Binding DeviceId, Mode=OneWay}" />
@@ -36,4 +41,5 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
   </StackPanel>
-</Window>
+  </DockPanel>
+</ui:FluentWindow>

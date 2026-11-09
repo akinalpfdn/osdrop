@@ -30,6 +30,9 @@ TEST(InputProtocol, EveryRequestRoundTrips) {
         input::Watch{.on = true},
         input::Watch{.on = false},
         input::Heartbeat{},
+        input::SetChords{},
+        input::SetChords{.return_home = {.key = kRightArrow, .modifiers = input::kControl},
+                         .lock_input = {.key = kA, .modifiers = input::kAlt | input::kShift}},
     };
     for (const input::Request& request : requests) {
         const auto bytes = input::encode(request);
@@ -129,6 +132,15 @@ TEST(InputProtocol, ValuesOutOfRangeAreRefused) {
     EXPECT_FALSE(input::decode_report(input::encode(input::Report(
                                           input::WatchedMotion{.x = input::kMaxCoordinate + 1})))
                      .has_value());
+    const input::Chord shift_only{.key = kA, .modifiers = input::kShift};
+    EXPECT_EQ(request_error(input::encode(input::Request(input::SetChords{
+                  .return_home = shift_only, .lock_input = input::kLockInputChord}))),
+              DecodeError::ValueOutOfRange)
+        << "Shift alone types";
+    EXPECT_EQ(request_error(input::encode(input::Request(input::SetChords{
+                  .return_home = input::kLockInputChord, .lock_input = input::kLockInputChord}))),
+              DecodeError::ValueOutOfRange)
+        << "the same chord twice";
 }
 
 TEST(InputProtocol, TypesHaveNamesForTheLog) {

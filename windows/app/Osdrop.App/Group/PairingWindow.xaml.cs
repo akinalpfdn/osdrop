@@ -1,10 +1,10 @@
 using System.ComponentModel;
-using System.Windows;
+using Wpf.Ui.Appearance;
 
 namespace Osdrop.App.Group;
 
 /// <summary>The pairing code on this PC, whichever computer started the pairing.</summary>
-public partial class PairingWindow : Window
+public partial class PairingWindow : Wpf.Ui.Controls.FluentWindow
 {
     private readonly GroupViewModel _group;
     private bool _closingFromModel;
@@ -13,6 +13,7 @@ public partial class PairingWindow : Window
     {
         InitializeComponent();
         _group = group;
+        SystemThemeWatcher.Watch(this);
     }
 
     /// <summary>Closes when the pairing ends, without counting as the user's answer.</summary>

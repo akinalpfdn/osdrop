@@ -3,24 +3,24 @@
                     xmlns:tb="clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf"
                     xmlns:res="clr-namespace:Osdrop.Localization;assembly=Osdrop.Localization"
                     xmlns:tray="clr-namespace:Osdrop.App.Tray">
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="../Theme/Styles.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+  <!-- A click opens the panel (the Mac's menu); the menu has the quick actions. TrayIconTheme
+       sets the icon. -->
   <tb:TaskbarIcon x:Key="Osdrop.Tray.Icon"
                   ToolTipText="{x:Static res:Strings.TrayToolTip}"
+                  NoLeftClickDelay="True"
+                  LeftClickCommand="{Binding TogglePanelCommand}"
                   d:DataContext="{d:DesignInstance Type=tray:TrayViewModel}"
                   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                   mc:Ignorable="d">
-    <tb:TaskbarIcon.IconSource>
-      <tb:GeneratedIconSource Text="{StaticResource Osdrop.Tray.IconGlyph}"
-                              Foreground="{StaticResource Osdrop.Brush.TrayIconForeground}"
-                              Background="{StaticResource Osdrop.Brush.TrayIconBackground}"
-                              FontSize="{StaticResource Osdrop.FontSize.TrayIconGlyph}"
-                              FontWeight="{StaticResource Osdrop.FontWeight.TrayIconGlyph}" />
-    </tb:TaskbarIcon.IconSource>
     <tb:TaskbarIcon.ContextMenu>
       <ContextMenu>
-        <MenuItem Header="{x:Static res:Strings.TrayComputers}" Command="{Binding OpenComputersCommand}" />
-        <MenuItem Header="{x:Static res:Strings.TrayMesh}" Command="{Binding OpenMeshCommand}"
-                  Visibility="{Binding Source={x:Static tray:TrayViewModel.ShowsMesh}, Converter={StaticResource Osdrop.Converter.Visible}}" />
+        <MenuItem Header="{x:Static res:Strings.TrayOpen}" Command="{Binding TogglePanelCommand}"
+                  FontWeight="{StaticResource Osdrop.FontWeight.Emphasis}" />
+        <MenuItem Header="{x:Static res:Strings.PanelSettings}" Command="{Binding OpenSettingsCommand}" />
         <Separator />
         <MenuItem Header="{x:Static res:Strings.TrayQuit}" Command="{Binding QuitCommand}" />
       </ContextMenu>

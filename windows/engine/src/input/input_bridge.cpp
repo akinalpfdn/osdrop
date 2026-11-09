@@ -19,6 +19,8 @@ constexpr auto kTickInterval = std::chrono::milliseconds(100);
 constexpr auto kCursorCheckInterval = std::chrono::milliseconds(100);
 /// Farther than this from where Osdrop put it, the cursor was moved by something else.
 constexpr LONG kCursorReportDistance = 2;
+/// While watching, how often the rectangle a game may hold the cursor in is read.
+constexpr auto kClipCheckInterval = std::chrono::milliseconds(100);
 /// While the cursor is home, how often Caps Lock is read; after Osdrop sets it, how long before.
 constexpr auto kCapsCheckInterval = std::chrono::milliseconds(250);
 constexpr auto kCapsSettleTime = std::chrono::milliseconds(300);
@@ -105,9 +107,9 @@ struct Overloaded : Visitors... { // NOLINT(misc-multiple-inheritance): the stan
 
 } // namespace
 
-InputBridge::InputBridge(win::GroupEngine& group)
-    : group_(group), frequency_(performance_frequency()), forwarder_(click_settings()),
-      thread_([this] { run(); }) {}
+InputBridge::InputBridge(win::GroupEngine& group, Listener listener)
+    : group_(group), listener_(std::move(listener)), frequency_(performance_frequency()),
+      forwarder_(click_settings()), thread_([this] { run(); }) {}
 
 InputBridge::~InputBridge() {
     stop();
@@ -149,6 +151,17 @@ void InputBridge::set_watching(bool watching) {
     if (watching_wanted_ != watching) {
         watching_wanted_ = watching;
         watching_changed_ = true;
+        wake_.notify_one();
+    }
+}
+
+void InputBridge::set_chords(const protocol::Chord& return_home,
+                             const protocol::Chord& lock_input) {
+    const std::scoped_lock lock(mutex_);
+    const Chords chords{.return_home = return_home, .lock_input = lock_input};
+    if (chords_wanted_ != chords) {
+        chords_wanted_ = chords;
+        chords_changed_ = true;
         wake_.notify_one();
     }
 }
@@ -195,13 +208,15 @@ InputBridge::Work InputBridge::take_work() {
                : std::chrono::duration_cast<std::chrono::milliseconds>(kReconnectInterval);
     wake_.wait_for(lock, wait, [this] {
         return stopping_ || !pending_.empty() || control_change_.has_value() ||
-               !capture_changes_.empty() || watching_changed_;
+               !capture_changes_.empty() || watching_changed_ || chords_changed_;
     });
     watching_changed_ = false;
+    chords_changed_ = false;
     Work work{.inputs = {pending_.begin(), pending_.end()},
               .control = std::exchange(control_change_, std::nullopt),
               .captures = std::exchange(capture_changes_, {}),
               .watching = watching_wanted_,
+              .chords = chords_wanted_,
               .stopping = stopping_};
     pending_.clear();
     return work;
@@ -210,7 +225,8 @@ InputBridge::Work InputBridge::take_work() {
 void InputBridge::connect() {
     client_.reset();
     closed_ = false;
-    watching_ = false; // a new OsdropInput watches nothing yet
+    watching_ = false;    // a new OsdropInput watches nothing yet
+    chords_sent_.reset(); // and has the default chords
     {
         const std::scoped_lock lock(forwarder_mutex_);
         forwarder_.reset();
@@ -229,6 +245,9 @@ void InputBridge::connect() {
     if (reachable_ != reachable) {
         reachable_ = reachable;
         group_.set_unavailable(reachable ? kAvailable : kCannotInject);
+        if (listener_.reachable) {
+            listener_.reachable(reachable);
+        }
     }
     if (reachable && controlled_) {
         static_cast<void>(client_->send(protocol::BeginControl{}));
@@ -236,6 +255,7 @@ void InputBridge::connect() {
 }
 
 void InputBridge::apply(const Work& work) {
+    send_chords(work.chords);
     watch(work.watching);
     for (const CaptureChange& change : work.captures) {
         std::visit(Overloaded{[this](const Began& began) { begin_capture(began); },
@@ -260,6 +280,13 @@ void InputBridge::watch(bool watching) {
     if (client_ && watching != watching_) {
         watching_ = watching;
         static_cast<void>(client_->send(protocol::Watch{.on = watching}));
+    }
+}
+
+void InputBridge::send_chords(const Chords& chords) {
+    if (client_ && chords_sent_ != chords && (chords_sent_ || chords != Chords{})) {
+        chords_sent_ = chords;
+        static_cast<void>(client_->send(chords));
     }
 }
 
@@ -337,6 +364,44 @@ void InputBridge::tick() {
         last_caps_check_ = now;
         report_caps_lock();
     }
+    if (watching_ && !capturing_ && now - last_clip_check_ >= kClipCheckInterval) {
+        last_clip_check_ = now;
+        check_clip();
+    }
+}
+
+void InputBridge::set_respects_clip(bool respects) {
+    respects_clip_ = respects; // the next check applies it
+}
+
+void InputBridge::check_clip() {
+    // A game that keeps the cursor on its monitor holds it in a rectangle smaller than the
+    // desktop; then it does not cross to another computer either.
+    std::optional<win::PixelRect> clip;
+    RECT held{};
+    if (respects_clip_ && GetClipCursor(&held) != FALSE) {
+        const RECT desktop{
+            .left = GetSystemMetrics(SM_XVIRTUALSCREEN),
+            .top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+            .right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            .bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        const bool smaller = held.left > desktop.left || held.top > desktop.top ||
+                             held.right < desktop.right || held.bottom < desktop.bottom;
+        if (smaller) {
+            clip = win::PixelRect{
+                .left = held.left, .top = held.top, .right = held.right, .bottom = held.bottom};
+        }
+    }
+    if (clip == clip_) {
+        return;
+    }
+    if (clip.has_value() != clip_.has_value() && listener_.log) {
+        listener_.log(clip ? "An application holds the cursor: no crossings"
+                           : "The cursor is free again: crossings resume");
+    }
+    clip_ = clip;
+    const std::scoped_lock lock(forwarder_mutex_);
+    forwarder_.set_clip(clip);
 }
 
 void InputBridge::watch_cursor() {
@@ -419,9 +484,18 @@ void InputBridge::hotkey(protocol::Hotkey hotkey) {
         group_.return_home(false);
         break;
     case protocol::Hotkey::LockInput:
-        locked_ = !locked_;
-        group_.lock_input(locked_);
+        set_locked(!locked_);
         break;
+    }
+}
+
+void InputBridge::set_locked(bool locked) {
+    if (locked_.exchange(locked) == locked) {
+        return;
+    }
+    group_.lock_input(locked);
+    if (listener_.locked) {
+        listener_.locked(locked);
     }
 }
 

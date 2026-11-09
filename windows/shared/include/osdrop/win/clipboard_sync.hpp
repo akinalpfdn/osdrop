@@ -101,7 +101,10 @@ public:
 class ClipboardMesh {
 public:
     virtual ~ClipboardMesh() = default;
-    virtual osdrop_result copied(const ClipData& data) = 0;
+    /// Offers a copy; `clip_id` is its ID, for withdraw().
+    virtual osdrop_result copied(const ClipData& data, std::uint64_t& clip_id) = 0;
+    /// Withdraws an offered copy: members fetching it get CANCELLED.
+    virtual void withdraw(std::uint64_t clip_id) = 0;
     virtual osdrop_result fetch_content(const ClipDevice& device, const osdrop_object_ref& item,
                                         std::uint64_t max_bytes, std::uint64_t& id) = 0;
     virtual osdrop_result receive(const ClipDevice& device, const osdrop_object_ref& item,
@@ -114,7 +117,8 @@ public:
 class CoreClipboardMesh final : public ClipboardMesh {
 public:
     explicit CoreClipboardMesh(osdrop_mesh* mesh) : mesh_(mesh) {}
-    osdrop_result copied(const ClipData& data) override;
+    osdrop_result copied(const ClipData& data, std::uint64_t& clip_id) override;
+    void withdraw(std::uint64_t clip_id) override;
     osdrop_result fetch_content(const ClipDevice& device, const osdrop_object_ref& item,
                                 std::uint64_t max_bytes, std::uint64_t& id) override;
     osdrop_result receive(const ClipDevice& device, const osdrop_object_ref& item,
@@ -152,6 +156,10 @@ public:
     /// Stops fetching copied files; the clipboard keeps what it had. Posts to the clipboard
     /// thread.
     void cancel_fetch();
+    /// The user's settings; posts to the clipboard thread. Turned off, this PC's copy is withdrawn,
+    /// another computer's copy being fetched is dropped, and copies are neither offered nor
+    /// fetched. `files_limit` replaces the files limit from the next copy on.
+    void set_sharing(bool shared, std::uint64_t files_limit);
 
     // --- From core's callbacks: they post to the clipboard thread ---
     void peer_connected(const ClipDevice& device, std::string name);
@@ -196,6 +204,8 @@ private:
     std::optional<Incoming> incoming_;
     /// What this PC last offered, while no other computer's copy came after it.
     std::optional<CopySignature> last_offered_;
+    std::uint64_t offered_clip_ = 0; ///< this PC's newest offered copy; 0 when none is
+    bool shared_ = true;
 };
 
 } // namespace osdrop::win

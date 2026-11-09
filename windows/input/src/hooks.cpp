@@ -17,6 +17,9 @@ constexpr std::int64_t kLocalInputIntervalMs = 100;
 /// After Osdrop moves the cursor, movement is not reported for this long (1/500 s).
 constexpr std::int64_t kWarpSettleDivisor = 500;
 
+/// Tells the hook thread that new chords wait (set_chords).
+constexpr UINT kChordsMessage = WM_APP + 1;
+
 bool injected_by_osdrop(DWORD flags, DWORD injected_flag, ULONG_PTR extra) {
     return (flags & injected_flag) != 0 && extra == kInjectedTag;
 }
@@ -55,8 +58,13 @@ void Hooks::run() {
     HHOOK keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, on_keyboard, module, 0);
     installed_ = mouse != nullptr && keyboard != nullptr ? 1 : 0;
     installed_.notify_all();
+    apply_chords(); // set before the thread had a queue
     if (installed_.load() == 1) {
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+            if (message.hwnd == nullptr && message.message == kChordsMessage) {
+                apply_chords();
+                continue;
+            }
             DispatchMessageW(&message);
         }
     }
@@ -81,6 +89,27 @@ void Hooks::set_controlled(bool controlled) {
 
 void Hooks::set_watching(bool watching) {
     watching_ = watching;
+}
+
+void Hooks::set_chords(const protocol::Chord& return_home, const protocol::Chord& lock_input) {
+    {
+        const std::scoped_lock lock(chords_mutex_);
+        new_chords_ = std::pair(return_home, lock_input);
+    }
+    if (const DWORD id = thread_id_.load(); id != 0) {
+        PostThreadMessageW(id, kChordsMessage, 0, 0);
+    }
+}
+
+void Hooks::apply_chords() {
+    std::optional<std::pair<protocol::Chord, protocol::Chord>> chords;
+    {
+        const std::scoped_lock lock(chords_mutex_);
+        chords = std::exchange(new_chords_, std::nullopt);
+    }
+    if (chords) {
+        chords_.set(chords->first, chords->second);
+    }
 }
 
 void Hooks::warping() {

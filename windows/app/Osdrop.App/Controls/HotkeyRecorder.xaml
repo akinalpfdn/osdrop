@@ -1,0 +1,14 @@
+<UserControl x:Class="Osdrop.App.Controls.HotkeyRecorder"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:res="clr-namespace:Osdrop.Localization;assembly=Osdrop.Localization">
+  <StackPanel>
+    <ui:Button x:Name="Recorder" MinWidth="{StaticResource Osdrop.Width.Setting}" HorizontalAlignment="Right"
+               Click="OnClick" PreviewKeyDown="OnPreviewKeyDown" LostKeyboardFocus="OnLostFocus"
+               ToolTip="{x:Static res:Strings.HotkeyHint}"
+               AutomationProperties.HelpText="{x:Static res:Strings.HotkeyHint}" />
+    <TextBlock x:Name="Hint" Margin="{StaticResource Osdrop.Thickness.ItemGap}" Style="{StaticResource Osdrop.Text.Caption}"
+               Text="{x:Static res:Strings.HotkeyNeedsModifier}" Visibility="Collapsed" />
+  </StackPanel>
+</UserControl>

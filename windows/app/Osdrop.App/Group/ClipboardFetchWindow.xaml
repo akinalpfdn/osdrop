@@ -1,5 +1,6 @@
-<Window x:Class="Osdrop.App.Group.ClipboardFetchWindow"
+<ui:FluentWindow x:Class="Osdrop.App.Group.ClipboardFetchWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -11,7 +12,11 @@
         Width="{StaticResource Osdrop.Width.FetchWindow}"
         SizeToContent="Height"
         ResizeMode="NoResize"
-        WindowStyle="ToolWindow"
+        WindowStyle="None"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="None"
+        Background="{DynamicResource ApplicationBackgroundBrush}"
+        WindowCornerPreference="Round"
         ShowInTaskbar="False"
         ShowActivated="False"
         Topmost="True">
@@ -25,8 +30,8 @@
                Style="{StaticResource Osdrop.Text.Body}" />
     <TextBlock Text="{x:Static res:Strings.ClipboardFetchingHint}" Margin="{StaticResource Osdrop.Thickness.ItemGap}"
                Style="{StaticResource Osdrop.Text.Body}" />
-    <Button Content="{x:Static res:Strings.ClipboardFetchCancel}" Command="{Binding CancelCommand}"
+    <ui:Button Content="{x:Static res:Strings.ClipboardFetchCancel}" Command="{Binding CancelCommand}"
             HorizontalAlignment="Right" Margin="{StaticResource Osdrop.Thickness.SectionGap}"
-            Style="{StaticResource Osdrop.Button}" />
+            MinWidth="{StaticResource Osdrop.Width.Button}" />
   </StackPanel>
-</Window>
+</ui:FluentWindow>

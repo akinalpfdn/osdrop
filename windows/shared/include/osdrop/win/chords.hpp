@@ -1,11 +1,11 @@
 #pragma once
 
-// Osdrop's key chords on a PC (DEVPLAN Phase 11): Ctrl, Alt and Windows with Escape bring the
-// cursor home; with K they lock it to the computer it is on, or let it cross again. They are the
-// Mac's ⌃⌥⌘ chords on the same physical keys, with K for lock because Windows keeps Win+L for
-// locking the PC and no hook can take it. The hook thread feeds every physical key here, in
-// order; the key that completes a chord, its repeats and its release never reach an app or another
-// computer.
+// Osdrop's key chords on a PC (DEVPLAN Phases 11 and 17). By default Ctrl, Alt and Windows with
+// Escape bring the cursor home; with K they lock it to the computer it is on, or let it cross
+// again. They are the Mac's ⌃⌥⌘ chords on the same physical keys, with K for lock because Windows
+// keeps Win+L for locking the PC and no hook can take it; the user can choose others in Settings.
+// The hook thread feeds every physical key here, in order; the key that completes a chord, its
+// repeats and its release never reach an app or another computer.
 
 #include <osdrop/win/key_codes.hpp>
 
@@ -19,16 +19,24 @@ inline constexpr std::uint8_t kControl = 1U << 0U;
 inline constexpr std::uint8_t kAlt = 1U << 1U;
 inline constexpr std::uint8_t kShift = 1U << 2U;
 inline constexpr std::uint8_t kWindows = 1U << 3U;
+inline constexpr std::uint8_t kChordModifiers = kControl | kAlt | kShift | kWindows;
 
 struct Chord {
     ScanCode key;
     std::uint8_t modifiers = 0; ///< these must be held; more do not matter, so a chord always works
+    bool operator==(const Chord&) const = default;
 };
 
 inline constexpr Chord kReturnHomeChord{.key = {.code = 0x01, .extended = false},
                                         .modifiers = kControl | kAlt | kWindows};
 inline constexpr Chord kLockInputChord{.key = {.code = 0x25, .extended = false},
                                        .modifiers = kControl | kAlt | kWindows};
+
+/// A chord the hook can match: a key of the key table that is no modifier, with Ctrl, Alt or
+/// Windows held (Shift alone types).
+[[nodiscard]] bool valid(const Chord& chord);
+/// Two valid chords that can be told apart.
+[[nodiscard]] bool valid_pair(const Chord& return_home, const Chord& lock_input);
 
 class ChordMatcher {
 public:
@@ -46,7 +54,14 @@ public:
     /// The modifier bits held now.
     [[nodiscard]] std::uint8_t modifiers() const;
 
+    /// The chords from now on; a pair that is not valid_pair() is ignored.
+    void set(const Chord& return_home, const Chord& lock_input);
+    [[nodiscard]] const Chord& return_home() const { return return_home_; }
+    [[nodiscard]] const Chord& lock_input() const { return lock_input_; }
+
 private:
+    Chord return_home_ = kReturnHomeChord;
+    Chord lock_input_ = kLockInputChord;
     std::uint8_t held_ = 0;             ///< one bit per modifier key, left and right apart
     std::optional<ScanCode> chord_key_; ///< down and swallowed: its repeats and release are too
 };

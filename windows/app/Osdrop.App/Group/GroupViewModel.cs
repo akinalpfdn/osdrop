@@ -8,8 +8,8 @@ using Osdrop.App.Interop;
 namespace Osdrop.App.Group;
 
 /// <summary>
-/// The group on this PC (temporary UI, final in Phase 17): members, nearby computers, pairings and
-/// what the mesh window shows. Engine events arrive on the UI thread.
+/// The group on this PC: members, nearby computers, pairings, the clipboard's notices and what the
+/// mesh window shows. Engine events arrive on the UI thread.
 /// </summary>
 public sealed partial class GroupViewModel : ObservableObject
 {
@@ -63,6 +63,25 @@ public sealed partial class GroupViewModel : ObservableObject
     public partial int ListenPort { get; set; }
 
     public bool IsInGroup => GroupId is not null;
+
+    /// <summary>Members other than this PC, for Settings.</summary>
+    public IEnumerable<MemberItem> Others => Members.Where(member => !member.IsSelf);
+
+    public bool HasOthers => Members.Any(member => !member.IsSelf);
+
+    /// <summary>Another member has a session: the cursor can cross.</summary>
+    public bool HasConnectedOthers => Members.Any(member => !member.IsSelf && member.IsConnected);
+
+    /// <summary>The arrangement or a member's screens changed.</summary>
+    public event Action? ArrangementChanged;
+
+    /// <summary>Where this PC's mouse and keyboard are changed.</summary>
+    public event Action? InputChanged;
+
+    /// <summary>A member's name, or "another computer" for one this PC does not know.</summary>
+    public string NameOf(string deviceId) =>
+        Members.FirstOrDefault(member => member.DeviceId == deviceId)?.Name is { Length: > 0 } name
+            ? name : Localization.Strings.ClipboardOtherComputer;
 
     public async Task RefreshAsync()
     {
@@ -232,7 +251,13 @@ public sealed partial class GroupViewModel : ObservableObject
                 }
                 break;
             case EngineEventKind.Log:
-                System.Diagnostics.Trace.WriteLine(received.Message, "Osdrop");
+                Diagnostics.Log.Write(received.Level, received.Message);
+                break;
+            case EngineEventKind.LayoutChanged:
+                ArrangementChanged?.Invoke();
+                break;
+            case EngineEventKind.InputChanged:
+                InputChanged?.Invoke();
                 break;
             case EngineEventKind.ClipboardUnavailable:
                 ClipboardNotice = Describe(Localization.Strings.ClipboardUnavailable, received.Name);
@@ -264,6 +289,19 @@ public sealed partial class GroupViewModel : ObservableObject
     private static string NameOrOther(string name) =>
         string.IsNullOrEmpty(name) ? Localization.Strings.ClipboardOtherComputer : name;
 
+    /// <summary>A permission switched in Settings: core tells the member at once.</summary>
+    private void OnPermissionsChanged(MemberItem member) => _ = SetPermissionsAsync(member);
+
+    private async Task SetPermissionsAsync(MemberItem member)
+    {
+        CoreResult result = await _engine.SetPermissionsAsync(member.DeviceId, member.Permissions).ConfigureAwait(true);
+        if (result != CoreResult.Ok)
+        {
+            Diagnostics.Log.Write(LogLevel.Warning, $"Changing a member's permissions failed: {result}");
+            await RefreshMembersAsync().ConfigureAwait(true); // show what core has
+        }
+    }
+
     private MemberItem? Find(string deviceId) => Members.FirstOrDefault(member => member.DeviceId == deviceId);
 
     private async Task RefreshMembersAsync()
@@ -279,8 +317,11 @@ public sealed partial class GroupViewModel : ObservableObject
         Members.Clear();
         foreach (GroupMember member in members)
         {
-            Members.Add(new MemberItem(member));
+            Members.Add(new MemberItem(member, OnPermissionsChanged));
         }
+        OnPropertyChanged(nameof(Others));
+        OnPropertyChanged(nameof(HasOthers));
+        OnPropertyChanged(nameof(HasConnectedOthers));
         IReadOnlyList<BlockedComputer> blocked = await _engine.GetBlockedAsync().ConfigureAwait(true);
         Blocked.Clear();
         foreach (BlockedComputer computer in blocked)

@@ -1,0 +1,382 @@
+<ui:FluentWindow x:Class="Osdrop.App.Settings.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:res="clr-namespace:Osdrop.Localization;assembly=Osdrop.Localization"
+                 xmlns:settings="clr-namespace:Osdrop.App.Settings"
+                 xmlns:group="clr-namespace:Osdrop.App.Group"
+                 xmlns:arrangement="clr-namespace:Osdrop.App.Arrangement"
+                 xmlns:controls="clr-namespace:Osdrop.App.Controls"
+                 mc:Ignorable="d"
+                 d:DataContext="{d:DesignInstance Type=settings:SettingsViewModel}"
+                 Title="{x:Static res:Strings.SettingsTitle}"
+                 Width="{StaticResource Osdrop.Width.SettingsWindow}"
+                 Height="{StaticResource Osdrop.Height.SettingsWindow}"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round">
+  <ui:FluentWindow.Resources>
+    <Style x:Key="Osdrop.Icon.Platform" TargetType="ui:SymbolIcon">
+      <Setter Property="Symbol" Value="Laptop24" />
+      <Setter Property="FontSize" Value="{StaticResource Osdrop.FontSize.Icon}" />
+      <Setter Property="Margin" Value="{StaticResource Osdrop.Thickness.IconGap}" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsWindows}" Value="True">
+          <Setter Property="Symbol" Value="Desktop24" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+  </ui:FluentWindow.Resources>
+
+  <DockPanel>
+    <ui:TitleBar DockPanel.Dock="Top" Title="{x:Static res:Strings.SettingsTitle}" ShowMaximize="False" ShowMinimize="False" />
+    <TabControl Margin="{StaticResource Osdrop.Thickness.PagePadding}">
+
+      <!-- General -->
+      <TabItem Header="{x:Static res:Strings.SettingsGeneral}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.SectionGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsStartWithWindows}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ui:ToggleSwitch IsChecked="{Binding StartsWithWindows}"
+                               AutomationProperties.Name="{x:Static res:Strings.SettingsStartWithWindows}" />
+            </ui:CardControl>
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding StartupError}"
+                       Style="{StaticResource Osdrop.Text.Error}"
+                       Visibility="{Binding HasStartupError, Converter={StaticResource Osdrop.Converter.Visible}}" />
+
+            <TextBlock Text="{x:Static res:Strings.UpdatesTitle}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.UpdatesDaily}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ui:ToggleSwitch IsChecked="{Binding Settings.ChecksForUpdates}"
+                               AutomationProperties.Name="{x:Static res:Strings.UpdatesDaily}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{Binding Updates.CurrentVersionText}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{Binding Updates.CheckResult}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <StackPanel Orientation="Horizontal">
+                <ui:Button Margin="{StaticResource Osdrop.Thickness.ButtonGap}" Content="{x:Static res:Strings.UpdatesDownload}"
+                           Command="{Binding Updates.OpenDownloadCommand}"
+                           Visibility="{Binding Updates.IsUpdateAvailable, Converter={StaticResource Osdrop.Converter.Visible}}" />
+                <ui:Button Content="{x:Static res:Strings.UpdatesCheck}" Command="{Binding Updates.CheckNowCommand}" />
+              </StackPanel>
+            </ui:CardControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Arrangement -->
+      <TabItem Header="{x:Static res:Strings.SettingsArrangement}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.SectionGap}" Text="{x:Static res:Strings.SettingsArrangementEmpty}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding HasArrangement, Converter={StaticResource Osdrop.Converter.Hidden}}" />
+            <arrangement:ArrangementEditor Margin="{StaticResource Osdrop.Thickness.SectionGap}"
+                                           Geometry="{Binding Arrangement}" MoveCommand="{Binding MoveCommand}"
+                                           AutomationProperties.Name="{x:Static res:Strings.SettingsArrangement}"
+                                           AutomationProperties.HelpText="{x:Static res:Strings.SettingsArrangementHint}"
+                                           Visibility="{Binding HasArrangement, Converter={StaticResource Osdrop.Converter.Visible}}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.SectionGap}" Text="{x:Static res:Strings.SettingsArrangementDescription}"
+                       Style="{StaticResource Osdrop.Text.Caption}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding ArrangementProblem}"
+                       Style="{StaticResource Osdrop.Text.Error}"
+                       Visibility="{Binding HasArrangementProblem, Converter={StaticResource Osdrop.Converter.Visible}}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Devices -->
+      <TabItem Header="{x:Static res:Strings.SettingsDevices}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <TextBlock Text="{x:Static res:Strings.SettingsThisComputer}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{x:Static res:Strings.SettingsName}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{x:Static res:Strings.SettingsNameDescription}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <StackPanel Orientation="Horizontal">
+                <ui:TextBox Width="{StaticResource Osdrop.Width.Setting}" Margin="{StaticResource Osdrop.Thickness.ButtonGap}"
+                            Text="{Binding DeviceNameText, UpdateSourceTrigger=PropertyChanged}"
+                            AutomationProperties.Name="{x:Static res:Strings.SettingsName}">
+                  <ui:TextBox.InputBindings>
+                    <KeyBinding Key="Enter" Command="{Binding SaveNameCommand}" />
+                  </ui:TextBox.InputBindings>
+                </ui:TextBox>
+                <ui:Button Content="{x:Static res:Strings.SettingsNameSave}" Command="{Binding SaveNameCommand}" />
+              </StackPanel>
+            </ui:CardControl>
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding NameProblem}"
+                       Style="{StaticResource Osdrop.Text.Error}"
+                       Visibility="{Binding HasNameProblem, Converter={StaticResource Osdrop.Converter.Visible}}" />
+
+            <TextBlock Text="{x:Static res:Strings.SettingsMembers}" Style="{StaticResource Osdrop.Text.Section}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.GroupEmpty}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding Group.HasOthers, Converter={StaticResource Osdrop.Converter.Hidden}}" />
+            <ItemsControl ItemsSource="{Binding Group.Others}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type group:MemberItem}">
+                  <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                    <ui:CardControl.Header>
+                      <StackPanel>
+                        <DockPanel>
+                          <ui:SymbolIcon DockPanel.Dock="Left" Style="{StaticResource Osdrop.Icon.Platform}" />
+                          <StackPanel>
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+                            <TextBlock Text="{Binding Status}" Style="{StaticResource Osdrop.Text.Caption}" />
+                          </StackPanel>
+                        </DockPanel>
+                        <CheckBox Margin="{StaticResource Osdrop.Thickness.NestedGap}" IsChecked="{Binding AllowsControl}"
+                                  Content="{x:Static res:Strings.SettingsAllowControl}" />
+                        <CheckBox Margin="{StaticResource Osdrop.Thickness.NestedGap}" IsChecked="{Binding AllowsFiles}"
+                                  Content="{x:Static res:Strings.SettingsAllowFiles}" />
+                        <CheckBox Margin="{StaticResource Osdrop.Thickness.NestedGap}" IsChecked="{Binding AllowsClipboard}"
+                                  Content="{x:Static res:Strings.SettingsAllowClipboard}" />
+                      </StackPanel>
+                    </ui:CardControl.Header>
+                    <StackPanel VerticalAlignment="Top">
+                      <ui:Button HorizontalAlignment="Stretch" Content="{x:Static res:Strings.SettingsRemove}"
+                                 Command="{Binding DataContext.Group.RevokeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                 CommandParameter="{Binding}" />
+                      <ui:Button HorizontalAlignment="Stretch" Margin="{StaticResource Osdrop.Thickness.ItemGap}"
+                                 Content="{x:Static res:Strings.SettingsBlock}"
+                                 Command="{Binding DataContext.Group.BlockCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                 CommandParameter="{Binding}" />
+                    </StackPanel>
+                  </ui:CardControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ui:Button Margin="{StaticResource Osdrop.Thickness.SectionGap}" Content="{x:Static res:Strings.GroupLeave}"
+                       Command="{Binding Group.LeaveCommand}"
+                       Visibility="{Binding Group.HasOthers, Converter={StaticResource Osdrop.Converter.Visible}}" />
+
+            <StackPanel Visibility="{Binding Group.HasBlocked, Converter={StaticResource Osdrop.Converter.Visible}}">
+              <TextBlock Text="{x:Static res:Strings.GroupBlocked}" Style="{StaticResource Osdrop.Text.Section}" />
+              <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.GroupBlockedHint}"
+                         Style="{StaticResource Osdrop.Text.Caption}" />
+              <ItemsControl ItemsSource="{Binding Group.Blocked}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type group:BlockedItem}">
+                    <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                      <ui:CardControl.Header>
+                        <DockPanel>
+                          <ui:SymbolIcon DockPanel.Dock="Left" Style="{StaticResource Osdrop.Icon.Platform}" />
+                          <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+                        </DockPanel>
+                      </ui:CardControl.Header>
+                      <ui:Button Content="{x:Static res:Strings.GroupUnblock}"
+                                 Command="{Binding DataContext.Group.UnblockCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                 CommandParameter="{Binding}" />
+                    </ui:CardControl>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <TextBlock Text="{x:Static res:Strings.GroupNearby}" Style="{StaticResource Osdrop.Text.Section}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.GroupNearbyNone}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding Group.Nearby.Count, Converter={StaticResource Osdrop.Converter.Zero}}" />
+            <ItemsControl ItemsSource="{Binding Group.Nearby}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type group:NearbyItem}">
+                  <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                    <ui:CardControl.Header>
+                      <DockPanel>
+                        <ui:SymbolIcon DockPanel.Dock="Left" Style="{StaticResource Osdrop.Icon.Platform}" />
+                        <StackPanel>
+                          <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+                          <TextBlock Text="{Binding Note}" Style="{StaticResource Osdrop.Text.Caption}"
+                                     Visibility="{Binding HasNote, Converter={StaticResource Osdrop.Converter.Visible}}" />
+                        </StackPanel>
+                      </DockPanel>
+                    </ui:CardControl.Header>
+                    <ui:Button Content="{x:Static res:Strings.GroupPair}" IsEnabled="{Binding CanPair}"
+                               Command="{Binding DataContext.Group.PairCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                               CommandParameter="{Binding}" />
+                  </ui:CardControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Input -->
+      <TabItem Header="{x:Static res:Strings.SettingsInput}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <TextBlock Text="{x:Static res:Strings.SettingsCrossing}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsImmediate}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ui:ToggleSwitch IsChecked="{Binding CrossesImmediately}"
+                               AutomationProperties.Name="{x:Static res:Strings.SettingsImmediate}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}"
+                            Visibility="{Binding CrossesImmediately, Converter={StaticResource Osdrop.Converter.Hidden}}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{Binding PushText}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <Slider Width="{StaticResource Osdrop.Width.Setting}"
+                      Minimum="{x:Static settings:SettingsViewModel.MinPushSeconds}"
+                      Maximum="{x:Static settings:SettingsViewModel.MaxPushSeconds}"
+                      SmallChange="{x:Static settings:SettingsViewModel.PushSecondsStep}"
+                      LargeChange="{x:Static settings:SettingsViewModel.PushSecondsStep}"
+                      TickFrequency="{x:Static settings:SettingsViewModel.PushSecondsStep}" IsSnapToTickEnabled="True"
+                      Value="{Binding PushSeconds}" AutomationProperties.Name="{Binding PushText}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{x:Static res:Strings.SettingsGameCursor}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{x:Static res:Strings.SettingsGameCursorDescription}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <ui:ToggleSwitch IsChecked="{Binding RespectsGameCursor}"
+                               AutomationProperties.Name="{x:Static res:Strings.SettingsGameCursor}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsCrossingModifier}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ComboBox Width="{StaticResource Osdrop.Width.Setting}" ItemsSource="{Binding CrossingModifiers}"
+                        DisplayMemberPath="Name" SelectedItem="{Binding CrossingModifier}"
+                        AutomationProperties.Name="{x:Static res:Strings.SettingsCrossingModifier}" />
+            </ui:CardControl>
+
+            <TextBlock Text="{x:Static res:Strings.SettingsKeys}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{x:Static res:Strings.SettingsMapping}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{x:Static res:Strings.SettingsMappingDescription}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <ComboBox Width="{StaticResource Osdrop.Width.Setting}" ItemsSource="{Binding Mappings}"
+                        DisplayMemberPath="Name" SelectedItem="{Binding Mapping}"
+                        AutomationProperties.Name="{x:Static res:Strings.SettingsMapping}" />
+            </ui:CardControl>
+
+            <TextBlock Text="{x:Static res:Strings.SettingsSpeed}" Style="{StaticResource Osdrop.Text.Section}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.GroupEmpty}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding PointerSpeeds.Count, Converter={StaticResource Osdrop.Converter.Zero}}" />
+            <ItemsControl ItemsSource="{Binding PointerSpeeds}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type settings:PointerSpeedRow}">
+                  <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                    <ui:CardControl.Header>
+                      <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+                    </ui:CardControl.Header>
+                    <Slider Width="{StaticResource Osdrop.Width.Setting}"
+                            Minimum="{x:Static settings:SettingsViewModel.MinPointerSpeed}"
+                            Maximum="{x:Static settings:SettingsViewModel.MaxPointerSpeed}"
+                            Value="{Binding Speed}" AutomationProperties.Name="{Binding Name}" />
+                  </ui:CardControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{x:Static res:Strings.SettingsHotkeys}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsReturnHotkey}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <controls:HotkeyRecorder Hotkey="{Binding ReturnHotkey}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsLockHotkey}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <controls:HotkeyRecorder Hotkey="{Binding LockHotkey}" />
+            </ui:CardControl>
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding HotkeyMessage}"
+                       Style="{StaticResource Osdrop.Text.Error}"
+                       Visibility="{Binding HasHotkeyMessage, Converter={StaticResource Osdrop.Converter.Visible}}" />
+            <ui:Button Margin="{StaticResource Osdrop.Thickness.ItemGap}" Content="{x:Static res:Strings.HotkeyReset}"
+                       Command="{Binding ResetHotkeysCommand}" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Clipboard and files -->
+      <TabItem Header="{x:Static res:Strings.SettingsClipboard}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <TextBlock Text="{x:Static res:Strings.SettingsClipboardTitle}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{x:Static res:Strings.PanelShareClipboard}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{x:Static res:Strings.SettingsShareClipboardDescription}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <ui:ToggleSwitch IsChecked="{Binding SharesClipboard}"
+                               AutomationProperties.Name="{x:Static res:Strings.PanelShareClipboard}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsFilesLimit}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ComboBox Width="{StaticResource Osdrop.Width.Setting}" ItemsSource="{Binding FilesLimits}"
+                        DisplayMemberPath="Name" SelectedItem="{Binding FilesLimit}"
+                        AutomationProperties.Name="{x:Static res:Strings.SettingsFilesLimit}" />
+            </ui:CardControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- Advanced -->
+      <TabItem Header="{x:Static res:Strings.SettingsAdvanced}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="{StaticResource Osdrop.Thickness.TabContent}">
+            <TextBlock Text="{x:Static res:Strings.SettingsDiagnostics}" Style="{StaticResource Osdrop.Text.Section}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <StackPanel>
+                  <TextBlock Text="{x:Static res:Strings.SettingsDiagnosticsCopyTitle}" Style="{StaticResource Osdrop.Text.Body}" />
+                  <TextBlock Text="{x:Static res:Strings.SettingsDiagnosticsDescription}" Style="{StaticResource Osdrop.Text.Caption}" />
+                </StackPanel>
+              </ui:CardControl.Header>
+              <ui:Button Content="{x:Static res:Strings.SettingsDiagnosticsCopy}" Command="{Binding CopyDiagnosticsCommand}" />
+            </ui:CardControl>
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.SettingsDiagnosticsCopied}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding DiagnosticsCopied, Converter={StaticResource Osdrop.Converter.Visible}}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsLogs}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ui:Button Content="{x:Static res:Strings.SettingsLogsOpen}" Command="{Binding OpenLogsCommand}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsServiceLogs}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <ui:Button Content="{x:Static res:Strings.SettingsLogsOpen}" Command="{Binding OpenServiceLogsCommand}" />
+            </ui:CardControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</ui:FluentWindow>

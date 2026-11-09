@@ -78,7 +78,11 @@ GroupEngine::GroupEngine(Config config, StateStore& store, Discovery& discovery,
             [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
                 events_.clipboard_notice(notice, device, name);
             },
-            [this](const std::optional<ClipboardFetch>& fetch) { events_.clipboard_fetch(fetch); });
+            [this](const std::optional<ClipboardFetch>& fetch) { events_.clipboard_fetch(fetch); },
+            config_.clipboard_limits);
+        if (!config_.shares_clipboard) {
+            clipboard_->set_sharing(false, config_.clipboard_limits.files);
+        }
     }
 }
 
@@ -226,6 +230,7 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
         if (!engine->store_.save(StoredItem::LayoutState, std::span(state, size))) {
             engine->events_.log(OSDROP_LOG_ERROR, "Storing the arrangement failed");
         }
+        engine->events_.layout_changed();
     };
     result.pairing_code = [](void* context, std::uint64_t connection, std::uint32_t code,
                              const osdrop_peer* peer) {
@@ -309,17 +314,22 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
 
 void GroupEngine::control_callbacks(osdrop_mesh_callbacks& result) {
     result.controlled = [](void* context, const std::uint8_t* controller) {
-        static_cast<GroupEngine*>(context)->events_.controlled(controller != nullptr);
+        std::optional<DeviceIdBytes> by;
+        if (controller != nullptr) {
+            by = bytes_of<OSDROP_DEVICE_ID_SIZE>(controller);
+        }
+        static_cast<GroupEngine*>(context)->events_.controlled(by);
     };
     result.inject = [](void* context, const osdrop_input* input) {
         if (input != nullptr) {
             static_cast<GroupEngine*>(context)->events_.inject(*input);
         }
     };
-    result.capture_began = [](void* context, const std::uint8_t* /*device*/,
+    result.capture_began = [](void* context, const std::uint8_t* device,
                               const osdrop_input* release_here, std::size_t count) {
         const auto keys = std::span(release_here, release_here == nullptr ? 0 : count);
         static_cast<GroupEngine*>(context)->events_.capture_began(
+            bytes_of<OSDROP_DEVICE_ID_SIZE>(device),
             std::vector<osdrop_input>(keys.begin(), keys.end()));
     };
     result.capture_ended = [](void* context, const std::uint8_t* device, std::int32_t x,
@@ -536,6 +546,40 @@ void GroupEngine::cursor_moved(std::int32_t x, std::int32_t y) {
 
 osdrop_result GroupEngine::set_screens(std::span<const osdrop_monitor> monitors) {
     return osdrop_mesh_set_screens(mesh_, monitors.data(), monitors.size());
+}
+
+Expected<std::vector<osdrop_layout_computer>, osdrop_result> GroupEngine::layout() const {
+    return read_list<osdrop_layout_computer>(
+        [this](osdrop_layout_computer* out, std::size_t capacity, std::size_t* count) {
+            return osdrop_mesh_layout(mesh_, out, capacity, count);
+        });
+}
+
+osdrop_result GroupEngine::set_layout(std::span<const osdrop_placement> placements) {
+    return osdrop_mesh_set_layout(mesh_, placements.data(), placements.size());
+}
+
+osdrop_result GroupEngine::set_permissions(const DeviceIdBytes& device,
+                                           const osdrop_permissions& permissions) {
+    const osdrop_result result = osdrop_mesh_set_permissions(mesh_, device.data(), &permissions);
+    if (result == OSDROP_OK) {
+        events_.group_changed(); // members() carries the permissions
+    }
+    return result;
+}
+
+osdrop_result GroupEngine::set_input_settings(const osdrop_input_settings& settings) {
+    return osdrop_mesh_set_input_settings(mesh_, &settings);
+}
+
+osdrop_result GroupEngine::set_pointer_speed(const DeviceIdBytes& device, std::uint32_t permille) {
+    return osdrop_mesh_set_pointer_speed(mesh_, device.data(), permille);
+}
+
+void GroupEngine::set_clipboard_sharing(bool shared, std::uint64_t files_limit) {
+    if (clipboard_) {
+        clipboard_->set_sharing(shared, files_limit);
+    }
 }
 
 void GroupEngine::close_all(bool sleeping) {

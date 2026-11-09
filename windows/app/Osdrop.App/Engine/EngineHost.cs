@@ -22,12 +22,12 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     public event Action<EngineEvent>? EventReceived;
 
     /// <summary>Starts the engine; the result says why it could not.</summary>
-    public static async Task<(CoreResult Result, EngineHost? Host)> StartAsync(Dispatcher dispatcher)
+    public static async Task<(CoreResult Result, EngineHost? Host)> StartAsync(Dispatcher dispatcher, EngineOptions options)
     {
         var host = new EngineHost(dispatcher);
         host._self = GCHandle.Alloc(host);
         nint context = GCHandle.ToIntPtr(host._self);
-        (CoreResult result, nint engine) = await Native.Run(() => CreateNative(context)).ConfigureAwait(true);
+        (CoreResult result, nint engine) = await Native.Run(() => CreateNative(context, options)).ConfigureAwait(true);
         if (result != CoreResult.Ok)
         {
             host._self.Free();
@@ -101,6 +101,71 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task CancelClipboardFetchAsync() => Native.Run(() => NativeMethods.CancelClipboardFetch(_engine));
 
+    public Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => SetPermissionsNative(_engine, id, permissions));
+    }
+
+    public Task<IReadOnlyList<LayoutComputer>> GetLayoutAsync() =>
+        Native.Run<IReadOnlyList<LayoutComputer>>(() => ReadLayout(_engine));
+
+    public Task<CoreResult> SetLayoutAsync(IReadOnlyList<Placement> placements)
+    {
+        NativePlacement[] native = [.. placements.Select(ToNative)];
+        return Native.Run(() => SetLayoutNative(_engine, native));
+    }
+
+    public Task<CoreResult> SetInputSettingsAsync(InputSettings settings) =>
+        Native.Run(() => SetInputSettingsNative(_engine, ToNative(settings)));
+
+    public Task<CoreResult> SetPointerSpeedAsync(string deviceId, uint permille)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        return Native.Run(() => SetPointerSpeedNative(_engine, id, permille));
+    }
+
+    public Task<CoreResult> SetClipboardAsync(bool shared, ulong filesLimit) =>
+        Native.Run(() => NativeMethods.SetClipboard(_engine, shared ? (byte)1 : (byte)0, filesLimit));
+
+    public Task<CoreResult> SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput) => Native.Run(() =>
+    {
+        NativeHotkey home = ToNative(returnHome);
+        NativeHotkey lockHotkey = ToNative(lockInput);
+        return SetHotkeysNative(_engine, home, lockHotkey);
+    });
+
+    public Task<CoreResult> SetRespectsGameCursorAsync(bool respects) =>
+        Native.Run(() => NativeMethods.SetRespectsCursorClip(_engine, respects ? (byte)1 : (byte)0));
+
+    public Task<CoreResult> LockInputAsync(bool locked) =>
+        Native.Run(() => NativeMethods.LockInput(_engine, locked ? (byte)1 : (byte)0));
+
+    public Task<InputState> GetInputStateAsync() => Native.Run(() => ReadInputState(_engine));
+
+    public Task DismissInputNoticeAsync() => Native.Run(() => NativeMethods.DismissInputNotice(_engine));
+
+    /// <summary>
+    /// Stops the engine and starts it again with new options, on the native queue, so no call runs in
+    /// between; this host and its subscribers stay. A failed start leaves no engine: calls then fail.
+    /// </summary>
+    public Task<CoreResult> RestartAsync(EngineOptions options)
+    {
+        nint context = GCHandle.ToIntPtr(_self);
+        return Native.Run(() =>
+        {
+            nint old = _engine;
+            _engine = 0;
+            if (old != 0)
+            {
+                NativeMethods.Destroy(old);
+            }
+            (CoreResult result, nint engine) = CreateNative(context, options);
+            _engine = result == CoreResult.Ok ? engine : 0;
+            return result;
+        });
+    }
+
     /// <summary>Stops the engine while the app exits: waits on the native worker, never on this thread.</summary>
     public void Shutdown()
     {
@@ -116,11 +181,126 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         }
     }
 
-    private static unsafe (CoreResult Result, nint Engine) CreateNative(nint context)
+    private static unsafe (CoreResult Result, nint Engine) CreateNative(nint context, EngineOptions options)
     {
-        nint engine;
-        CoreResult result = NativeMethods.Create(&OnEvent, context, &engine);
-        return (result, engine);
+        byte[] name = Utf8.Terminated(options.DeviceName ?? string.Empty);
+        fixed (byte* namePointer = name)
+        {
+            var config = new NativeEngineConfig
+            {
+                DeviceName = namePointer,
+                SharesClipboard = options.SharesClipboard ? (byte)1 : (byte)0,
+                ClipboardFilesLimit = options.ClipboardFilesLimit,
+                Input = ToNative(options.Input),
+                ReturnHotkey = ToNative(options.ReturnHotkey),
+                LockHotkey = ToNative(options.LockHotkey),
+                RespectsCursorClip = options.RespectsGameCursor ? (byte)1 : (byte)0,
+            };
+            nint engine;
+            CoreResult result = NativeMethods.Create(&config, &OnEvent, context, &engine);
+            return (result, engine);
+        }
+    }
+
+    private static NativeHotkey ToNative(Hotkey hotkey) => new()
+    {
+        Modifiers = hotkey.Modifiers,
+        ScanCode = hotkey.ScanCode,
+        Extended = hotkey.Extended ? (byte)1 : (byte)0,
+    };
+
+    private static unsafe CoreResult SetHotkeysNative(nint engine, NativeHotkey returnHome, NativeHotkey lockInput) =>
+        NativeMethods.SetHotkeys(engine, &returnHome, &lockInput);
+
+    private static NativeInputSettings ToNative(InputSettings settings) => new()
+    {
+        ModifierMapping = (byte)settings.Mapping,
+        Immediate = settings.Immediate ? (byte)1 : (byte)0,
+        CrossingModifiers = settings.CrossingModifiers,
+        PushMilliseconds = settings.PushMilliseconds,
+    };
+
+    private static unsafe NativePlacement ToNative(Placement placement)
+    {
+        var native = new NativePlacement { X = placement.X, Y = placement.Y, Detached = placement.IsDetached ? (byte)1 : (byte)0 };
+        Convert.FromHexString(placement.DeviceId).CopyTo(new Span<byte>(native.DeviceId, NativeSizes.DeviceId));
+        return native;
+    }
+
+    private static unsafe CoreResult SetPermissionsNative(nint engine, byte[] deviceId, Permissions permissions)
+    {
+        var native = new NativePermissions
+        {
+            Control = permissions.Control ? (byte)1 : (byte)0,
+            Files = permissions.Files ? (byte)1 : (byte)0,
+            Clipboard = permissions.Clipboard ? (byte)1 : (byte)0,
+        };
+        fixed (byte* id = deviceId)
+        {
+            return NativeMethods.SetPermissions(engine, id, &native);
+        }
+    }
+
+    private static unsafe CoreResult SetLayoutNative(nint engine, NativePlacement[] placements)
+    {
+        fixed (NativePlacement* pointer = placements)
+        {
+            return NativeMethods.SetLayout(engine, pointer, (nuint)placements.Length);
+        }
+    }
+
+    private static unsafe CoreResult SetInputSettingsNative(nint engine, NativeInputSettings settings) =>
+        NativeMethods.SetInputSettings(engine, &settings);
+
+    private static unsafe CoreResult SetPointerSpeedNative(nint engine, byte[] deviceId, uint permille)
+    {
+        fixed (byte* id = deviceId)
+        {
+            return NativeMethods.SetPointerSpeed(engine, id, permille);
+        }
+    }
+
+    private static unsafe InputState ReadInputState(nint engine)
+    {
+        NativeEngineInputState state;
+        if (NativeMethods.GetInputState(engine, &state) != CoreResult.Ok)
+        {
+            return InputState.Unknown;
+        }
+        CaptureNotice? notice = state.NoticeReason == 0 ? null
+            : new CaptureNotice(state.NoticeReason, state.NoticeRefused, Utf8.Hex(state.NoticeDeviceId, NativeSizes.DeviceId));
+        return new InputState(
+            state.Reachable == 1, state.Locked == 1,
+            state.Controlled == 1 ? Utf8.Hex(state.ControllerId, NativeSizes.DeviceId) : null,
+            state.Capturing == 1 ? Utf8.Hex(state.TargetId, NativeSizes.DeviceId) : null,
+            notice);
+    }
+
+    private static unsafe List<LayoutComputer> ReadLayout(nint engine)
+    {
+        NativeLayoutComputer[] computers = ReadList<NativeLayoutComputer>(
+            (items, capacity, count) => NativeMethods.Layout(engine, items, capacity, count));
+        var list = new List<LayoutComputer>(computers.Length);
+        fixed (NativeLayoutComputer* pointer = computers)
+        {
+            for (int i = 0; i < computers.Length; ++i)
+            {
+                NativeLayoutComputer* computer = pointer + i;
+                string deviceId = Utf8.Hex(computer->Placement.DeviceId, NativeSizes.DeviceId);
+                Placement? placement = computer->Placed == 1
+                    ? new Placement(deviceId, computer->Placement.X, computer->Placement.Y, computer->Placement.Detached == 1)
+                    : null;
+                int count = Math.Min((int)computer->MonitorCount, NativeSizes.MaxMonitors);
+                var monitors = new List<MonitorFrame>(count);
+                for (int m = 0; m < count; ++m)
+                {
+                    NativeRect frame = computer->Monitors[m].Frame;
+                    monitors.Add(new MonitorFrame(frame.X, frame.Y, frame.Width, frame.Height));
+                }
+                list.Add(new LayoutComputer(deviceId, placement, monitors));
+            }
+        }
+        return list;
     }
 
     private static unsafe EngineInfo? ReadInfo(nint engine)
@@ -176,9 +356,11 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
             for (int i = 0; i < members.Length; ++i)
             {
                 NativeMember* member = pointer + i;
+                NativePermissions permissions = member->Permissions;
                 list.Add(new GroupMember(
                     Utf8.Hex(member->DeviceId, NativeSizes.DeviceId), Utf8.Read(member->Name, NativeSizes.Name),
-                    member->Platform, member->Self == 1, member->Connected == 1));
+                    member->Platform, member->Self == 1, member->Connected == 1,
+                    new Permissions(permissions.Control == 1, permissions.Files == 1, permissions.Clipboard == 1)));
             }
         }
         return list;

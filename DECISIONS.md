@@ -643,3 +643,30 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Only the hook sees keys while they are swallowed, and the way out must work when the engine or core hangs, as the Mac's tap and capture guard do.
 **Trade-offs:** The chords are fixed until the Windows settings (Phase 17).
 **Revisit if:** Users report clashes with Ctrl+Alt+Win+K or Esc.
+
+---
+
+## 2026-11-09 — The Windows interface follows Osplay's shell; the engine reports the input state
+**Chosen:** The shell is Osplay's: WPF-UI following the system theme live, a tray icon whose click opens a panel above the taskbar, a tabbed Settings window, settings in `%APPDATA%\Osdrop\settings.json`, one instance per session. Its contents are the Mac's, tab for tab. The engine reports what the panel needs from its own state (`osdrop_engine_get_input_state` and INPUT_CHANGED) instead of passing core's control callbacks through; a new name restarts the engine, as the Mac restarts its mesh. While OsdropInput does not answer, the panel names the cause from the service manager and repairs it by running `OsdropService.exe --install` elevated. The tray icon is the Mac menu bar glyph, drawn into .ico files by a script, and filled while another computer controls the PC.
+**Alternatives:** A main window instead of a tray panel; core's callbacks forwarded one by one to C#; a repair that starts the service through the service manager (needs the same elevation, cannot install a missing one).
+**Why:** The two Osdrop apps and the two sibling products should look and behave alike. The shell must read the state again after it starts or restarts the engine, which events alone cannot give; one state call can.
+**Trade-offs:** Renaming drops every session for a moment.
+**Revisit if:** The panel grows past what a tray panel holds; then a main window.
+
+---
+
+## 2026-11-09 — The PC's chords are settings, as on the Mac
+**Chosen:** User decision: the return and lock chords can be changed in Settings › Input. The shell records a key by its scan code with Ctrl, Alt, Shift and Windows; the engine refuses a pair the hook cannot match (no Ctrl, Alt or Windows, a modifier as the key, a key without a place in the key table, the same chord twice) and sends the pair to OsdropInput in a SetChords request, again after every reconnect. OsdropInput uses the defaults until a client sends chords and after it goes. With the same key, the chord with more modifiers is matched first, so both stay reachable. In the recorder Escape alone cancels; with modifiers it is recorded.
+**Alternatives:** Fixed chords shown in Settings (the earlier entry's trade-off).
+**Why:** Both apps should work the same way, and a chord can clash with an app the user relies on.
+**Trade-offs:** A combination Windows takes for itself (Win+L, some Win+letter shortcuts) never reaches the recorder, so it cannot be chosen.
+**Revisit if:** Users need a chord with a key outside the key table.
+
+---
+
+## 2026-11-09 — No crossing while a game holds the cursor
+**Chosen:** User decision: while an application holds the cursor in a rectangle smaller than the desktop (ClipCursor, as full-screen games do to keep it on their monitor), the PC's cursor crosses to no other computer. The engine reads the rectangle every 100 ms while watching; the forwarder then keeps positions in it and reports only the movement inside it, so a push at its edge moves nothing and core sees no crossing. A setting in Settings › Input turns it off; it is on by default.
+**Alternatives:** Detecting full-screen applications (QUNS states); a list of games; leaving it to the lock chord.
+**Why:** The low-level hook sees where the cursor would go before Windows applies the rectangle, so a held cursor still pushed past the edge and crossed. Holding the cursor is exactly how a game says it should not leave; full-screen detection misses borderless games and catches videos.
+**Trade-offs:** Games in a window that do not hold the cursor still let it cross (the lock chord covers them). Up to 100 ms after a game takes the cursor, a push can still cross.
+**Revisit if:** A game holds the cursor in a way GetClipCursor does not show, or users report Mac games letting the cursor cross.

@@ -17,6 +17,14 @@ internal static unsafe class Utf8
         return Encoding.UTF8.GetString(field, length < 0 ? size : length);
     }
 
+    /// <summary>A string as NUL-terminated UTF-8, for a const char* argument.</summary>
+    public static byte[] Terminated(string text)
+    {
+        byte[] bytes = new byte[Encoding.UTF8.GetByteCount(text) + 1];
+        _ = Encoding.UTF8.GetBytes(text, bytes);
+        return bytes;
+    }
+
     /// <summary>A fixed byte array as lowercase hex, as Osdrop shows IDs.</summary>
     public static string Hex(byte* field, int size) =>
         Convert.ToHexStringLower(new ReadOnlySpan<byte>(field, size));
