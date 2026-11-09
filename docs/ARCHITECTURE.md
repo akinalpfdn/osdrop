@@ -25,8 +25,9 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 | `Package.swift` | Exposes `core` to Swift as `OsdropCore` and its wrapper `CoreBridge` |
 | `macos/` | Swift menu bar app (generated with XcodeGen from `macos/project.yml`) and `CoreBridge` |
 | `windows/engine/` | Native engine DLL (`OsdropEngine.dll`) used by the shell |
-| `windows/input/` | `OsdropInput.exe`: input capture and injection as SYSTEM in the user's session |
+| `windows/input/` | `OsdropInput.exe`: input capture and injection as SYSTEM in the user's session, and `OsdropInputTool.exe` for developers |
 | `windows/service/` | `OsdropService`: keeps `OsdropInput` running in the active session |
+| `windows/system/` | Win32 pieces shared by the engine, the input process, the service and the tool |
 | `windows/shared/` | Windows-header-free libraries, built and tested on every host |
 | `windows/app/` | WPF shell (`Osdrop.App`) and its strings (`Osdrop.Localization`) |
 | `windows/installer/` | Inno Setup script |
@@ -192,8 +193,9 @@ the others fetch it in the background and put it on their own clipboard as real 
 
 ## Cursor and keyboard across computers
 
-Built in Phase 11 for `core` and the Mac; the Windows side comes with Phase 3. Core decides every
-crossing, refusal and release; the platforms capture, inject, hide the cursor and show state.
+Built in Phase 11 for `core` and the Mac; on Windows, both halves came with Phase 3 (see
+"Windows input process"). Core decides every crossing, refusal and release; the platforms capture,
+inject, hide the cursor and show state.
 
 - **Core** (`core/src/control`). `Control` is both parts of every computer. As a controller it
   takes all of the computer's physical input from the platform and drives the crossing engine with
@@ -220,6 +222,15 @@ crossing, refusal and release; the platforms capture, inject, hide the cursor an
   ⌃⌥⌘⎋ remains the way out of a capture. Without Accessibility the Mac does not watch input and
   refuses control (not permitted); a locked screen refuses too. The menu bar icon changes and the
   menu names the controller while another computer controls the Mac.
+- **Windows** (`windows/engine/src/input`, through the input process). The engine's
+  `InputBridge` has OsdropInput watch the PC's input while a member is connected, and the
+  `InputForwarder` turns its reports into core's input: positions kept on a monitor as Windows
+  keeps them while the push still moves, click counts from the PC's double-click settings by where
+  the cursor is on the other computer, repeats for keys that go down again. On a crossing the
+  bridge parks the hidden cursor in the middle of its monitor, releases the held keys locally and
+  confirms the capture every 250 ms; on the way back it sets Caps Lock as the user left it and
+  shows the cursor where core says. Ctrl+Alt+Win+Esc and Ctrl+Alt+Win+K are the chords; the
+  indicator and notices come with the Windows interface (Phase 17).
 - **Fidelity** (Phase 12). Keys travel as HID usages and the computer they arrive on applies its
   own layout; Control and Command/Windows swap between a Mac and a PC unless the user chose keys
   by position; Caps Lock travels as a state; scrolling travels as content movement, a line being a
@@ -343,3 +354,66 @@ Built in Phase 2 (`macos/Osdrop/Services/Drag`):
 - **Threads** — AppKit runs some promise callbacks on background queues (file coordination for
   sandboxed targets, delivery of received promises). Those callbacks are nonisolated and tested
   from background queues.
+
+## Windows input process
+
+Built in Phase 3, with the PC's controller half of Phase 11. Hooking and injecting over elevated
+windows needs a process above their integrity level, so input runs in a SYSTEM process inside the
+user's session, apart from the engine (security reasoning: `SECURITY_MODEL.md`, "Windows input
+process").
+
+- **OsdropService** (`windows/service`). A LocalSystem service whose only job is to keep
+  `OsdropInput` running in the active console session: started there with the service's own token
+  (its session changed) on `winsta0\default`, moved on log on, log off and fast user switching,
+  asked to quit through `Global\com.akinalpfdn.osdrop.input.stop.<session>` before it is ended,
+  restarted at once after a run of a minute or more and with pauses from 0.5 to 30 s while it keeps
+  failing. `--install`, `--stop` and `--uninstall` are for the installer and for development.
+- **OsdropInput** (`windows/input`). Per-monitor DPI aware v2, so every position is a physical
+  pixel of the virtual desktop. Low-level hooks run on a time-critical thread with its own message
+  loop; their callbacks only decide and enqueue (`ReportQueue`: motion added up while the pipe is
+  busy, keys and buttons never dropped) and are timed (`HookTimings`), because Windows removes a
+  hook whose callback is slow. Its own SendInput events carry the tag `OSDP` in `dwExtraInfo` and
+  pass the hooks unreported. Movement is measured from where the cursor is when the hook runs to
+  where Windows takes it, before Windows keeps it on a monitor, so a push against an outer edge
+  still moves; for 2 ms after OsdropInput moves the cursor itself, movement is not reported. While
+  watched, this PC's input acts here and is reported; while captured, it is swallowed and reported,
+  the cursor waits hidden at the park point, every system cursor is replaced by a transparent one,
+  and the saved ones come back on release. The capture ends inside OsdropInput, with the cursor
+  where it left, when its heartbeat stops for a second or the user presses Ctrl+Alt+Win+Esc; the
+  hook matches the chords (`chords`) while it watches or captures, and at home presses an
+  unassigned key after one so releasing Win or Alt opens no menu. A marker file in `%ProgramData%\Osdrop` says the cursors are
+  hidden: after a crash the next `OsdropInput` reloads them (as SYSTEM that is the default
+  scheme), and the client, which runs as the user, reloads the user's own scheme when the pipe
+  breaks. While controlled, this PC's own input is reported as LocalInput, at most every 100 ms.
+- **Input pipe** (`windows/shared/input_protocol`, portable and tested on every host). A
+  message-mode pipe per session, one message per pipe message, little-endian: magic `ODPI`,
+  version u16 (1), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
+  (x, y i32 pixels), Press (button u8 0-4, down u8), Scroll (vertical, horizontal i32 in
+  WHEEL_DELTA units), Key (scan code u16, extended u8, down u8), StartCapture (park x, y, home
+  x, y), StopCapture (x, y), QueryStats, Watch (on u8), Heartbeat. Reports: CapturedMotion (dx,
+  dy i32, ticks u64), PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64,
+  p50, p99, max u32 in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version,
+  3 injection without control or capture), WatchedMotion (x, y, dx, dy i32, ticks u64),
+  HotkeyPressed (u8: 1 return, 2 lock) and Released (u8: 1 return chord, 2 no heartbeat). Ticks
+  are QueryPerformanceCounter values, so the engine knows how old an input is. Positions are at
+  most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.
+  `InputSession` applies them: injection while the client controls this PC or captures its input
+  (keys released here, Caps Lock), what the client pressed is released when control or capture
+  ends or the client goes, and a capture without a Heartbeat for a second ends here. Absolute
+  moves use SendInput's 0-65535 scale over the virtual desktop, rounded so every pixel is reached
+  exactly (`absolute`).
+- **Engine** (`windows/engine/src/input`). `InputBridge` connects to the pipe (again every 2 s
+  while it cannot) and tells core this PC cannot be controlled while it is unreachable. Its thread
+  is per-monitor DPI aware, so it reads and writes physical pixels as OsdropInput does. Core's
+  callbacks only queue; the bridge's thread turns each injected input into requests (`Injection`:
+  positions from 1/16 pixel, buttons and scrolls moving the cursor first, keys by scan code, Caps
+  Lock pressed only when it differs) and keeps the newest of a run of moves; it starts and stops
+  captures, sends heartbeats, and reads Caps Lock every 250 ms while the cursor is home. Reports go
+  from the pipe's reader thread straight to core: watched and captured input through the
+  `InputForwarder`, LocalInput as physical input that gives the control back to this PC's user,
+  the chords and Released as core's return and lock. A cursor that something else moved during
+  control, holding for two 100 ms checks, is reported. A pipe that breaks during a capture brings
+  the cursor home.
+- **OsdropInputTool** (`windows/input/tool`). `capture [s]` captures this PC's input and plays it
+  back at the same pace; `stats` prints the hook timings. It is the hardware check of this phase
+  and runs only next to `OsdropInput`.

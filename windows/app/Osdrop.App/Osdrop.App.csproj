@@ -24,14 +24,21 @@
     <InternalsVisibleTo Include="Osdrop.App.Tests" />
   </ItemGroup>
 
-  <!-- The native engine from the CMake build (docs/BUILDING.md); override with
-       -p:OsdropNativeBin=<folder> for another preset. -->
+  <!-- The native engine, input process, service and input tool from the CMake build
+       (docs/BUILDING.md); override with -p:OsdropNativeBin=<folder> for another preset. They sit
+       next to Osdrop.exe, as installed: OsdropInput accepts pipe clients from its own folder only. -->
   <PropertyGroup>
     <OsdropNativeBin Condition="'$(OsdropNativeBin)' == ''">$(MSBuildThisFileDirectory)..\..\build\debug\bin</OsdropNativeBin>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(OsdropNativeBin)\OsdropEngine.dll" Link="OsdropEngine.dll" Visible="false"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(OsdropNativeBin)\OsdropEngine.dll')" />
+    <None Include="$(OsdropNativeBin)\OsdropInput.exe" Link="OsdropInput.exe" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(OsdropNativeBin)\OsdropInput.exe')" />
+    <None Include="$(OsdropNativeBin)\OsdropService.exe" Link="OsdropService.exe" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(OsdropNativeBin)\OsdropService.exe')" />
+    <None Include="$(OsdropNativeBin)\OsdropInputTool.exe" Link="OsdropInputTool.exe" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(OsdropNativeBin)\OsdropInputTool.exe')" />
   </ItemGroup>
 
 </Project>

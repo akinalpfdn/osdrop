@@ -146,6 +146,10 @@ public:
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
                           const std::string& /*name*/) override {}
     void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
+    void controlled(bool /*controlled*/) override {}
+    void inject(const osdrop_input& /*input*/) override {}
+    void capture_began(const std::vector<osdrop_input>& /*release_here*/) override {}
+    void capture_ended(const osdrop::win::CaptureEnd& /*end*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);
@@ -328,8 +332,9 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->confirm_pairing(connection.value(), true), OSDROP_OK);
     EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
     ASSERT_TRUE(pc->events.wait_for([&] { return pc->events.connected_unlocked() == 1; }));
-    EXPECT_EQ(pc->events.features(), OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
-        << "no control or drags before the input process and the drag bridge exist";
+    EXPECT_EQ(pc->events.features(),
+              OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
+        << "no drags before the drag bridge exists";
     ASSERT_TRUE(wait_until([&] {
         return pc->engine->info().has_group && laptop.engine->info().has_group &&
                pc->engine->members().value().size() == 2;

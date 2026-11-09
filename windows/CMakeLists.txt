@@ -10,12 +10,13 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../core" core)
 add_subdirectory(shared)
 
 if(WIN32)
+    add_subdirectory(system)
     add_subdirectory(engine)
     add_subdirectory(input)
     add_subdirectory(service)
 
     # One folder for every binary, as the installer lays them out.
-    foreach(target osdrop_engine osdrop_input osdrop_service)
+    foreach(target osdrop_engine osdrop_input osdrop_input_tool osdrop_service)
         set_target_properties(${target} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
     endforeach()
 else()

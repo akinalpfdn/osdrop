@@ -597,3 +597,49 @@ choices the plan leaves open are logged here.
 **Why:** Letting removed computers pair again (same day) opened code spam; a block that every member honours stops it in one place. Versioned entries merge like the rest of the roster, so an unblock spreads and a member that missed it cannot undo it.
 **Trade-offs:** A new identity (Osdrop reinstalled, its key store cleared) is a new device and is not blocked. RosterState and the stored group state change format (version 2; version 1 is still read). Blocks a computer brings into another group apply there too.
 **Revisit if:** Users are blocked by new identities in practice; a pairing wait for refused codes would then help.
+
+---
+
+## 2026-11-08 — Hidden cursors come back three ways
+**Chosen:** OsdropInput hides the cursor by replacing every system cursor with a transparent one and restores the copies it saved. A marker file records that they are hidden: after a crash the next OsdropInput reloads the cursors, and the pipe's client, which runs as the user, reloads them too when the pipe breaks.
+**Alternatives:** Only `SPI_SETCURSORS` on release; a full-screen window with no cursor.
+**Why:** As SYSTEM, `SPI_SETCURSORS` reads SYSTEM's registry, so it brings back the default scheme, not the user's; only the user's own process gets their scheme back. A full-screen window takes the foreground from the user's app.
+**Trade-offs:** After a crash with no client running (the developer tool killed too), the user gets the default cursors until they sign in again or change the scheme.
+**Revisit if:** Code signing allows `uiAccess`: the user's own process could then hide and restore the cursors.
+
+---
+
+## 2026-11-08 — The input pipe admits Osdrop's own executables only, one client at a time
+**Chosen:** A client must run in OsdropInput's session as its user and be `Osdrop.exe` or `OsdropInputTool.exe` from OsdropInput's own folder; the pipe has one instance, created once per process. The shell's build copies the input process, the service and the tool next to `Osdrop.exe`, so development uses the same check as an installed copy.
+**Alternatives:** Any process of the session's user (the ACL alone); a shared secret handed to the app.
+**Why:** DEVPLAN's security model: malware running as the user must not reach a SYSTEM injector. The install folder needs an administrator to write to; a secret the user's processes can read protects nothing.
+**Trade-offs:** The tool and Osdrop cannot use the input process at the same time; the hardware rows quit Osdrop first.
+**Revisit if:** Osdrop needs a second client (a helper of the drag bridge), or code signing allows checking signatures instead of paths.
+
+---
+
+## 2026-11-08 — Phase 3 makes the PC controllable; the PC controlling others is Phase 11's Windows half
+**Chosen:** The engine's `InputBridge` injects what a controlling computer sends and reports this PC's own input during control, and the PC announces OSDROP_FEATURE_TAKES_CONTROL. Watching all of the PC's input for crossings from its edges, capture and the hotkeys stay with the Windows half of the controller (Phase 11), on top of the same input process.
+**Alternatives:** Both directions in this phase.
+**Why:** The feature bit means "injects input", the phase's gate is capture and injection over elevated windows, and the bridge is what lets a Mac's cursor cross in. The controller needs an observing mode in OsdropInput and crossing tests of its own.
+**Trade-offs:** Until then a PC's own mouse cannot cross to a Mac.
+**Revisit if:** The user wants both directions in one step.
+User decision (same day): after the hardware rows pass, the PC controlling others is added to the Phase 3 PR.
+
+---
+
+## 2026-11-09 — The PC watches its own input through OsdropInput, measured from where the cursor is
+**Chosen:** While a member is connected, the engine asks OsdropInput to watch (Watch): the hooks report every movement as where Windows takes the cursor and how far it moved from where it is when the hook runs, and every button, wheel and key, without swallowing them. The engine keeps the position on a monitor and hands it all to core. While captured, movement is measured the same way, so the park point and apps that move the cursor do not matter; for 2 ms after Osdrop moves the cursor itself, movement is not reported.
+**Alternatives:** Hooks in the engine (medium integrity); Raw Input for movement; deltas from one hook position to the next.
+**Why:** A medium-integrity hook hears nothing while an elevated window has the keyboard, so crossings and held keys would fail over Task Manager or an administrator terminal. A low-level hook sees where the cursor would go before Windows keeps it on a monitor, so a push against an outer edge still moves, as core's edge push needs; position-to-position deltas would be zero there. Raw Input gives device counts without the pointer settings and arrives apart from the hooks.
+**Trade-offs:** Osdrop's own process now receives keys typed into elevated windows while a member is connected (SECURITY_MODEL.md). Absolute pointing devices (pen tablets, remote sessions) cannot push past an edge, as on any system that reads positions.
+**Revisit if:** A hook ever reports positions already kept on a monitor; then Raw Input would carry the push.
+
+---
+
+## 2026-11-09 — PC chords: Ctrl+Alt+Win with Esc returns, with K locks; OsdropInput ends a capture by itself
+**Chosen:** The Mac's ⌃⌥⌘ chords on the same physical keys: Ctrl+Alt+Win+Esc brings the cursor home, Ctrl+Alt+Win+K locks it (L belongs to Windows: Win+L locks the PC and no hook can take it). OsdropInput's hook matches them while it watches or captures and swallows the completing key; at home it then presses an unassigned key (VK 0xE8) so releasing Win or Alt opens no menu. During capture the return chord, or a heartbeat missing for 1 s (the engine sends one every 250 ms), ends the capture inside OsdropInput, with the cursor where it left; the engine then brings the cursor home in core.
+**Alternatives:** Chords in the engine; RegisterHotKey; ending a capture only when core says so.
+**Why:** Only the hook sees keys while they are swallowed, and the way out must work when the engine or core hangs, as the Mac's tap and capture guard do.
+**Trade-offs:** The chords are fixed until the Windows settings (Phase 17).
+**Revisit if:** Users report clashes with Ctrl+Alt+Win+K or Esc.

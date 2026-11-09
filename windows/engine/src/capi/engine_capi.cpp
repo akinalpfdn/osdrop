@@ -1,5 +1,6 @@
 #include "clipboard/win_clipboard.hpp"
 #include "discovery/dns_sd_discovery.hpp"
+#include "input/input_bridge.hpp"
 #include "screens/monitors.hpp"
 #include "store/dpapi_store.hpp"
 
@@ -13,12 +14,15 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <climits>
 #include <exception>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -107,12 +111,22 @@ public:
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_PEER_CONNECTED);
         std::ranges::copy(peer.device_id, std::begin(event.device_id));
         copy_name(std::data(peer.name), event.name);
+        {
+            const std::scoped_lock lock(input_mutex_);
+            connected_.insert(event_id(event));
+            watch();
+        }
         send(event);
     }
     void peer_disconnected(const win::DeviceIdBytes& device, osdrop_result reason) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_PEER_DISCONNECTED);
         std::ranges::copy(device, std::begin(event.device_id));
         event.reason = reason;
+        {
+            const std::scoped_lock lock(input_mutex_);
+            connected_.erase(device);
+            watch();
+        }
         send(event);
     }
     void peer_responsive(const win::DeviceIdBytes& device, bool responsive) override {
@@ -140,6 +154,33 @@ public:
         copy_name(name, event.name);
         send(event);
     }
+    void controlled(bool controlled) override {
+        if (osdrop::engine::InputBridge* bridge = input_.load()) {
+            bridge->controlled(controlled);
+        }
+    }
+    void inject(const osdrop_input& input) override {
+        if (osdrop::engine::InputBridge* bridge = input_.load()) {
+            bridge->inject(input);
+        }
+    }
+    void capture_began(const std::vector<osdrop_input>& release_here) override {
+        if (osdrop::engine::InputBridge* bridge = input_.load()) {
+            bridge->capture_began(release_here);
+        }
+    }
+    void capture_ended(const win::CaptureEnd& end) override {
+        if (osdrop::engine::InputBridge* bridge = input_.load()) {
+            bridge->capture_ended(end);
+        }
+    }
+    /// Where control events go once the bridge exists; it hears of the members connected so far.
+    void set_input(osdrop::engine::InputBridge* bridge) {
+        const std::scoped_lock lock(input_mutex_);
+        input_ = bridge;
+        watch();
+    }
+
     void clipboard_fetch(const std::optional<win::ClipboardFetch>& fetch) override {
         if (!fetch) {
             send(blank_event(OSDROP_ENGINE_CLIPBOARD_FETCH_ENDED));
@@ -156,6 +197,19 @@ public:
 private:
     void send(const osdrop_engine_event& event) const { callback_(context_, &event); }
 
+    static win::DeviceIdBytes event_id(const osdrop_engine_event& event) {
+        win::DeviceIdBytes id{};
+        std::ranges::copy(event.device_id, id.begin());
+        return id;
+    }
+
+    /// This PC's input is watched while a member is connected; under input_mutex_.
+    void watch() const {
+        if (osdrop::engine::InputBridge* bridge = input_.load()) {
+            bridge->set_watching(!connected_.empty());
+        }
+    }
+
     static osdrop_engine_event_kind kind_of(win::ClipboardNotice notice) {
         switch (notice) {
         case win::ClipboardNotice::TooLarge:
@@ -170,6 +224,9 @@ private:
 
     osdrop_engine_callback callback_;
     void* context_;
+    std::atomic<osdrop::engine::InputBridge*> input_{nullptr};
+    std::mutex input_mutex_;
+    std::set<win::DeviceIdBytes> connected_; ///< members with a session; under input_mutex_
 };
 
 win::DeviceIdBytes read_id(const std::uint8_t* bytes) {
@@ -186,6 +243,9 @@ struct osdrop_engine {
     osdrop_engine(osdrop_engine_callback callback, void* context) : events(callback, context) {}
     ~osdrop_engine() {
         try {
+            if (input) {
+                input->stop(); // its thread calls the group engine: it stops before it goes
+            }
             clipboard.stop(); // its thread runs the group's clipboard work: it stops first
         } catch (...) {
             std::terminate(); // only joining can throw: unrecoverable
@@ -200,11 +260,13 @@ struct osdrop_engine {
     osdrop::engine::DnsSdDiscovery discovery;
     osdrop::engine::WinClipboard clipboard;
     CallbackEvents events;
+    std::unique_ptr<osdrop::engine::InputBridge> input;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
 
-    /// Reads this PC's monitors and reports them.
+    /// Reads this PC's monitors and reports them, to core and to the input bridge.
     [[nodiscard]] osdrop_result report_screens() const {
         const auto monitors = osdrop::engine::physical_monitors();
+        input->set_monitors(monitors);
         const auto report = win::screen_report(monitors);
         if (!report) {
             return report.error();
@@ -239,6 +301,8 @@ osdrop_result osdrop_engine_create(osdrop_engine_callback callback, void* contex
         return group.error();
     }
     engine->group = std::move(group.value());
+    engine->input = std::make_unique<osdrop::engine::InputBridge>(*engine->group);
+    engine->events.set_input(engine->input.get());
     engine->clipboard.listen(
         [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
     if (engine->report_screens() != OSDROP_OK) {

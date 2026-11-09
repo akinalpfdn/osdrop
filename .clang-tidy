@@ -27,7 +27,7 @@ Checks: >
 # are checked explicitly in one reader per codec (and fuzzed); magic numbers are reviewed by hand
 # because wire offsets are documented in PROTOCOL.md next to their constants.
 WarningsAsErrors: '*'
-HeaderFilterRegex: '.*/(core|windows)/(include|src|engine|input|service|shared)/.*'
+HeaderFilterRegex: '.*/(core|windows)/(include|src|engine|input|service|shared|system)/.*'
 FormatStyle: file
 CheckOptions:
   - key: readability-identifier-naming.NamespaceCase
