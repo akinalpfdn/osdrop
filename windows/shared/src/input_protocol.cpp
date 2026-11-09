@@ -20,6 +20,7 @@ enum class Type : std::uint8_t {
     QueryStats = 9,
     Watch = 10,
     Heartbeat = 11,
+    SetChords = 12,
     CapturedMotion = 101,
     PhysicalPress = 102,
     PhysicalScroll = 103,
@@ -130,6 +131,12 @@ void write_key(Writer& w, ScanCode scan, bool down) {
     w.flag(down);
 }
 
+void write_chord(Writer& w, const Chord& chord) {
+    w.u8(chord.modifiers);
+    w.u16(chord.key.code);
+    w.flag(chord.key.extended);
+}
+
 // Each reader takes the body; nullopt for a short body, ValueOutOfRange for bad values.
 template <typename T>
 using Field = Expected<T, DecodeError>;
@@ -193,6 +200,34 @@ Field<E> read_code(Reader& r, E last) {
         return Field<E>::failure(DecodeError::ValueOutOfRange);
     }
     return static_cast<E>(*code);
+}
+
+Field<Chord> read_chord(Reader& r) {
+    const auto modifiers = r.u8();
+    const auto code = r.u16();
+    const auto extended = r.flag();
+    if (!modifiers || !code || !extended) {
+        return Field<Chord>::failure(DecodeError::Truncated);
+    }
+    if (!*extended) {
+        return Field<Chord>::failure(DecodeError::ValueOutOfRange);
+    }
+    return Chord{.key = {.code = *code, .extended = **extended}, .modifiers = *modifiers};
+}
+
+Field<SetChords> read_set_chords(Reader& r) {
+    const auto home = read_chord(r);
+    if (!home) {
+        return Field<SetChords>::failure(home.error());
+    }
+    const auto lock = read_chord(r);
+    if (!lock) {
+        return Field<SetChords>::failure(lock.error());
+    }
+    if (!valid_pair(home.value(), lock.value())) {
+        return Field<SetChords>::failure(DecodeError::ValueOutOfRange);
+    }
+    return SetChords{.return_home = home.value(), .lock_input = lock.value()};
 }
 
 Field<StartCapture> read_start_capture(Reader& r) {
@@ -356,6 +391,11 @@ Bytes encode(const Request& request) {
                                          return Type::Watch;
                                      },
                                      [](const Heartbeat&) { return Type::Heartbeat; },
+                                     [&](const SetChords& m) {
+                                         write_chord(w, m.return_home);
+                                         write_chord(w, m.lock_input);
+                                         return Type::SetChords;
+                                     },
                                  },
                                  request);
     return w.message(type);
@@ -429,6 +469,8 @@ Expected<Request, DecodeError> decode_request(std::span<const std::uint8_t> mess
         return empty<Request, QueryStats>(bytes);
     case Type::Heartbeat:
         return empty<Request, Heartbeat>(bytes);
+    case Type::SetChords:
+        return body<Request, SetChords>(bytes, read_set_chords);
     case Type::Watch:
         return body<Request, Watch>(bytes, [](Reader& r) {
             const auto on = r.flag();
@@ -552,13 +594,14 @@ std::uint16_t type_of(const Request& request) {
                                      [](const QueryStats&) { return Type::QueryStats; },
                                      [](const Watch&) { return Type::Watch; },
                                      [](const Heartbeat&) { return Type::Heartbeat; },
+                                     [](const SetChords&) { return Type::SetChords; },
                                  },
                                  request);
     return static_cast<std::uint16_t>(type);
 }
 
 std::string_view type_name(std::uint16_t type) {
-    static constexpr std::array<std::pair<Type, std::string_view>, 21> kNames{{
+    static constexpr std::array<std::pair<Type, std::string_view>, 22> kNames{{
         {Type::BeginControl, "BeginControl"},
         {Type::EndControl, "EndControl"},
         {Type::Move, "Move"},
@@ -570,6 +613,7 @@ std::string_view type_name(std::uint16_t type) {
         {Type::QueryStats, "QueryStats"},
         {Type::Watch, "Watch"},
         {Type::Heartbeat, "Heartbeat"},
+        {Type::SetChords, "SetChords"},
         {Type::CapturedMotion, "CapturedMotion"},
         {Type::PhysicalPress, "PhysicalPress"},
         {Type::PhysicalScroll, "PhysicalScroll"},

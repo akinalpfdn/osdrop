@@ -55,13 +55,22 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial uint PushMilliseconds { get; set; } = AppTunables.DefaultPushMilliseconds;
 
+    /// <summary>The chord that brings the cursor home.</summary>
+    [ObservableProperty]
+    public partial Hotkey ReturnHotkey { get; set; } = Hotkey.DefaultReturnHome;
+
+    /// <summary>The chord that keeps the cursor where it is, or lets it cross again.</summary>
+    [ObservableProperty]
+    public partial Hotkey LockHotkey { get; set; } = Hotkey.DefaultLockInput;
+
     /// <summary>Pointer speed on each member (hex device ID), in thousandths of this PC's own.</summary>
     [ObservableProperty]
     public partial IReadOnlyDictionary<string, uint> PointerSpeeds { get; set; } = new Dictionary<string, uint>();
 
     internal InputSettings Input => new(ModifierMapping, CrossesImmediately, CrossingModifiers, PushMilliseconds);
 
-    internal EngineOptions EngineOptions => new(DeviceName, SharesClipboard, ClipboardFilesLimit, Input);
+    internal EngineOptions EngineOptions =>
+        new(DeviceName, SharesClipboard, ClipboardFilesLimit, Input, ReturnHotkey, LockHotkey);
 
     public static AppSettings Load()
     {
@@ -123,6 +132,7 @@ public sealed partial class AppSettings : ObservableObject
             CrossingModifiers = stored.CrossingModifiers;
             PushMilliseconds = Math.Clamp(
                 stored.PushMilliseconds, (uint)(AppTunables.MinPushSeconds * 1000), (uint)(AppTunables.MaxPushSeconds * 1000));
+            (ReturnHotkey, LockHotkey) = Usable(stored.ReturnHotkey, stored.LockHotkey);
             PointerSpeeds = (stored.PointerSpeeds ?? [])
                 .Where(entry => entry.Value is >= 250 and <= 4000 && entry.Key.Length == NativeSizes.DeviceId * 2)
                 .ToDictionary(entry => entry.Key, entry => entry.Value);
@@ -141,7 +151,8 @@ public sealed partial class AppSettings : ObservableObject
         }
         var stored = new Stored(
             DeviceName, ChecksForUpdates, LastUpdateCheck, SharesClipboard, ClipboardFilesLimit, ModifierMapping,
-            CrossesImmediately, CrossingModifiers, PushMilliseconds, new Dictionary<string, uint>(PointerSpeeds));
+            CrossesImmediately, CrossingModifiers, PushMilliseconds, new Dictionary<string, uint>(PointerSpeeds),
+            ReturnHotkey, LockHotkey);
         try
         {
             _ = Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -163,5 +174,13 @@ public sealed partial class AppSettings : ObservableObject
         bool CrossesImmediately = false,
         byte CrossingModifiers = 0,
         uint PushMilliseconds = AppTunables.DefaultPushMilliseconds,
-        Dictionary<string, uint>? PointerSpeeds = null);
+        Dictionary<string, uint>? PointerSpeeds = null,
+        Hotkey? ReturnHotkey = null,
+        Hotkey? LockHotkey = null);
+
+    /// <summary>Stored chords, or the defaults when they are missing, damaged or the same.</summary>
+    private static (Hotkey Return, Hotkey Lock) Usable(Hotkey? returnHome, Hotkey? lockInput) =>
+        returnHome is { HasModifier: true } && lockInput is { HasModifier: true } && returnHome != lockInput
+            ? (returnHome, lockInput)
+            : (Hotkey.DefaultReturnHome, Hotkey.DefaultLockInput);
 }

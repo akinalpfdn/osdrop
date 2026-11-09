@@ -92,12 +92,22 @@ typedef struct osdrop_engine_input_state {
     uint8_t notice_device_id[OSDROP_DEVICE_ID_SIZE];
 } osdrop_engine_input_state;
 
+/* A chord: a key by its scan code, with modifiers held (1 Ctrl, 2 Alt, 4 Shift, 8 Windows; Ctrl,
+   Alt or Windows among them). The key must not be a modifier. */
+typedef struct osdrop_engine_hotkey {
+    uint8_t modifiers;
+    uint16_t scan_code;
+    uint8_t extended;
+} osdrop_engine_hotkey;
+
 /* What the shell chose; read when the engine starts. */
 typedef struct osdrop_engine_config {
     const char* device_name; /* NUL-terminated UTF-8; NULL or empty: this PC's own name */
     uint8_t shares_clipboard;
     uint64_t clipboard_files_limit; /* bytes */
     osdrop_input_settings input;
+    osdrop_engine_hotkey return_hotkey; /* brings the cursor home */
+    osdrop_engine_hotkey lock_hotkey;   /* "lock input here" */
 } osdrop_engine_config;
 
 /* A computer nearby that is not a member of this PC's group. */
@@ -175,6 +185,10 @@ osdrop_engine_set_input_settings(osdrop_engine* engine, const osdrop_input_setti
 OSDROP_ENGINE_API osdrop_result osdrop_engine_set_pointer_speed(osdrop_engine* engine,
                                                                 const uint8_t* device_id,
                                                                 uint32_t permille);
+/* The chords; INVALID_ARGUMENT for a chord the hook cannot match, or the same one twice. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
+                                                          const osdrop_engine_hotkey* return_hotkey,
+                                                          const osdrop_engine_hotkey* lock_hotkey);
 /* "Lock input here" (also toggled by the lock hotkey); INPUT_CHANGED follows. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_lock_input(osdrop_engine* engine, uint8_t locked);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_get_input_state(osdrop_engine* engine,

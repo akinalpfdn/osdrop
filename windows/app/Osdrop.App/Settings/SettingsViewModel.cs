@@ -201,11 +201,25 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<PointerSpeedRow> PointerSpeeds { get; } = [];
 
-    public string ReturnHotkeyText { get; } =
-        LocalizedText.Format(Localization.Strings.SettingsReturnHotkey, ControlViewModel.ReturnHotkey);
+    /// <summary>The chord that brings the cursor home; a refused one is put back.</summary>
+    public Hotkey ReturnHotkey
+    {
+        get => Settings.ReturnHotkey;
+        set => _ = SetHotkeysAsync(value, Settings.LockHotkey);
+    }
 
-    public string LockHotkeyText { get; } =
-        LocalizedText.Format(Localization.Strings.SettingsLockHotkey, ControlViewModel.LockHotkey);
+    public Hotkey LockHotkey
+    {
+        get => Settings.LockHotkey;
+        set => _ = SetHotkeysAsync(Settings.ReturnHotkey, value);
+    }
+
+    /// <summary>Why the last chord was refused; null when it was taken.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHotkeyMessage))]
+    public partial string? HotkeyMessage { get; private set; }
+
+    public bool HasHotkeyMessage => HotkeyMessage is not null;
 
     // --- Clipboard and files ---
 
@@ -322,6 +336,31 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private bool CanSaveName() => !IsRenaming;
+
+    [RelayCommand]
+    private Task ResetHotkeysAsync() => SetHotkeysAsync(Hotkey.DefaultReturnHome, Hotkey.DefaultLockInput);
+
+    /// <summary>Both chords, checked by the engine as the hook matches them; saved once taken.</summary>
+    internal async Task SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput)
+    {
+        CoreResult result = returnHome == lockInput || !returnHome.HasModifier || !lockInput.HasModifier
+            ? CoreResult.InvalidArgument
+            : await _engine.SetHotkeysAsync(returnHome, lockInput).ConfigureAwait(true);
+        if (result == CoreResult.Ok)
+        {
+            Settings.ReturnHotkey = returnHome;
+            Settings.LockHotkey = lockInput;
+            HotkeyMessage = null;
+        }
+        else
+        {
+            HotkeyMessage = returnHome == lockInput ? Localization.Strings.HotkeyTaken
+                : !returnHome.HasModifier || !lockInput.HasModifier ? Localization.Strings.HotkeyNeedsModifier
+                : Localization.Strings.HotkeyInvalid;
+        }
+        OnPropertyChanged(nameof(ReturnHotkey)); // the recorders show what is in use
+        OnPropertyChanged(nameof(LockHotkey));
+    }
 
     [RelayCommand]
     private async Task CopyDiagnosticsAsync()

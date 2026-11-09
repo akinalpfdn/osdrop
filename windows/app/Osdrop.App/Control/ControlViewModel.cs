@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Services;
+using Osdrop.App.Settings;
 
 namespace Osdrop.App.Control;
 
@@ -13,10 +14,6 @@ namespace Osdrop.App.Control;
 /// </summary>
 public sealed partial class ControlViewModel : ObservableObject
 {
-    /// <summary>The fixed hotkeys of OsdropInput (windows/shared chords.hpp).</summary>
-    public const string ReturnHotkey = "Ctrl+Alt+Win+Esc";
-    public const string LockHotkey = "Ctrl+Alt+Win+K";
-
     private const byte _refused = 4;
     private const byte _refusedLocked = 1;
     private const byte _refusedAsleep = 2;
@@ -24,17 +21,28 @@ public sealed partial class ControlViewModel : ObservableObject
 
     private readonly IGroupEngine _engine;
     private readonly GroupViewModel _group;
+    private readonly AppSettings _settings;
     private readonly Func<Task<InputServiceState>> _queryService;
     private readonly Func<Task<bool>> _repairService;
     private InputState _state = InputState.Unknown;
     private bool _applyingState;
 
     internal ControlViewModel(
-        IGroupEngine engine, GroupViewModel group, Func<Task<InputServiceState>>? queryService = null,
-        Func<Task<bool>>? repairService = null)
+        IGroupEngine engine, GroupViewModel group, AppSettings settings,
+        Func<Task<InputServiceState>>? queryService = null, Func<Task<bool>>? repairService = null)
     {
         _engine = engine;
         _group = group;
+        _settings = settings;
+        _settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AppSettings.ReturnHotkey) or nameof(AppSettings.LockHotkey))
+            {
+                OnPropertyChanged(nameof(LockTitle));
+                OnPropertyChanged(nameof(LockedText));
+                OnPropertyChanged(nameof(HintText));
+            }
+        };
         _queryService = queryService ?? InputService.QueryAsync;
         _repairService = repairService ?? InputService.RepairAsync;
         _group.InputChanged += () => _ = RefreshAsync();
@@ -86,11 +94,11 @@ public sealed partial class ControlViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(RepairCommand))]
     public partial bool IsRepairing { get; private set; }
 
-    public string LockTitle { get; } = LocalizedText.Format(Localization.Strings.PanelLockInput, LockHotkey);
+    public string LockTitle => LocalizedText.Format(Localization.Strings.PanelLockInput, HotkeyText.Display(_settings.LockHotkey));
 
-    public string LockedText { get; } = LocalizedText.Format(Localization.Strings.ControlLocked, LockHotkey);
+    public string LockedText => LocalizedText.Format(Localization.Strings.ControlLocked, HotkeyText.Display(_settings.LockHotkey));
 
-    public string HintText { get; } = LocalizedText.Format(Localization.Strings.ControlHint, ReturnHotkey);
+    public string HintText => LocalizedText.Format(Localization.Strings.ControlHint, HotkeyText.Display(_settings.ReturnHotkey));
 
     public async Task RefreshAsync()
     {

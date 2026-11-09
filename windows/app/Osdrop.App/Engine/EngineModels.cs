@@ -33,9 +33,31 @@ public enum ModifierMapping
 internal sealed record InputSettings(
     ModifierMapping Mapping, bool Immediate, byte CrossingModifiers, uint PushMilliseconds);
 
+/// <summary>
+/// A chord as OsdropInput's hook matches it: modifier bits (1 Ctrl, 2 Alt, 4 Shift, 8 Windows) and
+/// a key by its scan code, so the layout does not change it.
+/// </summary>
+public sealed record Hotkey(byte Modifiers, ushort ScanCode, bool Extended)
+{
+    public const byte Control = 1;
+    public const byte Alt = 2;
+    public const byte Shift = 4;
+    public const byte Windows = 8;
+
+    /// <summary>Ctrl+Alt+Win+Esc: the Mac's ⌃⌥⌘⎋ on the same keys.</summary>
+    public static Hotkey DefaultReturnHome { get; } = new(Control | Alt | Windows, 0x01, false);
+
+    /// <summary>Ctrl+Alt+Win+K (Windows keeps Win+L for locking the PC).</summary>
+    public static Hotkey DefaultLockInput { get; } = new(Control | Alt | Windows, 0x25, false);
+
+    /// <summary>Ctrl, Alt or Windows is held: Shift alone types.</summary>
+    public bool HasModifier => (Modifiers & (Control | Alt | Windows)) != 0 && (Modifiers & ~0x0F) == 0;
+}
+
 /// <summary>What the engine starts with; a new name restarts it.</summary>
 internal sealed record EngineOptions(
-    string? DeviceName, bool SharesClipboard, ulong ClipboardFilesLimit, InputSettings Input);
+    string? DeviceName, bool SharesClipboard, ulong ClipboardFilesLimit, InputSettings Input,
+    Hotkey ReturnHotkey, Hotkey LockHotkey);
 
 /// <summary>A monitor's logical frame in the arrangement, in 1/16 of a unit, relative to its computer.</summary>
 internal readonly record struct MonitorFrame(int X, int Y, int Width, int Height);
@@ -103,6 +125,8 @@ internal interface IGroupEngine
     /// <summary>The pointer speed on a member, in thousandths of this PC's own.</summary>
     Task<CoreResult> SetPointerSpeedAsync(string deviceId, uint permille);
     Task<CoreResult> SetClipboardAsync(bool shared, ulong filesLimit);
+    /// <summary>INVALID_ARGUMENT for a chord the hook cannot match.</summary>
+    Task<CoreResult> SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput);
     Task<CoreResult> LockInputAsync(bool locked);
     Task<InputState> GetInputStateAsync();
     Task DismissInputNoticeAsync();

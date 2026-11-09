@@ -128,6 +128,10 @@ void Injector::set_watching(bool watching) {
     hooks_.set_watching(watching);
 }
 
+void Injector::set_chords(const protocol::Chord& return_home, const protocol::Chord& lock_input) {
+    hooks_.set_chords(return_home, lock_input);
+}
+
 void Injector::mask_menu_keys() {
     send_virtual_key(kMaskKey, true);
     send_virtual_key(kMaskKey, false);

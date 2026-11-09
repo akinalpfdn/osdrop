@@ -3,6 +3,7 @@ using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Interop;
 using Osdrop.App.Services;
+using Osdrop.App.Settings;
 using Xunit;
 
 namespace Osdrop.App.Tests;
@@ -21,7 +22,8 @@ public sealed class ControlViewModelTests
         engine.Members.Add(new GroupMember(_laptop, "Laptop", Platform.MacOS, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
         var group = new GroupViewModel(engine);
         await group.RefreshAsync();
-        var control = new ControlViewModel(engine, group, () => Task.FromResult(service), () => Task.FromResult(true));
+        var control = new ControlViewModel(
+            engine, group, AppSettings.InMemory(), () => Task.FromResult(service), () => Task.FromResult(true));
         return (engine, group, control);
     }
 

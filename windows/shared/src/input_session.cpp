@@ -77,6 +77,7 @@ std::optional<Report> InputSession::carry_out(const Request& request, Clock::tim
                           [&](const StopCapture& m) { return stop_capture(m); },
                           [&](const Heartbeat&) { return heartbeat(now); },
                           [&](const Watch& m) { return watch(m.on); },
+                          [&](const SetChords& m) { return set_chords(m); },
                           [&](const QueryStats&) { return std::optional<Report>(device_.stats()); },
                           [](const auto&) { return std::optional<Report>(); }, // injection
                       },
@@ -142,6 +143,15 @@ std::optional<Report> InputSession::heartbeat(Clock::time_point now) {
     return std::nullopt; // a late one, after the capture ended here, is no error
 }
 
+std::optional<Report> InputSession::set_chords(const SetChords& chords) {
+    if (chords != chords_) {
+        chords_ = chords;
+        device_.set_chords(chords.return_home, chords.lock_input);
+        log_.info("The client set its chords");
+    }
+    return std::nullopt;
+}
+
 std::optional<Report> InputSession::watch(bool on) {
     if (watching_ != on) {
         watching_ = on;
@@ -205,6 +215,10 @@ void InputSession::reset() {
     if (watching_) {
         watching_ = false;
         device_.set_watching(false);
+    }
+    if (chords_ != SetChords{}) {
+        chords_ = SetChords{}; // the next client starts from the defaults
+        device_.set_chords(chords_.return_home, chords_.lock_input);
     }
 }
 

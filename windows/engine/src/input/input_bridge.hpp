@@ -61,6 +61,9 @@ public:
     void set_monitors(std::vector<win::PhysicalMonitor> monitors);
     /// "Lock input here", from the shell or the lock hotkey. Any thread.
     void set_locked(bool locked);
+    /// The user's chords (a valid pair), sent to OsdropInput now and after every reconnect. Any
+    /// thread.
+    void set_chords(const win::input::Chord& return_home, const win::input::Chord& lock_input);
 
     /// Ends the bridge's thread; what arrives later is dropped. Before the group engine goes.
     void stop();
@@ -71,12 +74,14 @@ private:
         std::vector<osdrop_input> release_here;
     };
     using CaptureChange = std::variant<Began, win::CaptureEnd>;
+    using Chords = win::input::SetChords;
 
     struct Work {
         std::vector<osdrop_input> inputs;
         std::optional<bool> control;
         std::vector<CaptureChange> captures;
         bool watching = false;
+        Chords chords;
         bool stopping = false;
     };
 
@@ -88,6 +93,7 @@ private:
     void begin_capture(const Began& began);
     void end_capture(const win::CaptureEnd& end);
     void watch(bool watching);
+    void send_chords(const Chords& chords);
     void tick();
     void watch_cursor();
     void report_caps_lock();
@@ -108,6 +114,8 @@ private:
     std::vector<CaptureChange> capture_changes_;
     bool watching_wanted_ = false;
     bool watching_changed_ = false;
+    Chords chords_wanted_;
+    bool chords_changed_ = false;
     bool stopping_ = false;
 
     // The forwarder turns reports into core's input on the reader thread; captures move it.
@@ -123,7 +131,8 @@ private:
     std::unique_ptr<sys::InputClient> client_;
     std::optional<bool> reachable_; // as last told to core
     bool controlled_ = false;
-    bool watching_ = false; // as last told to OsdropInput
+    bool watching_ = false;             // as last told to OsdropInput
+    std::optional<Chords> chords_sent_; // as last told to OsdropInput
     win::Injection injection_;
     POINT expected_{};                // where the last injected move put the cursor
     std::optional<POINT> moved_here_; // a different position seen once, waiting for a second look

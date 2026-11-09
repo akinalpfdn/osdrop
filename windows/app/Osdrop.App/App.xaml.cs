@@ -112,7 +112,7 @@ public partial class App : Application, IDisposable
         Log.Write(LogLevel.Info, "The engine started");
         _engine = engine;
         _group = new GroupViewModel(engine);
-        var control = new ControlViewModel(engine, _group);
+        var control = new ControlViewModel(engine, _group, _settings);
         control.ControlledChanged += controlled =>
         {
             if (_trayIconTheme is not null)

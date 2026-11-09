@@ -128,6 +128,13 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
     public Task<CoreResult> SetClipboardAsync(bool shared, ulong filesLimit) =>
         Native.Run(() => NativeMethods.SetClipboard(_engine, shared ? (byte)1 : (byte)0, filesLimit));
 
+    public Task<CoreResult> SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput) => Native.Run(() =>
+    {
+        NativeHotkey home = ToNative(returnHome);
+        NativeHotkey lockHotkey = ToNative(lockInput);
+        return SetHotkeysNative(_engine, home, lockHotkey);
+    });
+
     public Task<CoreResult> LockInputAsync(bool locked) =>
         Native.Run(() => NativeMethods.LockInput(_engine, locked ? (byte)1 : (byte)0));
 
@@ -182,12 +189,24 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
                 SharesClipboard = options.SharesClipboard ? (byte)1 : (byte)0,
                 ClipboardFilesLimit = options.ClipboardFilesLimit,
                 Input = ToNative(options.Input),
+                ReturnHotkey = ToNative(options.ReturnHotkey),
+                LockHotkey = ToNative(options.LockHotkey),
             };
             nint engine;
             CoreResult result = NativeMethods.Create(&config, &OnEvent, context, &engine);
             return (result, engine);
         }
     }
+
+    private static NativeHotkey ToNative(Hotkey hotkey) => new()
+    {
+        Modifiers = hotkey.Modifiers,
+        ScanCode = hotkey.ScanCode,
+        Extended = hotkey.Extended ? (byte)1 : (byte)0,
+    };
+
+    private static unsafe CoreResult SetHotkeysNative(nint engine, NativeHotkey returnHome, NativeHotkey lockInput) =>
+        NativeMethods.SetHotkeys(engine, &returnHome, &lockInput);
 
     private static NativeInputSettings ToNative(InputSettings settings) => new()
     {

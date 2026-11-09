@@ -94,6 +94,32 @@ public sealed class SettingsTests
     }
 
     [Fact]
+    public async Task ChordsAreCheckedByTheEngineAndKeptOnlyWhenTaken()
+    {
+        var engine = new FakeEngine();
+        (SettingsViewModel settings, AppSettings stored) = await MakeAsync(engine);
+        var lockOnL = new Hotkey(Hotkey.Control | Hotkey.Alt, 0x26, false);
+        settings.LockHotkey = lockOnL;
+        await Task.Yield();
+        Assert.Equal((Hotkey.DefaultReturnHome, lockOnL), Assert.Single(engine.Hotkeys));
+        Assert.Equal(lockOnL, stored.LockHotkey);
+        Assert.False(settings.HasHotkeyMessage);
+
+        await settings.SetHotkeysAsync(lockOnL, lockOnL);
+        Assert.Equal(Localization.Strings.HotkeyTaken, settings.HotkeyMessage);
+        Assert.Single(engine.Hotkeys); // not even asked
+
+        engine.HotkeyResult = CoreResult.InvalidArgument;
+        await settings.SetHotkeysAsync(new Hotkey(Hotkey.Control, 0x7F, true), lockOnL);
+        Assert.Equal(Localization.Strings.HotkeyInvalid, settings.HotkeyMessage);
+        Assert.Equal(Hotkey.DefaultReturnHome, stored.ReturnHotkey);
+
+        engine.HotkeyResult = CoreResult.Ok;
+        await settings.ResetHotkeysCommand.ExecuteAsync(null);
+        Assert.Equal(Hotkey.DefaultLockInput, stored.LockHotkey);
+    }
+
+    [Fact]
     public void NamesAreCutAt64BytesOnACharacter()
     {
         string name = new string('a', 63) + "ğğ";
@@ -136,8 +162,9 @@ public sealed class SettingsTests
     {
         var group = new GroupViewModel(engine);
         await group.RefreshAsync();
-        var control = new ControlViewModel(engine, group, () => Task.FromResult(InputServiceState.Running), () => Task.FromResult(true));
         var stored = AppSettings.InMemory();
+        var control = new ControlViewModel(
+            engine, group, stored, () => Task.FromResult(InputServiceState.Running), () => Task.FromResult(true));
         var settings = new SettingsViewModel(
             stored, engine, group, control, new UpdatesViewModel(stored), () => Task.FromResult("0.0.0"), _ => { });
         return (settings, stored);

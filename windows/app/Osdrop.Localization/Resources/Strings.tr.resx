@@ -412,13 +412,10 @@
     <value>Kısayollar</value>
   </data>
   <data name="SettingsReturnHotkey" xml:space="preserve">
-    <value>İmleci geri getir: {0}</value>
+    <value>İmleci geri getir</value>
   </data>
   <data name="SettingsLockHotkey" xml:space="preserve">
-    <value>İmleci bulunduğu yerde tut: {0}</value>
-  </data>
-  <data name="SettingsHotkeysDescription" xml:space="preserve">
-    <value>PC'de bu kısayollar sabittir: Ctrl, Alt ve Windows tuşlarını birlikte kullanırlar; hiçbir uygulama bunu yapmaz.</value>
+    <value>İmleci bulunduğu yerde tut</value>
   </data>
   <data name="SettingsClipboardTitle" xml:space="preserve">
     <value>Pano</value>
@@ -512,5 +509,35 @@
   </data>
   <data name="ErrorInternal" xml:space="preserve">
     <value>Osdrop içinde bir hata oldu. Ayarlar › Gelişmiş'ten tanılamayı kopyalayıp bildirin.</value>
+  </data>
+  <data name="HotkeyRecording" xml:space="preserve">
+    <value>Tuşlara basın…</value>
+  </data>
+  <data name="HotkeyHint" xml:space="preserve">
+    <value>Tıklayın, sonra yeni birleşime basın. Yalnız Escape iptal eder.</value>
+  </data>
+  <data name="HotkeyNeedsModifier" xml:space="preserve">
+    <value>Bir tuşla birlikte Ctrl, Alt ya da Windows kullanın.</value>
+  </data>
+  <data name="HotkeyTaken" xml:space="preserve">
+    <value>Her kısayolun kendi birleşimi olmalı.</value>
+  </data>
+  <data name="HotkeyInvalid" xml:space="preserve">
+    <value>Bu tuş bir kısayolda kullanılamaz. Başka bir tuş seçin.</value>
+  </data>
+  <data name="HotkeyReset" xml:space="preserve">
+    <value>Varsayılanlara dön</value>
+  </data>
+  <data name="KeyControl" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="KeyAlt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="KeyShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="KeyWindows" xml:space="preserve">
+    <value>Win</value>
   </data>
 </root>

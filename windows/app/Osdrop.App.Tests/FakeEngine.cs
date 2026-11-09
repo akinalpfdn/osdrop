@@ -75,6 +75,8 @@ internal sealed class FakeEngine : IGroupEngine
     public List<(string DeviceId, uint Permille)> PointerSpeeds { get; } = [];
     public List<(bool Shared, ulong FilesLimit)> ClipboardSettings { get; } = [];
     public List<bool> Locks { get; } = [];
+    public List<(Hotkey ReturnHome, Hotkey LockInput)> Hotkeys { get; } = [];
+    public CoreResult HotkeyResult { get; set; } = CoreResult.Ok;
     public InputState InputState { get; set; } = InputState.Unknown;
     public int NoticeDismissals { get; private set; }
     public List<EngineOptions> Restarts { get; } = [];
@@ -109,6 +111,12 @@ internal sealed class FakeEngine : IGroupEngine
     {
         ClipboardSettings.Add((shared, filesLimit));
         return Task.FromResult(CoreResult.Ok);
+    }
+
+    public Task<CoreResult> SetHotkeysAsync(Hotkey returnHome, Hotkey lockInput)
+    {
+        Hotkeys.Add((returnHome, lockInput));
+        return Task.FromResult(HotkeyResult);
     }
 
     public Task<CoreResult> LockInputAsync(bool locked)

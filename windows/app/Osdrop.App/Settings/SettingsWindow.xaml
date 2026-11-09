@@ -8,6 +8,7 @@
                  xmlns:settings="clr-namespace:Osdrop.App.Settings"
                  xmlns:group="clr-namespace:Osdrop.App.Group"
                  xmlns:arrangement="clr-namespace:Osdrop.App.Arrangement"
+                 xmlns:controls="clr-namespace:Osdrop.App.Controls"
                  mc:Ignorable="d"
                  d:DataContext="{d:DesignInstance Type=settings:SettingsViewModel}"
                  Title="{x:Static res:Strings.SettingsTitle}"
@@ -286,12 +287,23 @@
             </ItemsControl>
 
             <TextBlock Text="{x:Static res:Strings.SettingsHotkeys}" Style="{StaticResource Osdrop.Text.Section}" />
-            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding ReturnHotkeyText}"
-                       Style="{StaticResource Osdrop.Text.Body}" />
-            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding LockHotkeyText}"
-                       Style="{StaticResource Osdrop.Text.Body}" />
-            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.SettingsHotkeysDescription}"
-                       Style="{StaticResource Osdrop.Text.Caption}" />
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsReturnHotkey}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <controls:HotkeyRecorder Hotkey="{Binding ReturnHotkey}" />
+            </ui:CardControl>
+            <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+              <ui:CardControl.Header>
+                <TextBlock Text="{x:Static res:Strings.SettingsLockHotkey}" Style="{StaticResource Osdrop.Text.Body}" />
+              </ui:CardControl.Header>
+              <controls:HotkeyRecorder Hotkey="{Binding LockHotkey}" />
+            </ui:CardControl>
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{Binding HotkeyMessage}"
+                       Style="{StaticResource Osdrop.Text.Error}"
+                       Visibility="{Binding HasHotkeyMessage, Converter={StaticResource Osdrop.Converter.Visible}}" />
+            <ui:Button Margin="{StaticResource Osdrop.Thickness.ItemGap}" Content="{x:Static res:Strings.HotkeyReset}"
+                       Command="{Binding ResetHotkeysCommand}" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>

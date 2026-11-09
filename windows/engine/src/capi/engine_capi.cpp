@@ -5,6 +5,7 @@
 #include "store/dpapi_store.hpp"
 
 #include <osdrop/engine.h>
+#include <osdrop/win/chords.hpp>
 #include <osdrop/win/group_engine.hpp>
 #include <osdrop/win/screens.hpp>
 
@@ -297,6 +298,23 @@ private:
     osdrop_engine_input_state state_{}; ///< under state_mutex_
 };
 
+win::input::Chord chord_of(const osdrop_engine_hotkey& hotkey) {
+    return {.key = {.code = hotkey.scan_code, .extended = hotkey.extended == 1},
+            .modifiers = hotkey.modifiers};
+}
+
+/// The chords, or nullopt when the pair is not one the hook can match.
+std::optional<std::pair<win::input::Chord, win::input::Chord>>
+chords_of(const osdrop_engine_hotkey& return_hotkey, const osdrop_engine_hotkey& lock_hotkey) {
+    const win::input::Chord home = chord_of(return_hotkey);
+    const win::input::Chord lock = chord_of(lock_hotkey);
+    if (return_hotkey.extended > 1 || lock_hotkey.extended > 1 ||
+        !win::input::valid_pair(home, lock)) {
+        return std::nullopt;
+    }
+    return std::pair(home, lock);
+}
+
 win::DeviceIdBytes read_id(const std::uint8_t* bytes) {
     win::DeviceIdBytes id{};
     std::copy_n(bytes, id.size(), id.begin());
@@ -385,6 +403,12 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
         osdrop::engine::InputBridge::Listener{
             .reachable = [events](bool reachable) { events->input_reachable(reachable); },
             .locked = [events](bool locked) { events->input_locked(locked); }});
+    if (const auto chords = chords_of(config->return_hotkey, config->lock_hotkey)) {
+        engine->input->set_chords(chords->first, chords->second);
+    } else {
+        engine->events.log(OSDROP_LOG_WARNING,
+                           "The stored chords were refused; the defaults apply");
+    }
     engine->events.set_input(engine->input.get());
     engine->clipboard.listen(
         [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
@@ -610,6 +634,20 @@ osdrop_result osdrop_engine_set_pointer_speed(osdrop_engine* engine, const uint8
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     return engine->group->set_pointer_speed(read_id(device_id), permille);
+}
+
+osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
+                                        const osdrop_engine_hotkey* return_hotkey,
+                                        const osdrop_engine_hotkey* lock_hotkey) {
+    if (engine == nullptr || return_hotkey == nullptr || lock_hotkey == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    const auto chords = chords_of(*return_hotkey, *lock_hotkey);
+    if (!chords) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->input->set_chords(chords->first, chords->second);
+    return OSDROP_OK;
 }
 
 osdrop_result osdrop_engine_lock_input(osdrop_engine* engine, uint8_t locked) {

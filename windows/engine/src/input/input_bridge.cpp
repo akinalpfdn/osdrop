@@ -153,6 +153,17 @@ void InputBridge::set_watching(bool watching) {
     }
 }
 
+void InputBridge::set_chords(const protocol::Chord& return_home,
+                             const protocol::Chord& lock_input) {
+    const std::scoped_lock lock(mutex_);
+    const Chords chords{.return_home = return_home, .lock_input = lock_input};
+    if (chords_wanted_ != chords) {
+        chords_wanted_ = chords;
+        chords_changed_ = true;
+        wake_.notify_one();
+    }
+}
+
 void InputBridge::set_monitors(std::vector<win::PhysicalMonitor> monitors) {
     const std::scoped_lock lock(forwarder_mutex_);
     forwarder_.set_monitors(std::move(monitors));
@@ -195,13 +206,15 @@ InputBridge::Work InputBridge::take_work() {
                : std::chrono::duration_cast<std::chrono::milliseconds>(kReconnectInterval);
     wake_.wait_for(lock, wait, [this] {
         return stopping_ || !pending_.empty() || control_change_.has_value() ||
-               !capture_changes_.empty() || watching_changed_;
+               !capture_changes_.empty() || watching_changed_ || chords_changed_;
     });
     watching_changed_ = false;
+    chords_changed_ = false;
     Work work{.inputs = {pending_.begin(), pending_.end()},
               .control = std::exchange(control_change_, std::nullopt),
               .captures = std::exchange(capture_changes_, {}),
               .watching = watching_wanted_,
+              .chords = chords_wanted_,
               .stopping = stopping_};
     pending_.clear();
     return work;
@@ -210,7 +223,8 @@ InputBridge::Work InputBridge::take_work() {
 void InputBridge::connect() {
     client_.reset();
     closed_ = false;
-    watching_ = false; // a new OsdropInput watches nothing yet
+    watching_ = false;    // a new OsdropInput watches nothing yet
+    chords_sent_.reset(); // and has the default chords
     {
         const std::scoped_lock lock(forwarder_mutex_);
         forwarder_.reset();
@@ -239,6 +253,7 @@ void InputBridge::connect() {
 }
 
 void InputBridge::apply(const Work& work) {
+    send_chords(work.chords);
     watch(work.watching);
     for (const CaptureChange& change : work.captures) {
         std::visit(Overloaded{[this](const Began& began) { begin_capture(began); },
@@ -263,6 +278,13 @@ void InputBridge::watch(bool watching) {
     if (client_ && watching != watching_) {
         watching_ = watching;
         static_cast<void>(client_->send(protocol::Watch{.on = watching}));
+    }
+}
+
+void InputBridge::send_chords(const Chords& chords) {
+    if (client_ && chords_sent_ != chords && (chords_sent_ || chords != Chords{})) {
+        chords_sent_ = chords;
+        static_cast<void>(client_->send(chords));
     }
 }
 

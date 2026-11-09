@@ -412,13 +412,10 @@
     <value>Shortcuts</value>
   </data>
   <data name="SettingsReturnHotkey" xml:space="preserve">
-    <value>Bring the cursor back: {0}</value>
+    <value>Bring the cursor back</value>
   </data>
   <data name="SettingsLockHotkey" xml:space="preserve">
-    <value>Keep the cursor where it is: {0}</value>
-  </data>
-  <data name="SettingsHotkeysDescription" xml:space="preserve">
-    <value>On a PC these shortcuts are fixed: they use Ctrl, Alt and Windows together, which no app does.</value>
+    <value>Keep the cursor where it is</value>
   </data>
   <data name="SettingsClipboardTitle" xml:space="preserve">
     <value>Clipboard</value>
@@ -512,5 +509,35 @@
   </data>
   <data name="ErrorInternal" xml:space="preserve">
     <value>Something went wrong inside Osdrop. Copy diagnostics in Settings › Advanced and report it.</value>
+  </data>
+  <data name="HotkeyRecording" xml:space="preserve">
+    <value>Press keys…</value>
+  </data>
+  <data name="HotkeyHint" xml:space="preserve">
+    <value>Click, then press the new combination. Escape alone cancels.</value>
+  </data>
+  <data name="HotkeyNeedsModifier" xml:space="preserve">
+    <value>Use Ctrl, Alt or Windows with a key.</value>
+  </data>
+  <data name="HotkeyTaken" xml:space="preserve">
+    <value>Each shortcut needs its own combination.</value>
+  </data>
+  <data name="HotkeyInvalid" xml:space="preserve">
+    <value>This key cannot be part of a shortcut. Choose another one.</value>
+  </data>
+  <data name="HotkeyReset" xml:space="preserve">
+    <value>Reset to defaults</value>
+  </data>
+  <data name="KeyControl" xml:space="preserve">
+    <value>Ctrl</value>
+  </data>
+  <data name="KeyAlt" xml:space="preserve">
+    <value>Alt</value>
+  </data>
+  <data name="KeyShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="KeyWindows" xml:space="preserve">
+    <value>Win</value>
   </data>
 </root>

@@ -6,6 +6,7 @@
 // little-endian: magic u32, version u16, type u16, body length u32, body. Requests go to
 // OsdropInput; reports come back at any time while this PC's input is watched or captured.
 
+#include <osdrop/win/chords.hpp>
 #include <osdrop/win/expected.hpp>
 #include <osdrop/win/key_codes.hpp>
 
@@ -99,9 +100,15 @@ struct Watch {
 struct Heartbeat {
     bool operator==(const Heartbeat&) const = default;
 };
+/// The user's chords (valid_pair); until a client sends them, and after it goes, the defaults.
+struct SetChords {
+    Chord return_home = kReturnHomeChord;
+    Chord lock_input = kLockInputChord;
+    bool operator==(const SetChords&) const = default;
+};
 
 using Request = std::variant<BeginControl, EndControl, Move, Press, Scroll, Key, StartCapture,
-                             StopCapture, QueryStats, Watch, Heartbeat>;
+                             StopCapture, QueryStats, Watch, Heartbeat, SetChords>;
 
 /// How often a capturing client sends Heartbeat, and how long OsdropInput waits for one.
 inline constexpr std::chrono::milliseconds kHeartbeatInterval{250};

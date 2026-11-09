@@ -193,6 +193,15 @@ internal struct NativeInputSettings
     public uint PushMilliseconds;
 }
 
+/// <summary>osdrop_engine_hotkey.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeHotkey
+{
+    public byte Modifiers;
+    public ushort ScanCode;
+    public byte Extended;
+}
+
 /// <summary>osdrop_engine_config.</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct NativeEngineConfig
@@ -201,6 +210,8 @@ internal unsafe struct NativeEngineConfig
     public byte SharesClipboard;
     public ulong ClipboardFilesLimit;
     public NativeInputSettings Input;
+    public NativeHotkey ReturnHotkey;
+    public NativeHotkey LockHotkey;
 }
 
 /// <summary>osdrop_engine_input_state.</summary>

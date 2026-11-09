@@ -1,5 +1,6 @@
-// Osdrop's key chords on a PC (DEVPLAN Phase 11): Ctrl+Alt+Windows with Escape or K, matched on
-// the keys as the hooks see them, the completing key kept from the apps down to its release.
+// Osdrop's key chords on a PC (DEVPLAN Phases 11 and 17): Ctrl+Alt+Windows with Escape or K by
+// default, or the user's, matched on the keys as the hooks see them, the completing key kept from
+// the apps down to its release.
 #include <osdrop/win/chords.hpp>
 
 #include <gtest/gtest.h>
@@ -70,6 +71,36 @@ TEST(Chords, InactiveChordsPassButModifiersAreStillFollowed) {
     EXPECT_EQ(matcher.key(kK, true, true), Outcome::LockInput) << "active from the next press";
     EXPECT_EQ(matcher.key(kK, false, false), Outcome::Swallow)
         << "a swallowed press is released unseen, even after watching stopped";
+}
+
+TEST(Chords, TheUsersChordsReplaceTheDefaults) {
+    input::ChordMatcher matcher;
+    const input::Chord home{.key = kL, .modifiers = input::kControl | input::kAlt};
+    const input::Chord lock{.key = kL,
+                            .modifiers = input::kControl | input::kAlt | input::kWindows};
+    matcher.set(home, lock);
+    hold(matcher, {kLeftControl, kLeftAlt, kLeftWindows});
+    EXPECT_EQ(matcher.key(kEscape, true, true), Outcome::Pass) << "the default is gone";
+    EXPECT_EQ(matcher.key(kL, true, true), Outcome::LockInput) << "the more specific chord wins";
+    EXPECT_EQ(matcher.key(kL, false, true), Outcome::Swallow);
+    EXPECT_EQ(matcher.key(kLeftWindows, false, true), Outcome::Pass);
+    EXPECT_EQ(matcher.key(kL, true, true), Outcome::ReturnHome);
+}
+
+TEST(Chords, ChordsTheHookCannotMatchAreRefused) {
+    EXPECT_TRUE(input::valid(input::kReturnHomeChord));
+    EXPECT_FALSE(input::valid({.key = kK, .modifiers = input::kShift})) << "Shift alone types";
+    EXPECT_FALSE(input::valid({.key = kK, .modifiers = 0}));
+    EXPECT_FALSE(input::valid({.key = kLeftAlt, .modifiers = input::kControl})) << "a modifier";
+    EXPECT_FALSE(input::valid(
+        {.key = ScanCode{.code = 0x7F, .extended = true}, .modifiers = input::kControl}))
+        << "no key has it";
+    EXPECT_FALSE(input::valid({.key = kK, .modifiers = 0x10}));
+    EXPECT_FALSE(input::valid_pair(input::kLockInputChord, input::kLockInputChord));
+
+    input::ChordMatcher matcher;
+    matcher.set({.key = kK, .modifiers = input::kShift}, input::kLockInputChord);
+    EXPECT_EQ(matcher.return_home(), input::kReturnHomeChord) << "an invalid pair is ignored";
 }
 
 } // namespace

@@ -1,6 +1,9 @@
 #include <osdrop/win/chords.hpp>
 
+#include <algorithm>
 #include <array>
+#include <bit>
+#include <utility>
 
 namespace osdrop::win::input {
 namespace {
@@ -26,7 +29,29 @@ bool held(std::uint8_t modifiers, const Chord& chord) {
     return (modifiers & chord.modifiers) == chord.modifiers;
 }
 
+bool is_modifier(ScanCode scan) {
+    return std::ranges::any_of(kModifierKeys,
+                               [&](const ModifierKey& modifier) { return modifier.scan == scan; });
+}
+
 } // namespace
+
+bool valid(const Chord& chord) {
+    return (chord.modifiers & ~kChordModifiers) == 0 &&
+           (chord.modifiers & (kControl | kAlt | kWindows)) != 0 && usage_of(chord.key) &&
+           !is_modifier(chord.key);
+}
+
+bool valid_pair(const Chord& return_home, const Chord& lock_input) {
+    return valid(return_home) && valid(lock_input) && return_home != lock_input;
+}
+
+void ChordMatcher::set(const Chord& return_home, const Chord& lock_input) {
+    if (valid_pair(return_home, lock_input)) {
+        return_home_ = return_home;
+        lock_input_ = lock_input;
+    }
+}
 
 ChordMatcher::Outcome ChordMatcher::key(ScanCode scan, bool down, bool active) {
     unsigned bit = 1;
@@ -47,13 +72,20 @@ ChordMatcher::Outcome ChordMatcher::key(ScanCode scan, bool down, bool active) {
         return Outcome::Pass;
     }
     const std::uint8_t modifiers = this->modifiers();
-    if (scan == kReturnHomeChord.key && held(modifiers, kReturnHomeChord)) {
-        chord_key_ = scan;
-        return Outcome::ReturnHome;
-    }
-    if (scan == kLockInputChord.key && held(modifiers, kLockInputChord)) {
-        chord_key_ = scan;
-        return Outcome::LockInput;
+    // With the same key, the chord with more modifiers is tried first, so both can be reached.
+    const bool lock_first =
+        std::popcount(lock_input_.modifiers) > std::popcount(return_home_.modifiers);
+    const std::array<std::pair<const Chord*, Outcome>, 2> chords{{
+        {lock_first ? &lock_input_ : &return_home_,
+         lock_first ? Outcome::LockInput : Outcome::ReturnHome},
+        {lock_first ? &return_home_ : &lock_input_,
+         lock_first ? Outcome::ReturnHome : Outcome::LockInput},
+    }};
+    for (const auto& [chord, outcome] : chords) {
+        if (scan == chord->key && held(modifiers, *chord)) {
+            chord_key_ = scan;
+            return outcome;
+        }
     }
     return Outcome::Pass;
 }
