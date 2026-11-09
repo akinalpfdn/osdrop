@@ -13,9 +13,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A pull request runs only the jobs its changes can affect; a skipped job counts as passed for
+  # the required checks. Pushes to main, and any change this cannot place, run everything; if this
+  # job fails, everything runs too.
+  changes:
+    name: Changed areas
+    runs-on: ubuntu-24.04
+    outputs:
+      core: ${{ steps.areas.outputs.core }}
+      macos: ${{ steps.areas.outputs.macos }}
+      windows: ${{ steps.areas.outputs.windows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Classify the changed files
+        id: areas
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: scripts/ci_changed_areas.sh
+
   macos:
     name: macOS
+    needs: changes
+    if: >-
+      !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.core == 'true' ||
+      needs.changes.outputs.macos == 'true' || needs.changes.outputs.windows == 'true')
     runs-on: macos-26
+    env:
+      CORE: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' }}
+      MAC: ${{ needs.changes.result != 'success' || needs.changes.outputs.core == 'true' || needs.changes.outputs.macos == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -25,6 +55,7 @@ jobs:
         run: brew install cmake ninja xcodegen
 
       - name: Core — configure, build, test
+        if: env.CORE == 'true'
         working-directory: core
         run: |
           cmake --preset debug
@@ -42,9 +73,11 @@ jobs:
         run: scripts/lint.sh
 
       - name: Swift package — build and test
+        if: env.MAC == 'true'
         run: swift test
 
       - name: macOS app — generate, build, test
+        if: env.MAC == 'true'
         working-directory: macos
         run: |
           xcodegen generate
@@ -53,6 +86,9 @@ jobs:
 
   macos-sanitizers:
     name: macOS sanitizers
+    needs: changes
+    if: >-
+      !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.core == 'true')
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,6 +112,9 @@ jobs:
 
   fuzz:
     name: Decoder fuzzing
+    needs: changes
+    if: >-
+      !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.core == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -112,6 +151,10 @@ jobs:
 
   windows:
     name: Windows
+    needs: changes
+    if: >-
+      !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.core == 'true' ||
+      needs.changes.outputs.windows == 'true')
     runs-on: windows-2025
     defaults:
       run:

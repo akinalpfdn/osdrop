@@ -204,7 +204,12 @@ format a C++ file with the pinned version from `scripts/lint.sh`, for example
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` has three jobs:
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`. A pull request
+runs only the jobs its changes can affect (`scripts/ci_changed_areas.sh`): `core/`, `protocol/` and
+`Package.swift` run every job, `macos/` the macOS job, `windows/` and `scripts/windows/` the macOS
+job's lint and portable tests and the Windows job, and documentation none. Tooling, CI and any
+other file run everything, as does every push to `main`. A skipped job counts as passed for the
+required checks. The jobs:
 
 - **macOS** — core build and tests, portable Windows libraries and tests, `scripts/lint.sh`,
   `swift test`, app build and tests.
@@ -213,3 +218,5 @@ format a C++ file with the pinned version from `scripts/lint.sh`, for example
 - **Windows** — core, engine, input process and service with MSVC (`/W4 /WX`), all native tests,
   clang-tidy on core and Windows code, `dotnet format` check, shell build with analyzers as errors
   and shell tests (every string loads in English and Turkish).
+- **Decoder fuzzing** — every decoder, the crypto parsers, the group and the layout for 30 seconds
+  each with libFuzzer, seeded with the protocol fixtures.
