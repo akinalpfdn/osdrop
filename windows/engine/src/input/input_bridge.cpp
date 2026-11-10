@@ -332,6 +332,9 @@ void InputBridge::send_all(const std::vector<osdrop_input>& inputs) {
 void InputBridge::begin_capture(const Began& began) {
     const POINT home = cursor_position();
     const POINT park = park_point(home);
+    if (listener_.parking) {
+        listener_.parking(park); // a drag of this PC carried away waits there
+    }
     {
         const std::scoped_lock lock(forwarder_mutex_);
         forwarder_.capture({.x = park.x, .y = park.y});

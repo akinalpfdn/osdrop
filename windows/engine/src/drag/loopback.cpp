@@ -7,11 +7,15 @@
 #include <windows.h>
 
 #include <chrono>
+#include <filesystem>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace osdrop::engine::drag {
 namespace {
@@ -25,10 +29,15 @@ constexpr LONG kStartInset = 48;
 /// The starter window needs a moment to show before the press that starts the drag.
 constexpr auto kPressDelay = std::chrono::milliseconds(150);
 
-/// Local files read front to back.
-class LocalSource final : public shared::ContentSource {
+/// Local files read front to back; apps that take only paths get the files themselves.
+class LocalContent final : public DragContent {
 public:
-    explicit LocalSource(std::vector<std::filesystem::path> paths) : paths_(std::move(paths)) {}
+    LocalContent(std::vector<shared::TreeEntry> entries, std::vector<std::filesystem::path> paths,
+                 std::vector<std::filesystem::path> items)
+        : entries_(std::move(entries)), paths_(std::move(paths)), items_(std::move(items)) {}
+
+    std::optional<std::vector<shared::TreeEntry>> entries() override { return entries_; }
+    std::optional<std::vector<std::filesystem::path>> local_items() override { return items_; }
 
     std::unique_ptr<shared::ContentReader> open(std::size_t entry) override {
         if (entry >= paths_.size()) {
@@ -53,7 +62,9 @@ private:
         std::ifstream file_;
     };
 
+    std::vector<shared::TreeEntry> entries_;
     std::vector<std::filesystem::path> paths_;
+    std::vector<std::filesystem::path> items_;
 };
 
 std::uint64_t write_time(const std::filesystem::path& path) {
@@ -148,9 +159,12 @@ void Loopback::update() {
         return;
     }
     if (!targets_) {
-        targets_ =
-            std::make_unique<EdgeTargets>([this](const std::vector<std::filesystem::path>& items,
-                                                 POINT at) { dropped(items, at); });
+        targets_ = std::make_unique<EdgeTargets>(
+            EdgeTargets::Handler{.entered = {},
+                                 .taking = {}, // every drop is taken
+                                 .taken = [this](const std::vector<std::filesystem::path>& items,
+                                                 POINT at) { dropped(items, at); },
+                                 .released = {}});
     }
     targets_->set_strips(shared::edge_strips(monitors(), kStripThickness));
 }
@@ -171,14 +185,26 @@ void Loopback::dropped(const std::vector<std::filesystem::path>& items, POINT at
     const std::string count = std::to_string(entries.size());
     log_(("Drag loopback: captured " + count + " files and folders").c_str());
     SetCursorPos(start.x, start.y);
+    std::vector<shared::ArrivingItem> top;
+    std::error_code error;
+    for (const std::filesystem::path& item : items) {
+        const bool folder = std::filesystem::is_directory(item, error);
+        std::uint64_t size = 0;
+        for (const shared::TreeEntry& entry : entries) {
+            const bool inside = entry.path == relative_name(item.filename()) ||
+                                entry.path.starts_with(relative_name(item.filename()) + "/");
+            size += inside ? entry.size : 0;
+        }
+        top.push_back({.name = relative_name(item.filename()), .folder = folder, .size = size});
+    }
     const Log log = log_;
-    const bool started =
-        start_drag(DragRequest{.at = start,
-                               .entries = std::move(entries),
-                               .source = std::make_shared<LocalSource>(std::move(paths)),
-                               .staged_limit = DragRequest{}.staged_limit},
-                   [log](DragOutcome outcome) { log(describe(outcome)); });
-    if (!started) {
+    const auto handle = start_drag(DragRequest{.at = start,
+                                               .items = std::move(top),
+                                               .content = std::make_shared<LocalContent>(
+                                                   std::move(entries), std::move(paths), items),
+                                               .staged_limit = DragRequest{}.staged_limit},
+                                   [log](DragOutcome outcome) { log(describe(outcome)); });
+    if (!handle) {
         log_("Drag loopback: the drag thread did not start");
         return;
     }

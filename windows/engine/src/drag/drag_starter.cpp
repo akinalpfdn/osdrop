@@ -10,11 +10,9 @@
 #include <shobjidl.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <span>
 #include <string>
@@ -34,7 +32,8 @@ constexpr BYTE kAlpha = 1;
 constexpr UINT kPressTimeoutMilliseconds = 3000;
 constexpr UINT_PTR kPressTimer = 1;
 constexpr int kImageSize = 48;
-constexpr std::size_t kCopyChunk = std::size_t{256} * 1024;
+/// Posted to the drag's thread by DragHandle::cancel().
+constexpr UINT kCancelMessage = WM_APP + 2;
 
 CLIPFORMAT registered(const wchar_t* name) {
     return static_cast<CLIPFORMAT>(RegisterClipboardFormatW(name));
@@ -153,12 +152,11 @@ struct Stored {
 class DataObject final : public ComObject<IDataObject, IDataObjectAsyncCapability> {
 public:
     DataObject(DragRequest request, DWORD thread)
-        : request_(std::move(request)), files_(shared::virtual_files(request_.entries)),
-          thread_(thread), descriptor_(registered(CFSTR_FILEDESCRIPTORW)),
-          contents_(registered(CFSTR_FILECONTENTS)),
-          preferred_(registered(CFSTR_PREFERREDDROPEFFECT)) {
-        for (const shared::TreeEntry& entry : request_.entries) {
-            total_ += entry.folder ? 0 : entry.size;
+        : request_(std::move(request)), thread_(thread),
+          descriptor_(registered(CFSTR_FILEDESCRIPTORW)), contents_(registered(CFSTR_FILECONTENTS)),
+          preferred_(registered(CFSTR_PREFERREDDROPEFFECT)), own_(own_drag_format()) {
+        for (const shared::ArrivingItem& item : request_.items) {
+            total_ += item.size;
         }
     }
     ~DataObject() override {
@@ -172,7 +170,6 @@ public:
     DataObject& operator=(DataObject&&) = delete;
 
     [[nodiscard]] bool in_operation() const { return in_operation_; }
-    [[nodiscard]] const shared::VirtualFiles& files() const { return files_; }
 
     // IDataObject
     HRESULT STDMETHODCALLTYPE GetData(FORMATETC* format, STGMEDIUM* medium) override {
@@ -181,13 +178,18 @@ public:
         }
         *medium = STGMEDIUM{};
         if (format->cfFormat == descriptor_ && (format->tymed & TYMED_HGLOBAL) != 0) {
-            return global(descriptors(), medium);
+            const shared::VirtualFiles* described = files();
+            return described != nullptr ? global(descriptors(*described), medium) : E_FAIL;
         }
         if (format->cfFormat == contents_ && (format->tymed & TYMED_ISTREAM) != 0) {
             return content(format->lindex, medium);
         }
         if (format->cfFormat == CF_HDROP && (format->tymed & TYMED_HGLOBAL) != 0 && stages()) {
-            return global(dropped_files(), medium);
+            const auto items = request_.content->local_items();
+            return items ? global(dropped_files(*items), medium) : E_FAIL;
+        }
+        if (format->cfFormat == own_ && (format->tymed & TYMED_HGLOBAL) != 0) {
+            return global({0}, medium);
         }
         if (format->cfFormat == preferred_ && (format->tymed & TYMED_HGLOBAL) != 0) {
             const DWORD effect = DROPEFFECT_COPY;
@@ -214,7 +216,8 @@ public:
             (format->cfFormat == descriptor_ && (format->tymed & TYMED_HGLOBAL) != 0) ||
             (format->cfFormat == contents_ && (format->tymed & TYMED_ISTREAM) != 0) ||
             (format->cfFormat == CF_HDROP && (format->tymed & TYMED_HGLOBAL) != 0 && stages()) ||
-            (format->cfFormat == preferred_ && (format->tymed & TYMED_HGLOBAL) != 0);
+            (format->cfFormat == preferred_ && (format->tymed & TYMED_HGLOBAL) != 0) ||
+            (format->cfFormat == own_ && (format->tymed & TYMED_HGLOBAL) != 0);
         const bool theirs = std::ranges::any_of(stored_, [&](const Stored& stored) {
             return stored.format.cfFormat == format->cfFormat &&
                    (stored.format.tymed & format->tymed) != 0;
@@ -264,6 +267,7 @@ public:
             list.push_back(format_of(CF_HDROP, TYMED_HGLOBAL));
         }
         list.push_back(format_of(preferred_, TYMED_HGLOBAL));
+        list.push_back(format_of(own_, TYMED_HGLOBAL));
         for (const Stored& stored : stored_) {
             list.push_back(stored.format);
         }
@@ -361,14 +365,27 @@ private:
         return duplicate(stored.format, stored.medium, *medium);
     }
 
+    /// The files as descriptors, described when a target first asks: the content may wait
+    /// until they are known. Null when they cannot be had.
+    const shared::VirtualFiles* files() {
+        if (!described_) {
+            const auto entries = request_.content->entries();
+            described_ = true;
+            if (entries) {
+                files_ = shared::virtual_files(*entries);
+            }
+        }
+        return files_ ? &*files_ : nullptr;
+    }
+
     /// FILEGROUPDESCRIPTORW with one FILEDESCRIPTORW per file and folder.
-    [[nodiscard]] std::vector<std::uint8_t> descriptors() const {
+    [[nodiscard]] static std::vector<std::uint8_t> descriptors(const shared::VirtualFiles& files) {
         const std::size_t header = offsetof(FILEGROUPDESCRIPTORW, fgd);
-        std::vector<std::uint8_t> bytes(header + (files_.files.size() * sizeof(FILEDESCRIPTORW)));
-        const auto count = static_cast<UINT>(files_.files.size());
+        std::vector<std::uint8_t> bytes(header + (files.files.size() * sizeof(FILEDESCRIPTORW)));
+        const auto count = static_cast<UINT>(files.files.size());
         std::memcpy(bytes.data(), &count, sizeof(count));
-        for (std::size_t i = 0; i < files_.files.size(); ++i) {
-            const shared::VirtualFile& file = files_.files[i];
+        for (std::size_t i = 0; i < files.files.size(); ++i) {
+            const shared::VirtualFile& file = files.files[i];
             FILEDESCRIPTORW descriptor{};
             // FD_UNICODE is the sign bit of the enum: the flags are combined as DWORDs.
             descriptor.dwFlags = static_cast<DWORD>(FD_ATTRIBUTES) |
@@ -392,32 +409,32 @@ private:
     }
 
     HRESULT content(LONG index, STGMEDIUM* medium) {
-        if (index < 0 || static_cast<std::size_t>(index) >= files_.files.size() ||
-            files_.files[static_cast<std::size_t>(index)].folder) {
+        const shared::VirtualFiles* described = files();
+        if (described == nullptr || index < 0 ||
+            static_cast<std::size_t>(index) >= described->files.size() ||
+            described->files[static_cast<std::size_t>(index)].folder) {
             return DV_E_LINDEX;
         }
-        const shared::VirtualFile& file = files_.files[static_cast<std::size_t>(index)];
+        const shared::VirtualFile& file = described->files[static_cast<std::size_t>(index)];
         const std::wstring path = wide(file.path);
         const std::wstring name = path.substr(path.find_last_of(L'\\') + 1);
         // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): COM object, released by the target
-        medium->pstm = new ContentStream(request_.source, file.entry, file.size, name);
+        medium->pstm = new ContentStream(request_.content, file.entry, file.size, name);
         medium->tymed = TYMED_ISTREAM;
         medium->pUnkForRelease = nullptr;
         return S_OK;
     }
 
-    /// Whether the drag is small enough to be offered as staged copies too.
+    /// Whether the drag is small enough to be offered as local files too.
     [[nodiscard]] bool stages() const {
-        return total_ <= request_.staged_limit && !files_.files.empty();
+        return total_ <= request_.staged_limit && !request_.items.empty();
     }
 
-    /// DROPFILES naming the staged top-level items; copies the files on the first request.
-    std::vector<std::uint8_t> dropped_files() {
-        if (!staged_) {
-            staged_ = stage();
-        }
+    /// DROPFILES naming the content's top-level items.
+    static std::vector<std::uint8_t>
+    dropped_files(const std::vector<std::filesystem::path>& items) {
         std::wstring list;
-        for (const std::filesystem::path& item : *staged_) {
+        for (const std::filesystem::path& item : items) {
             list += item.wstring();
             list.push_back(L'\0');
         }
@@ -431,51 +448,29 @@ private:
         return bytes;
     }
 
-    std::vector<std::filesystem::path> stage() {
-        static std::atomic<unsigned> counter{0};
-        std::error_code error;
-        const auto folder = std::filesystem::temp_directory_path(error) / L"Osdrop" / L"drags-out" /
-                            (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(++counter));
-        std::vector<std::filesystem::path> items;
-        std::vector<std::uint8_t> buffer(kCopyChunk);
-        for (const shared::VirtualFile& file : files_.files) {
-            const std::filesystem::path path = folder / std::filesystem::path(wide(file.path));
-            std::filesystem::create_directories(file.folder ? path : path.parent_path(), error);
-            if (!file.folder) {
-                shared::FileStream stream(*request_.source, file.entry, file.size);
-                std::ofstream out(path, std::ios::binary | std::ios::trunc);
-                for (std::size_t got = stream.read(buffer); got > 0; got = stream.read(buffer)) {
-                    out.write(reinterpret_cast<const char*>(buffer.data()),
-                              static_cast<std::streamsize>(got));
-                }
-            }
-            if (file.path.find(u'\\') == std::u16string::npos) {
-                items.push_back(path);
-            }
-        }
-        return items;
-    }
-
     DragRequest request_;
-    shared::VirtualFiles files_;
+    bool described_ = false;
+    std::optional<shared::VirtualFiles> files_; ///< once described; nullopt when that failed
     DWORD thread_;
     CLIPFORMAT descriptor_;
     CLIPFORMAT contents_;
     CLIPFORMAT preferred_;
+    CLIPFORMAT own_;
     std::uint64_t total_ = 0;
     std::vector<Stored> stored_;
-    std::optional<std::vector<std::filesystem::path>> staged_;
     BOOL asynchronous_ = TRUE;
     std::atomic<bool> in_operation_{false};
 };
 
 // NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
-/// Ends the drag where the left button comes up; Escape cancels it.
+/// Ends the drag where the left button comes up; Escape or a cancel() ends it without a drop.
 class DropSource final : public ComObject<IDropSource> {
 public:
+    explicit DropSource(const DragHandle& handle) : handle_(handle) {}
+
     HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL escape, DWORD keys) override {
-        if (escape != FALSE) {
+        if (escape != FALSE || handle_.cancelled()) {
             return DRAGDROP_S_CANCEL;
         }
         return (keys & MK_LBUTTON) == 0 ? DRAGDROP_S_DROP : S_OK;
@@ -483,11 +478,14 @@ public:
     HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD /*effect*/) override {
         return DRAGDROP_S_USEDEFAULTCURSORS;
     }
+
+private:
+    const DragHandle& handle_;
 };
 
 /// The first item's shell icon as the drag image.
-void set_drag_image(IDataObject* data, const shared::VirtualFiles& files) {
-    if (files.files.empty()) {
+void set_drag_image(IDataObject* data, const std::vector<shared::ArrivingItem>& items) {
+    if (items.empty()) {
         return;
     }
     ComPtr<IDragSourceHelper> helper;
@@ -495,9 +493,9 @@ void set_drag_image(IDataObject* data, const shared::VirtualFiles& files) {
                                 IID_PPV_ARGS(helper.put())))) {
         return;
     }
-    const shared::VirtualFile& first = files.files.front();
+    const shared::ArrivingItem& first = items.front();
     SHFILEINFOW info{};
-    const std::wstring name = wide(first.path);
+    const std::wstring name = wide(shared::utf16(first.name));
     if (SHGetFileInfoW(name.c_str(),
                        first.folder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL, &info,
                        sizeof(info), SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES) == 0) {
@@ -534,9 +532,22 @@ void set_drag_image(IDataObject* data, const shared::VirtualFiles& files) {
 /// The drag of one starter window, reached from its window procedure.
 struct Starter {
     DragRequest request;
-    std::function<void(DragOutcome)> done;
+    std::function<void(DragOutcome)> ended;
+    std::function<void()> done;
+    std::shared_ptr<DragHandle> handle;
     DragOutcome outcome = DragOutcome::Failed;
+    bool reported = false; ///< `ended` ran
     ComPtr<DataObject> data;
+
+    void end(DragOutcome result) {
+        outcome = result;
+        if (!reported) {
+            reported = true;
+            if (ended) {
+                ended(result);
+            }
+        }
+    }
 };
 
 DragOutcome outcome_of(HRESULT result, DWORD effect) {
@@ -567,15 +578,16 @@ LRESULT CALLBACK starter_procedure(HWND window, UINT message, WPARAM wparam, LPA
         PostQuitMessage(0); // no press came: the drag never started
         return 0;
     case WM_LBUTTONDOWN:
-        if (starter != nullptr && starter->data) {
+        if (starter != nullptr && starter->data && !starter->handle->cancelled()) {
             KillTimer(window, kPressTimer);
             ShowWindow(window, SW_HIDE);
             const ComPtr<DropSource> source(
-                new DropSource()); // NOLINT(cppcoreguidelines-owning-memory)
+                new DropSource(*starter->handle)); // NOLINT(cppcoreguidelines-owning-memory)
             DWORD effect = DROPEFFECT_NONE;
             const HRESULT result =
                 DoDragDrop(starter->data.get(), source.get(), DROPEFFECT_COPY, &effect);
-            starter->outcome = outcome_of(result, effect);
+            starter->end(starter->handle->cancelled() ? DragOutcome::Cancelled
+                                                      : outcome_of(result, effect));
             PostQuitMessage(0);
             return 0;
         }
@@ -588,8 +600,14 @@ LRESULT CALLBACK starter_procedure(HWND window, UINT message, WPARAM wparam, LPA
 
 void run_drag(Starter& starter) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    MSG message{};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // creates the message queue
+    starter.handle->attach(GetCurrentThreadId());
     if (FAILED(OleInitialize(nullptr))) {
-        starter.done(DragOutcome::Failed);
+        starter.end(DragOutcome::Failed);
+        if (starter.done) {
+            starter.done();
+        }
         return;
     }
     const WNDCLASSEXW window_class{.cbSize = sizeof(WNDCLASSEXW),
@@ -608,18 +626,24 @@ void run_drag(Starter& starter) {
     RegisterClassExW(&window_class); // fails harmlessly when another drag registered it
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): COM object, owned by the ComPtr
     starter.data = ComPtr<DataObject>(new DataObject(starter.request, GetCurrentThreadId()));
-    set_drag_image(starter.data.get(), starter.data->files());
-    HWND window = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kClassName, L"",
-        WS_POPUP, starter.request.at.x - kHalfSize, starter.request.at.y - kHalfSize, 2 * kHalfSize,
-        2 * kHalfSize, nullptr, nullptr, GetModuleHandleW(nullptr), &starter);
+    set_drag_image(starter.data.get(), starter.request.items);
+    HWND window =
+        starter.handle->cancelled()
+            ? nullptr
+            : CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                              kClassName, L"", WS_POPUP, starter.request.at.x - kHalfSize,
+                              starter.request.at.y - kHalfSize, 2 * kHalfSize, 2 * kHalfSize,
+                              nullptr, nullptr, GetModuleHandleW(nullptr), &starter);
     if (window != nullptr) {
         SetLayeredWindowAttributes(window, 0, kAlpha, LWA_ALPHA);
         SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         SetTimer(window, kPressTimer, kPressTimeoutMilliseconds, nullptr);
-        MSG message{};
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+            if (message.hwnd == nullptr && message.message == kCancelMessage) {
+                PostQuitMessage(0); // cancelled before the press: the drag never starts
+                continue;
+            }
             DispatchMessageW(&message);
         }
         // Explorer may still be reading the files on its own thread, through this one.
@@ -628,24 +652,48 @@ void run_drag(Starter& starter) {
         }
         DestroyWindow(window);
     }
+    starter.end(starter.handle->cancelled() ? DragOutcome::Cancelled : starter.outcome);
     starter.data.reset();
     OleUninitialize();
-    starter.done(starter.outcome);
+    if (starter.done) {
+        starter.done();
+    }
 }
 
 } // namespace
 
-bool start_drag(DragRequest request, std::function<void(DragOutcome)> done) {
+void DragHandle::cancel() {
+    cancelled_ = true;
+    if (const DWORD thread = thread_.load(); thread != 0) {
+        PostThreadMessageW(thread, kCancelMessage, 0, 0); // wakes it, before or during the drag
+    }
+}
+
+void DragHandle::attach(DWORD thread) {
+    thread_ = thread;
+}
+
+CLIPFORMAT own_drag_format() {
+    static const CLIPFORMAT format = registered(L"com.akinalpfdn.osdrop.drag");
+    return format;
+}
+
+std::shared_ptr<DragHandle> start_drag(DragRequest request, std::function<void(DragOutcome)> ended,
+                                       std::function<void()> done) {
+    auto handle = std::make_shared<DragHandle>();
     try {
         std::thread([starter = Starter{.request = std::move(request),
+                                       .ended = std::move(ended),
                                        .done = std::move(done),
+                                       .handle = handle,
                                        .outcome = DragOutcome::Failed,
+                                       .reported = false,
                                        .data = {}}]() mutable {
             run_drag(starter);
         }).detach();
-        return true;
+        return handle;
     } catch (const std::system_error&) {
-        return false;
+        return nullptr;
     }
 }
 

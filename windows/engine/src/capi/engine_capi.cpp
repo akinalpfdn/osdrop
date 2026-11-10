@@ -1,5 +1,6 @@
 #include "clipboard/win_clipboard.hpp"
 #include "discovery/dns_sd_discovery.hpp"
+#include "drag/drag_bridge.hpp"
 #include "drag/loopback.hpp"
 #include "input/input_bridge.hpp"
 #include "screens/monitors.hpp"
@@ -19,6 +20,7 @@
 #include <atomic>
 #include <climits>
 #include <exception>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -28,12 +30,14 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 namespace {
 
 namespace win = osdrop::win;
+using osdrop::engine::drag::DragBridge;
 
 /// osdrop_random_source.fill backed by the system's preferred CSPRNG.
 osdrop_result system_random(void* /*context*/, std::uint8_t* buffer, std::size_t length) {
@@ -196,6 +200,9 @@ public:
         if (osdrop::engine::InputBridge* bridge = input_.load()) {
             bridge->capture_ended(end);
         }
+        if (DragBridge* drag = drag_.load()) {
+            drag->capture_ended();
+        }
         change_input([&](osdrop_engine_input_state& state) {
             state.capturing = 0;
             std::ranges::fill(state.target_id, std::uint8_t{0});
@@ -207,6 +214,32 @@ public:
                 clear_notice(state);
             }
         });
+    }
+    void drag_arrived(const win::DragArrival& arrival) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->arrived(arrival);
+        }
+    }
+    void drag_withdrawn(std::uint32_t drag_id) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->withdrawn(drag_id);
+        }
+    }
+    void drag_ended(std::uint32_t drag_id, osdrop_drag_outcome outcome) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->ended(drag_id, outcome);
+        }
+    }
+    void drag_wanted() override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->wanted();
+        }
+    }
+    /// From the input bridge's thread, before it parks the cursor for a capture.
+    void parking(POINT park) {
+        if (DragBridge* drag = drag_.load()) {
+            drag->parking(park);
+        }
     }
     /// From the input bridge's threads.
     void input_reachable(bool reachable) {
@@ -227,6 +260,12 @@ public:
     void set_input(osdrop::engine::InputBridge* bridge) {
         const std::scoped_lock lock(input_mutex_);
         input_ = bridge;
+        watch();
+    }
+    /// Where drag events go once the drag bridge exists.
+    void set_drag(DragBridge* bridge) {
+        const std::scoped_lock lock(input_mutex_);
+        drag_ = bridge;
         watch();
     }
 
@@ -271,10 +310,14 @@ private:
         return id;
     }
 
-    /// This PC's input is watched while a member is connected; under input_mutex_.
+    /// This PC's input is watched, and its edges take drags, while a member is connected; under
+    /// input_mutex_.
     void watch() const {
         if (osdrop::engine::InputBridge* bridge = input_.load()) {
             bridge->set_watching(!connected_.empty());
+        }
+        if (DragBridge* drag = drag_.load()) {
+            drag->set_active(!connected_.empty());
         }
     }
 
@@ -293,6 +336,7 @@ private:
     osdrop_engine_callback callback_;
     void* context_;
     std::atomic<osdrop::engine::InputBridge*> input_{nullptr};
+    std::atomic<DragBridge*> drag_{nullptr};
     std::mutex input_mutex_;
     std::set<win::DeviceIdBytes> connected_; ///< members with a session; under input_mutex_
     mutable std::mutex state_mutex_;
@@ -330,6 +374,9 @@ struct osdrop_engine {
     osdrop_engine(osdrop_engine_callback callback, void* context) : events(callback, context) {}
     ~osdrop_engine() {
         try {
+            if (drag) {
+                drag->stop(); // its thread calls the group engine and the input bridge
+            }
             if (input) {
                 input->stop(); // its thread calls the group engine: it stops before it goes
             }
@@ -349,6 +396,7 @@ struct osdrop_engine {
     CallbackEvents events;
     std::unique_ptr<osdrop::engine::InputBridge> input;
     std::unique_ptr<osdrop::engine::drag::Loopback> loopback;
+    std::unique_ptr<DragBridge> drag;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
@@ -356,6 +404,7 @@ struct osdrop_engine {
         const auto monitors = osdrop::engine::physical_monitors();
         input->set_monitors(monitors);
         loopback->set_monitors(monitors);
+        drag->set_monitors(monitors);
         const auto report = win::screen_report(monitors);
         if (!report) {
             return report.error();
@@ -408,7 +457,8 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
         osdrop::engine::InputBridge::Listener{
             .reachable = [events](bool reachable) { events->input_reachable(reachable); },
             .locked = [events](bool locked) { events->input_locked(locked); },
-            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); }});
+            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
+            .parking = [events](POINT park) { events->parking(park); }});
     engine->input->set_respects_clip(config->respects_cursor_clip == 1);
     if (const auto chords = chords_of(config->return_hotkey, config->lock_hotkey)) {
         engine->input->set_chords(chords->first, chords->second);
@@ -417,6 +467,12 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
                            "The stored chords were refused; the defaults apply");
     }
     engine->events.set_input(engine->input.get());
+    std::error_code no_temp;
+    engine->drag = std::make_unique<DragBridge>(
+        *engine->group, *engine->input,
+        std::filesystem::temp_directory_path(no_temp) / L"Osdrop" / L"arriving",
+        [events](const char* message) { events->log(OSDROP_LOG_INFO, message); });
+    engine->events.set_drag(engine->drag.get());
     engine->clipboard.listen(
         [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
     if (engine->report_screens() != OSDROP_OK) {
@@ -669,6 +725,7 @@ osdrop_result osdrop_engine_set_drag_loopback(osdrop_engine* engine, uint8_t ena
     if (engine == nullptr || enabled > 1) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
+    engine->drag->set_paused(enabled == 1); // the loopback has the edges meanwhile
     engine->loopback->set_enabled(enabled == 1);
     return OSDROP_OK;
 }

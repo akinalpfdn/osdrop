@@ -41,6 +41,8 @@ public:
         std::function<void(bool reachable)> reachable; ///< whether OsdropInput answers
         std::function<void(bool locked)> locked;       ///< "lock input here"
         std::function<void(const char* message)> log;  ///< a line for the shell's log
+        /// Before the cursor is parked at `park` for a capture; returns once ready for it.
+        std::function<void(POINT park)> parking;
     };
 
     InputBridge(win::GroupEngine& group, Listener listener);

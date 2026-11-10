@@ -1,6 +1,7 @@
 #include "drag/edge_targets.hpp"
 
 #include "drag/com_object.hpp"
+#include "drag/drag_starter.hpp"
 
 #include <windows.h>
 
@@ -9,6 +10,7 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -23,6 +25,11 @@ namespace {
 // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
 
 constexpr UINT kPlaceMessage = WM_APP + 1;
+constexpr UINT kHoldMessage = WM_APP + 2;
+/// Half the hold window's side: the parked cursor stays well inside it.
+constexpr int kHoldHalf = 32;
+/// How long set_hold() waits for the targets' thread.
+constexpr auto kHoldWait = std::chrono::milliseconds(200);
 constexpr UINT kPollMilliseconds = 30;
 /// Nearly invisible, yet still hit by the drop: a fully transparent window is not.
 constexpr BYTE kAlpha = 1;
@@ -204,16 +211,22 @@ std::vector<std::filesystem::path> saved_virtual_files(IDataObject* data) {
     return items;
 }
 
-/// Takes drops as copies and hands their files on.
+/// Takes drops as the handler says and hands their files on.
 class DropTarget final : public ComObject<IDropTarget> {
 public:
-    DropTarget(EdgeTargets::Dropped dropped, std::atomic<int>& over)
-        : dropped_(std::move(dropped)), over_(over) {}
+    /// `reports`: a strip, which reports the drags that reach it; the hold window does not.
+    DropTarget(const EdgeTargets::Handler& handler, std::atomic<int>& over, bool reports)
+        : handler_(handler), over_(over), reports_(reports) {}
 
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD /*keys*/, POINTL /*at*/,
                                         DWORD* effect) override {
         ++over_;
-        accepts_ = readable(data);
+        accepts_ = readable(data) && !own(data);
+        if (accepts_ && reports_ && handler_.entered) {
+            std::vector<std::filesystem::path> files = dropped_files(data);
+            const bool virtual_files = files.empty();
+            handler_.entered(std::move(files), virtual_files);
+        }
         return answer(effect);
     }
     HRESULT STDMETHODCALLTYPE DragOver(DWORD /*keys*/, POINTL /*at*/, DWORD* effect) override {
@@ -226,18 +239,28 @@ public:
     HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD /*keys*/, POINTL at,
                                    DWORD* effect) override {
         --over_;
-        if (!accepts_ || data == nullptr || effect == nullptr || (*effect & DROPEFFECT_COPY) == 0) {
+        const DropTaking taking = handler_.taking ? handler_.taking() : DropTaking::Take;
+        if (!accepts_ || data == nullptr || effect == nullptr || (*effect & DROPEFFECT_COPY) == 0 ||
+            taking == DropTaking::Refuse) {
             if (effect != nullptr) {
                 *effect = DROPEFFECT_NONE; // the drag slides back
             }
             return S_OK;
         }
         *effect = DROPEFFECT_COPY; // the source keeps its files
-        take(data, POINT{.x = at.x, .y = at.y});
+        if (taking == DropTaking::Take) {
+            take(data, POINT{.x = at.x, .y = at.y});
+        }
         return S_OK;
     }
 
 private:
+    /// A drag Osdrop started: it is carried across by the controller, not by these targets.
+    static bool own(IDataObject* data) {
+        FORMATETC mark = format(own_drag_format(), TYMED_HGLOBAL);
+        return data->QueryGetData(&mark) == S_OK;
+    }
+
     static bool readable(IDataObject* data) {
         if (data == nullptr) {
             return false;
@@ -258,7 +281,7 @@ private:
     void take(IDataObject* data, POINT at) {
         std::vector<std::filesystem::path> files = dropped_files(data);
         if (!files.empty()) {
-            dropped_(std::move(files), at);
+            handler_.taken(std::move(files), at);
             return;
         }
         // Virtual files: in the background when the source allows it, so it does not wait.
@@ -269,7 +292,7 @@ private:
             SUCCEEDED(async->GetAsyncMode(&asynchronous)) && asynchronous != FALSE &&
             SUCCEEDED(async->StartOperation(nullptr)) &&
             SUCCEEDED(CoMarshalInterThreadInterfaceInStream(IID_IDataObject, data, &marshaled))) {
-            std::thread([marshaled, at, dropped = dropped_] {
+            std::thread([marshaled, at, taken = handler_.taken] {
                 CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
                 {
                     ComPtr<IDataObject> remote;
@@ -282,7 +305,7 @@ private:
                             operation->EndOperation(saved.empty() ? E_FAIL : S_OK, nullptr,
                                                     DROPEFFECT_COPY);
                         }
-                        dropped(std::move(saved), at);
+                        taken(std::move(saved), at);
                     }
                 }
                 CoUninitialize();
@@ -292,11 +315,12 @@ private:
         if (async && asynchronous != FALSE) {
             async->EndOperation(E_FAIL, nullptr, DROPEFFECT_NONE); // it was started above
         }
-        dropped_(saved_virtual_files(data), at);
+        handler_.taken(saved_virtual_files(data), at);
     }
 
-    EdgeTargets::Dropped dropped_;
+    const EdgeTargets::Handler& handler_;
     std::atomic<int>& over_;
+    bool reports_;
     bool accepts_ = false;
 };
 
@@ -304,8 +328,8 @@ private:
 
 } // namespace
 
-EdgeTargets::EdgeTargets(Dropped dropped)
-    : dropped_(std::move(dropped)), thread_([this] { run(); }) {}
+EdgeTargets::EdgeTargets(Handler handler)
+    : handler_(std::move(handler)), thread_([this] { run(); }) {}
 
 EdgeTargets::~EdgeTargets() {
     try {
@@ -328,6 +352,17 @@ void EdgeTargets::set_strips(std::vector<win::PixelRect> strips) {
     if (const DWORD id = thread_id_.load(); id != 0) {
         PostThreadMessageW(id, kPlaceMessage, 0, 0);
     }
+}
+
+void EdgeTargets::set_hold(std::optional<POINT> at) {
+    std::unique_lock lock(mutex_);
+    hold_wanted_ = at;
+    const std::uint64_t request = ++hold_requests_;
+    if (const DWORD id = thread_id_.load(); id != 0) {
+        PostThreadMessageW(id, kHoldMessage, 0, 0);
+    }
+    // In place before the cursor is parked on it; the thread places it on start otherwise.
+    hold_changed_.wait_for(lock, kHoldWait, [&] { return hold_placed_ >= request; });
 }
 
 void EdgeTargets::run() {
@@ -354,10 +389,13 @@ void EdgeTargets::run() {
     RegisterClassExW(&window_class);
     thread_id_ = GetCurrentThreadId();
     place(); // what was set before the queue existed
+    place_hold();
     const UINT_PTR timer = SetTimer(nullptr, 0, kPollMilliseconds, nullptr);
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         if (message.hwnd == nullptr && message.message == kPlaceMessage) {
             place();
+        } else if (message.hwnd == nullptr && message.message == kHoldMessage) {
+            place_hold();
         } else if (message.hwnd == nullptr && message.message == WM_TIMER) {
             poll();
         } else {
@@ -369,8 +407,10 @@ void EdgeTargets::run() {
     {
         const std::scoped_lock lock(mutex_);
         wanted_.clear();
+        hold_wanted_.reset();
     }
     place(); // removes the windows
+    place_hold();
     OleUninitialize();
 }
 
@@ -390,7 +430,7 @@ void EdgeTargets::place() {
         return;
     }
     const ComPtr<DropTarget> target(
-        new DropTarget(dropped_, over_)); // NOLINT(cppcoreguidelines-owning-memory)
+        new DropTarget(handler_, over_, true)); // NOLINT(cppcoreguidelines-owning-memory)
     for (const win::PixelRect& strip : strips) {
         HWND window = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kClassName, L"",
@@ -405,9 +445,43 @@ void EdgeTargets::place() {
     }
 }
 
+void EdgeTargets::place_hold() {
+    if (hold_ != nullptr) {
+        RevokeDragDrop(hold_);
+        DestroyWindow(hold_);
+        hold_ = nullptr;
+    }
+    std::optional<POINT> at;
+    {
+        const std::scoped_lock lock(mutex_);
+        at = hold_wanted_;
+    }
+    if (at) {
+        hold_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                kClassName, L"", WS_POPUP, at->x - kHoldHalf, at->y - kHoldHalf,
+                                2 * kHoldHalf, 2 * kHoldHalf, nullptr, nullptr,
+                                GetModuleHandleW(nullptr), nullptr);
+        if (hold_ != nullptr) {
+            SetLayeredWindowAttributes(hold_, 0, kAlpha, LWA_ALPHA);
+            const ComPtr<DropTarget> target(
+                new DropTarget(handler_, over_, false)); // NOLINT(cppcoreguidelines-owning-memory)
+            RegisterDragDrop(hold_, target.get());
+            SetWindowPos(hold_, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+    }
+    const std::scoped_lock lock(mutex_);
+    hold_placed_ = hold_requests_;
+    hold_changed_.notify_all();
+}
+
 void EdgeTargets::poll() {
     // Shown while the left button is down or a drag is over one of them: an OLE drag holds it.
     const bool held = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    if (held_down_ && !held && over_.load() == 0 && handler_.released) {
+        handler_.released();
+    }
+    held_down_ = held;
     const bool show = held || over_.load() > 0;
     if (show == shown_) {
         return;
