@@ -184,8 +184,8 @@ std::string content_type(std::string_view name, bool folder) {
     std::ranges::transform(extension, extension.begin(), [](char c) {
         return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
     });
-    const auto* found = std::ranges::find(kContentTypes, std::string_view(extension),
-                                          &std::pair<std::string_view, std::string_view>::first);
+    const auto found = std::ranges::find(kContentTypes, std::string_view(extension),
+                                         &std::pair<std::string_view, std::string_view>::first);
     return std::string(found != kContentTypes.end() ? found->second : "public.data");
 }
 
