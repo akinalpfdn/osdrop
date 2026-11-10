@@ -21,6 +21,8 @@ enum class Type : std::uint8_t {
     Watch = 10,
     Heartbeat = 11,
     SetChords = 12,
+    HoldDrag = 13,
+    ReleaseDrag = 14,
     CapturedMotion = 101,
     PhysicalPress = 102,
     PhysicalScroll = 103,
@@ -396,6 +398,8 @@ Bytes encode(const Request& request) {
                                          write_chord(w, m.lock_input);
                                          return Type::SetChords;
                                      },
+                                     [](const HoldDrag&) { return Type::HoldDrag; },
+                                     [](const ReleaseDrag&) { return Type::ReleaseDrag; },
                                  },
                                  request);
     return w.message(type);
@@ -469,6 +473,10 @@ Expected<Request, DecodeError> decode_request(std::span<const std::uint8_t> mess
         return empty<Request, QueryStats>(bytes);
     case Type::Heartbeat:
         return empty<Request, Heartbeat>(bytes);
+    case Type::HoldDrag:
+        return empty<Request, HoldDrag>(bytes);
+    case Type::ReleaseDrag:
+        return empty<Request, ReleaseDrag>(bytes);
     case Type::SetChords:
         return body<Request, SetChords>(bytes, read_set_chords);
     case Type::Watch:
@@ -595,13 +603,15 @@ std::uint16_t type_of(const Request& request) {
                                      [](const Watch&) { return Type::Watch; },
                                      [](const Heartbeat&) { return Type::Heartbeat; },
                                      [](const SetChords&) { return Type::SetChords; },
+                                     [](const HoldDrag&) { return Type::HoldDrag; },
+                                     [](const ReleaseDrag&) { return Type::ReleaseDrag; },
                                  },
                                  request);
     return static_cast<std::uint16_t>(type);
 }
 
 std::string_view type_name(std::uint16_t type) {
-    static constexpr std::array<std::pair<Type, std::string_view>, 22> kNames{{
+    static constexpr std::array<std::pair<Type, std::string_view>, 24> kNames{{
         {Type::BeginControl, "BeginControl"},
         {Type::EndControl, "EndControl"},
         {Type::Move, "Move"},
@@ -614,6 +624,8 @@ std::string_view type_name(std::uint16_t type) {
         {Type::Watch, "Watch"},
         {Type::Heartbeat, "Heartbeat"},
         {Type::SetChords, "SetChords"},
+        {Type::HoldDrag, "HoldDrag"},
+        {Type::ReleaseDrag, "ReleaseDrag"},
         {Type::CapturedMotion, "CapturedMotion"},
         {Type::PhysicalPress, "PhysicalPress"},
         {Type::PhysicalScroll, "PhysicalScroll"},

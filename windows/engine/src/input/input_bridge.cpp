@@ -117,10 +117,13 @@ InputBridge::~InputBridge() {
 
 void InputBridge::controlled(bool controlled) {
     const std::scoped_lock lock(mutex_);
-    control_change_ = controlled;
-    if (!controlled) {
-        pending_.clear(); // nothing more for a control that ended
-    }
+    control_change_ = controlled; // core's releases before it go out first
+    wake_.notify_one();
+}
+
+void InputBridge::release_drag() {
+    const std::scoped_lock lock(mutex_);
+    release_drag_ = true;
     wake_.notify_one();
 }
 
@@ -208,7 +211,7 @@ InputBridge::Work InputBridge::take_work() {
                : std::chrono::duration_cast<std::chrono::milliseconds>(kReconnectInterval);
     wake_.wait_for(lock, wait, [this] {
         return stopping_ || !pending_.empty() || control_change_.has_value() ||
-               !capture_changes_.empty() || watching_changed_ || chords_changed_;
+               !capture_changes_.empty() || watching_changed_ || chords_changed_ || release_drag_;
     });
     watching_changed_ = false;
     chords_changed_ = false;
@@ -217,6 +220,7 @@ InputBridge::Work InputBridge::take_work() {
               .captures = std::exchange(capture_changes_, {}),
               .watching = watching_wanted_,
               .chords = chords_wanted_,
+              .release_drag = std::exchange(release_drag_, false),
               .stopping = stopping_};
     pending_.clear();
     return work;
@@ -227,6 +231,7 @@ void InputBridge::connect() {
     closed_ = false;
     watching_ = false;    // a new OsdropInput watches nothing yet
     chords_sent_.reset(); // and has the default chords
+    left_down_ = false;   // and released what the old one pressed
     {
         const std::scoped_lock lock(forwarder_mutex_);
         forwarder_.reset();
@@ -262,6 +267,14 @@ void InputBridge::apply(const Work& work) {
                               [this](const win::CaptureEnd& end) { end_capture(end); }},
                    change);
     }
+    const bool ending = work.control && !*work.control && controlled_;
+    if (ending && client_) {
+        send_all(work.inputs); // core's releases, while injection is still allowed
+        if (left_down_) {
+            // Core left it down: this PC's drag waits at the edge for its outcome.
+            static_cast<void>(client_->send(protocol::HoldDrag{}));
+        }
+    }
     if (work.control && *work.control != controlled_) {
         controlled_ = *work.control;
         moved_here_.reset();
@@ -271,8 +284,12 @@ void InputBridge::apply(const Work& work) {
                                                 : protocol::Request(protocol::EndControl{})));
         }
     }
-    if (client_ && controlled_) {
+    if (client_ && controlled_ && !ending) {
         send_all(work.inputs);
+    }
+    if (work.release_drag && client_) {
+        left_down_ = false;
+        static_cast<void>(client_->send(protocol::ReleaseDrag{}));
     }
 }
 
@@ -300,6 +317,10 @@ void InputBridge::send_all(const std::vector<osdrop_input>& inputs) {
         for (const protocol::Request& request : injection_.requests(inputs[i], caps_lock_on())) {
             if (const auto* move = std::get_if<protocol::Move>(&request)) {
                 expected_ = POINT{.x = move->x, .y = move->y};
+            }
+            if (const auto* press = std::get_if<protocol::Press>(&request);
+                press != nullptr && press->button == protocol::Button::Left) {
+                left_down_ = press->down;
             }
             if (!client_->send(request)) {
                 return; // the pipe broke; the next round connects again

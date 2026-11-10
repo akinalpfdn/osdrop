@@ -30,6 +30,8 @@ TEST(InputProtocol, EveryRequestRoundTrips) {
         input::Watch{.on = true},
         input::Watch{.on = false},
         input::Heartbeat{},
+        input::HoldDrag{},
+        input::ReleaseDrag{},
         input::SetChords{},
         input::SetChords{.return_home = {.key = kRightArrow, .modifiers = input::kControl},
                          .lock_input = {.key = kA, .modifiers = input::kAlt | input::kShift}},

@@ -78,6 +78,8 @@ std::optional<Report> InputSession::carry_out(const Request& request, Clock::tim
                           [&](const Heartbeat&) { return heartbeat(now); },
                           [&](const Watch& m) { return watch(m.on); },
                           [&](const SetChords& m) { return set_chords(m); },
+                          [&](const HoldDrag&) { return hold_drag(); },
+                          [&](const ReleaseDrag&) { return release_drag(); },
                           [&](const QueryStats&) { return std::optional<Report>(device_.stats()); },
                           [](const auto&) { return std::optional<Report>(); }, // injection
                       },
@@ -152,6 +154,24 @@ std::optional<Report> InputSession::set_chords(const SetChords& chords) {
     return std::nullopt;
 }
 
+std::optional<Report> InputSession::hold_drag() {
+    if (buttons_down_.erase(Button::Left) == 1) {
+        drag_held_ = true; // EndControl leaves it down
+        log_.info("The left button stays down for a drag");
+    }
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::release_drag() {
+    // Any state: a drag held past its control, or one this PC's own hand started, which waits
+    // at the edge while the input is captured or after the control moved on.
+    buttons_down_.erase(Button::Left);
+    drag_held_ = false;
+    device_.press(Button::Left, false);
+    log_.info("Released the left button of a drag");
+    return std::nullopt;
+}
+
 std::optional<Report> InputSession::watch(bool on) {
     if (watching_ != on) {
         watching_ = on;
@@ -208,6 +228,9 @@ void InputSession::reset() {
     end_capture_here();
     capture_.reset();
     release_all();
+    if (std::exchange(drag_held_, false)) {
+        device_.press(Button::Left, false);
+    }
     if (controlling_) {
         controlling_ = false;
         device_.set_controlled(false);

@@ -113,6 +113,37 @@ TEST_F(InputSessionTest, EndingControlReleasesWhatIsStillDown) {
     ASSERT_TRUE(send(input::Key{.scan = kA, .down = true}).has_value()) << "refused again";
 }
 
+TEST_F(InputSessionTest, AHeldDragKeepsTheLeftButtonDownPastTheControl) {
+    send(input::BeginControl{});
+    send(input::Key{.scan = kShift, .down = true});
+    send(input::Press{.button = input::Button::Left, .down = true});
+    EXPECT_FALSE(send(input::HoldDrag{}).has_value());
+    device.calls.clear();
+    send(input::EndControl{});
+    EXPECT_EQ(device.calls, std::vector<std::string>{"key 42 up"}) << "the drag waits";
+    // Injection is refused now, but the drag's own release is not.
+    EXPECT_FALSE(send(input::ReleaseDrag{}).has_value());
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"key 42 up", "press 0 up"}));
+    EXPECT_TRUE(log.warnings.empty());
+}
+
+TEST_F(InputSessionTest, ADragIsReleasedWhileCapturingToo) {
+    send(input::StartCapture{.park_x = 100, .park_y = 200, .home_x = 0, .home_y = 300});
+    device.calls.clear();
+    EXPECT_FALSE(send(input::ReleaseDrag{}).has_value());
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
+}
+
+TEST_F(InputSessionTest, AClientThatGoesReleasesAHeldDrag) {
+    send(input::BeginControl{});
+    send(input::Press{.button = input::Button::Left, .down = true});
+    send(input::HoldDrag{});
+    send(input::EndControl{});
+    device.calls.clear();
+    session.reset();
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
+}
+
 TEST_F(InputSessionTest, AClientThatGoesLeavesNothingPressedOrCaptured) {
     send(input::Watch{.on = true});
     send(input::BeginControl{});

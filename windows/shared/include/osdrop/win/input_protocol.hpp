@@ -21,7 +21,7 @@
 namespace osdrop::win::input {
 
 inline constexpr std::uint32_t kMagic = 0x4950'444F; // "ODPI" as little-endian bytes
-inline constexpr std::uint16_t kVersion = 1;
+inline constexpr std::uint16_t kVersion = 2;
 inline constexpr std::size_t kHeaderSize = 12;
 inline constexpr std::size_t kMaxMessageSize = 64;
 /// Virtual-desktop pixels, either sign.
@@ -106,9 +106,21 @@ struct SetChords {
     Chord lock_input = kLockInputChord;
     bool operator==(const SetChords&) const = default;
 };
+/// Before EndControl: the injected left button stays down after it, because a drag on this PC
+/// waits at the edge where the controller left for its outcome (DEVPLAN Phase 14). ReleaseDrag,
+/// or the client's end, releases it.
+struct HoldDrag {
+    bool operator==(const HoldDrag&) const = default;
+};
+/// Releases the left button where the cursor is, in any state: a drag on this PC that waits for
+/// its outcome ends there.
+struct ReleaseDrag {
+    bool operator==(const ReleaseDrag&) const = default;
+};
 
-using Request = std::variant<BeginControl, EndControl, Move, Press, Scroll, Key, StartCapture,
-                             StopCapture, QueryStats, Watch, Heartbeat, SetChords>;
+using Request =
+    std::variant<BeginControl, EndControl, Move, Press, Scroll, Key, StartCapture, StopCapture,
+                 QueryStats, Watch, Heartbeat, SetChords, HoldDrag, ReleaseDrag>;
 
 /// How often a capturing client sends Heartbeat, and how long OsdropInput waits for one.
 inline constexpr std::chrono::milliseconds kHeartbeatInterval{250};

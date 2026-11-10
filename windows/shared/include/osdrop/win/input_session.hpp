@@ -69,8 +69,8 @@ public:
     [[nodiscard]] std::optional<Clock::time_point> deadline() const;
     /// Past the deadline the capture ends here; the Released to send the client.
     [[nodiscard]] std::optional<Report> expire(Clock::time_point now);
-    /// The client is gone: capture ends where the cursor left, what it pressed is released, and
-    /// this PC's input is no longer watched.
+    /// The client is gone: capture ends where the cursor left, what it pressed is released (a
+    /// held drag's left button too), and this PC's input is no longer watched.
     void reset();
 
     [[nodiscard]] bool controlling() const { return controlling_; }
@@ -94,6 +94,8 @@ private:
     std::optional<Report> heartbeat(Clock::time_point now);
     std::optional<Report> watch(bool on);
     std::optional<Report> set_chords(const SetChords& chords);
+    std::optional<Report> hold_drag();
+    std::optional<Report> release_drag();
     /// Ends a capture that is still on here; whether there was one.
     bool end_capture_here();
     std::optional<Report> refuse(std::uint16_t type, Refusal reason, std::string_view why);
@@ -107,6 +109,7 @@ private:
     std::optional<Capture> capture_;
     std::set<ScanCode> keys_down_;
     std::set<Button> buttons_down_;
+    bool drag_held_ = false; ///< the left button stays down past the control (HoldDrag)
 };
 
 } // namespace osdrop::win::input
