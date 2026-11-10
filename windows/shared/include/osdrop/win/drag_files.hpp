@@ -52,6 +52,10 @@ struct VirtualFiles {
 /// UTF-8 as UTF-16; invalid sequences become U+FFFD.
 [[nodiscard]] std::u16string utf16(std::string_view text);
 
+/// The Uniform Type Identifier a drag item of this PC travels with, from its name: a Mac target
+/// such as Photos takes only the types it knows. "public.data" for names not in the table.
+[[nodiscard]] std::string content_type(std::string_view name, bool folder);
+
 /// The content of one file read front to back: a local file, or a transfer as it arrives. `read`
 /// may wait for bytes; it returns 0 at the end, or when the content cannot be read further.
 class ContentReader {

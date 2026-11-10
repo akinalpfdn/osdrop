@@ -156,6 +156,10 @@ public:
     void capture_began(const DeviceIdBytes& /*device*/,
                        const std::vector<osdrop_input>& /*release_here*/) override {}
     void capture_ended(const osdrop::win::CaptureEnd& /*end*/) override {}
+    void drag_arrived(const osdrop::win::DragArrival& /*arrival*/) override {}
+    void drag_withdrawn(std::uint32_t /*drag_id*/) override {}
+    void drag_ended(std::uint32_t /*drag_id*/, osdrop_drag_outcome /*outcome*/) override {}
+    void drag_wanted() override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);
@@ -340,9 +344,9 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->confirm_pairing(connection.value(), true), OSDROP_OK);
     EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
     ASSERT_TRUE(pc->events.wait_for([&] { return pc->events.connected_unlocked() == 1; }));
-    EXPECT_EQ(pc->events.features(),
-              OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
-        << "no drags before the drag bridge exists";
+    EXPECT_EQ(pc->events.features(), OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD |
+                                         OSDROP_FEATURE_FILES | OSDROP_FEATURE_DRAG_SOURCE |
+                                         OSDROP_FEATURE_DRAG_TARGET);
     ASSERT_TRUE(wait_until([&] {
         return pc->engine->info().has_group && laptop.engine->info().has_group &&
                pc->engine->members().value().size() == 2;

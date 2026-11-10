@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <set>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -11,6 +12,47 @@ namespace {
 
 constexpr char16_t kReplacement = 0xFFFD;
 constexpr std::size_t kSkipChunk = std::size_t{64} * 1024;
+
+/// Extensions (lowercase) and the types macOS gives them.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 37> kContentTypes{{
+    {"aac", "public.aac-audio"},
+    {"avi", "public.avi"},
+    {"bmp", "com.microsoft.bmp"},
+    {"csv", "public.comma-separated-values-text"},
+    {"doc", "com.microsoft.word.doc"},
+    {"docx", "org.openxmlformats.wordprocessingml.document"},
+    {"exe", "com.microsoft.windows-executable"},
+    {"flac", "org.xiph.flac"},
+    {"gif", "com.compuserve.gif"},
+    {"heic", "public.heic"},
+    {"heif", "public.heif"},
+    {"htm", "public.html"},
+    {"html", "public.html"},
+    {"jpeg", "public.jpeg"},
+    {"jpg", "public.jpeg"},
+    {"json", "public.json"},
+    {"m4a", "com.apple.m4a-audio"},
+    {"m4v", "com.apple.m4v-video"},
+    {"mkv", "org.matroska.mkv"},
+    {"mov", "com.apple.quicktime-movie"},
+    {"mp3", "public.mp3"},
+    {"mp4", "public.mpeg-4"},
+    {"pdf", "com.adobe.pdf"},
+    {"png", "public.png"},
+    {"ppt", "com.microsoft.powerpoint.ppt"},
+    {"pptx", "org.openxmlformats.presentationml.presentation"},
+    {"rtf", "public.rtf"},
+    {"svg", "public.svg-image"},
+    {"tif", "public.tiff"},
+    {"tiff", "public.tiff"},
+    {"txt", "public.plain-text"},
+    {"wav", "com.microsoft.waveform-audio"},
+    {"webp", "org.webmproject.webp"},
+    {"xls", "com.microsoft.excel.xls"},
+    {"xlsx", "org.openxmlformats.spreadsheetml.sheet"},
+    {"xml", "public.xml"},
+    {"zip", "public.zip-archive"},
+}};
 
 /// A relative path of names joined by '/', none of them empty, "." or "..".
 bool valid_path(std::string_view path) {
@@ -128,6 +170,23 @@ VirtualFiles virtual_files(std::span<const TreeEntry> entries) {
                                 .entry = index});
     }
     return result;
+}
+
+std::string content_type(std::string_view name, bool folder) {
+    if (folder) {
+        return "public.folder";
+    }
+    const std::size_t dot = name.rfind('.');
+    if (dot == std::string_view::npos || dot == 0) {
+        return "public.data";
+    }
+    std::string extension(name.substr(dot + 1));
+    std::ranges::transform(extension, extension.begin(), [](char c) {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    });
+    const auto* found = std::ranges::find(kContentTypes, std::string_view(extension),
+                                          &std::pair<std::string_view, std::string_view>::first);
+    return std::string(found != kContentTypes.end() ? found->second : "public.data");
 }
 
 FileStream::FileStream(ContentSource& source, std::size_t entry, std::uint64_t size)

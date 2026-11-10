@@ -64,8 +64,8 @@ std::shared_ptr<TransferSink> TransferRouter::sink_or_keep(std::uint64_t transfe
 
 void TransferRouter::planned(std::uint64_t transfer_id, const std::vector<PlannedEntry>& entries) {
     const std::scoped_lock lock(mutex_);
-    const Event event = [transfer_id, entries](TransferSink& sink) {
-        sink.planned(transfer_id, entries);
+    const Event event = [transfer_id, copy = entries](TransferSink& sink) {
+        sink.planned(transfer_id, copy);
     };
     if (const auto sink = sink_or_keep(transfer_id, event)) {
         event(*sink);
@@ -76,8 +76,8 @@ void TransferRouter::written(std::uint64_t transfer_id, std::uint32_t entry,
                              const std::filesystem::path& path, std::uint64_t bytes,
                              bool complete) {
     const std::scoped_lock lock(mutex_);
-    const Event event = [transfer_id, entry, path, bytes, complete](TransferSink& sink) {
-        sink.written(transfer_id, entry, path, bytes, complete);
+    const Event event = [transfer_id, entry, copy = path, bytes, complete](TransferSink& sink) {
+        sink.written(transfer_id, entry, copy, bytes, complete);
     };
     if (const auto sink = sink_or_keep(transfer_id, event)) {
         event(*sink);
@@ -87,8 +87,8 @@ void TransferRouter::written(std::uint64_t transfer_id, std::uint32_t entry,
 void TransferRouter::finished(std::uint64_t transfer_id, osdrop_result result,
                               const std::vector<std::filesystem::path>& items) {
     const std::scoped_lock lock(mutex_);
-    const Event event = [transfer_id, result, items](TransferSink& sink) {
-        sink.finished(transfer_id, result, items);
+    const Event event = [transfer_id, result, copy = items](TransferSink& sink) {
+        sink.finished(transfer_id, result, copy);
     };
     if (const auto sink = sink_or_keep(transfer_id, event)) {
         event(*sink);
@@ -125,9 +125,9 @@ public:
             }
             const auto wanted =
                 static_cast<std::size_t>(std::min<std::uint64_t>(buffer.size(), readable));
-            if (const auto got = read_at(path, buffer.first(wanted)); got.value_or(0) > 0) {
-                position_ += *got;
-                return *got;
+            if (const std::size_t got = read_at(path, buffer.first(wanted)).value_or(0); got > 0) {
+                position_ += got;
+                return got;
             }
             if (complete) {
                 return 0; // a finished file that cannot be read as core said: broken
@@ -148,7 +148,10 @@ private:
     }
     [[nodiscard]] static std::uint64_t available(const File& file) {
         // The last byte waits for the check: a drop never completes a file that failed it.
-        return file.complete ? file.bytes : (file.bytes > 0 ? file.bytes - 1 : 0);
+        if (file.complete) {
+            return file.bytes;
+        }
+        return file.bytes > 0 ? file.bytes - 1 : 0;
     }
     [[nodiscard]] bool ready() const {
         const File* file = this->file();
@@ -220,7 +223,11 @@ std::optional<std::vector<TreeEntry>> NetworkDrag::entries(std::chrono::millisec
     std::vector<TreeEntry> tree;
     std::vector<Place> places;
     for (std::size_t index = 0; index < state_.size(); ++index) {
-        const std::vector<PlannedEntry>& plan = *state_[index].plan;
+        const std::optional<std::vector<PlannedEntry>>& item_plan = state_[index].plan;
+        if (!item_plan) {
+            return std::nullopt; // cannot happen: every item was planned above
+        }
+        const std::vector<PlannedEntry>& plan = *item_plan;
         for (std::size_t entry = 0; entry < plan.size(); ++entry) {
             const PlannedEntry& planned = plan[entry];
             if (planned.kind == kLink) {
