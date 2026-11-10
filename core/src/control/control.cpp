@@ -708,4 +708,12 @@ void Control::on_send_progress(const transfer::SendProgress& progress) {
     transfer_observer_.on_send_progress(progress);
 }
 
+void Control::on_transfer_planned(const transfer::TransferPlan& plan) {
+    transfer_observer_.on_transfer_planned(plan);
+}
+
+void Control::on_entry_written(const transfer::EntryWritten& written) {
+    transfer_observer_.on_entry_written(written);
+}
+
 } // namespace osdrop::control

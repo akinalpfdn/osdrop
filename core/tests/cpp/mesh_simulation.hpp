@@ -196,6 +196,8 @@ public:
     std::vector<transfer::TransferOutcome> finished;
     std::vector<transfer::ContentOutcome> contents;
     std::vector<transfer::SendProgress> sends;
+    std::vector<transfer::TransferPlan> plans;
+    std::vector<transfer::EntryWritten> written;
 
     void on_offer_ready(const transfer::OfferReady& ready) override { offers.push_back(ready); }
     void on_send_progress(const transfer::SendProgress& update) override {
@@ -209,6 +211,10 @@ public:
     }
     void on_content_received(const transfer::ContentOutcome& outcome) override {
         contents.push_back(outcome);
+    }
+    void on_transfer_planned(const transfer::TransferPlan& plan) override { plans.push_back(plan); }
+    void on_entry_written(const transfer::EntryWritten& update) override {
+        written.push_back(update);
     }
 };
 

@@ -358,6 +358,16 @@ typedef struct osdrop_dragged_item {
     const char* content_type; /* NUL-terminated Uniform Type Identifier; replaced when invalid */
 } osdrop_dragged_item;
 
+/* An entry of an item this computer receives, as it will be created here. */
+typedef struct osdrop_received_entry {
+    const char* path;    /* NUL-terminated UTF-8, '/' between names, relative to the destination,
+                            with names mapped for this computer; a top-level name taken in the
+                            destination is numbered when the entry is placed */
+    uint8_t kind;        /* 1 file, 2 folder, 3 link */
+    uint64_t byte_count; /* a file's size */
+    int64_t modified_us; /* microseconds since 1970-01-01 UTC */
+} osdrop_received_entry;
+
 typedef struct osdrop_transfer_progress {
     uint64_t transfer_id;
     uint64_t bytes_done;
@@ -472,6 +482,21 @@ typedef struct osdrop_mesh_callbacks {
      */
     void (*send_progress)(void* context, const uint8_t* device_id, const osdrop_object_ref* item,
                           uint64_t bytes_sent, uint64_t bytes_total, uint8_t state);
+    /*
+     * A transfer this computer receives knows its entries (valid during the call), before any of
+     * their content: `entries[i]` is the entry that entry_written calls `i`.
+     */
+    void (*transfer_planned)(void* context, uint64_t transfer_id,
+                             const osdrop_received_entry* entries, size_t count);
+    /*
+     * A file of a transfer this computer receives, written front to back: its first `bytes` bytes
+     * are on disk at `path` (absolute UTF-8, NUL-terminated, valid during the call), a temporary
+     * file while `complete` is 0, then the file in its place, verified (1). Open the temporary
+     * with sharing that lets it be written, renamed and deleted: it moves when it completes and
+     * goes away when the transfer fails. Every chunk is reported.
+     */
+    void (*entry_written)(void* context, uint64_t transfer_id, uint32_t entry, const char* path,
+                          uint64_t bytes, uint8_t complete);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {

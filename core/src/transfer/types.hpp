@@ -56,6 +56,31 @@ struct TransferProgress {
     std::size_t files_total = 0;
 };
 
+/// An entry of an item being received, as it will be created here.
+struct ReceivedEntry {
+    std::string path; ///< mapped for this computer, '/' between names, relative to the destination
+    protocol::EntryKind kind = protocol::EntryKind::File;
+    std::uint64_t byte_count = 0; ///< files
+    std::int64_t modified_us = 0;
+    bool operator==(const ReceivedEntry&) const = default;
+};
+
+/// A receive() knows its entries, before any of their content.
+struct TransferPlan {
+    TransferId id = 0;
+    std::vector<ReceivedEntry> entries; ///< in the order of their indices
+};
+
+/// The bytes of one file of a receive() on disk so far; each file is written in order.
+struct EntryWritten {
+    TransferId id = 0;
+    std::size_t entry = 0;
+    std::filesystem::path path; ///< a temporary until `complete`, then the file itself
+    std::uint64_t bytes = 0;
+    bool complete = false; ///< verified and in place
+    bool operator==(const EntryWritten&) const = default;
+};
+
 struct TransferOutcome {
     TransferId id = 0;
     std::optional<Error> error; ///< empty: everything arrived
@@ -104,6 +129,10 @@ public:
     /// An offered item was scanned: its size, or why it cannot be sent.
     virtual void on_offer_ready(const OfferReady& ready) = 0;
     virtual void on_transfer_progress(const TransferProgress& progress) = 0;
+    /// A receive() planned its entries; their content follows.
+    virtual void on_transfer_planned(const TransferPlan& plan) = 0;
+    /// A file of a receive() was written further, or completed.
+    virtual void on_entry_written(const EntryWritten& written) = 0;
     /// The end of a receive(), once nothing is being written any more.
     virtual void on_transfer_finished(const TransferOutcome& outcome) = 0;
     /// The end of a fetch_content().

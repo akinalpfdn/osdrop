@@ -79,8 +79,12 @@ public:
     FileWriter(FileWriter&& other) noexcept;
     FileWriter& operator=(FileWriter&&) = delete;
 
-    /// NO_SPACE when the volume is full, IO_ERROR for other failures.
+    /// NO_SPACE when the volume is full, IO_ERROR for other failures. The data is flushed, so
+    /// others can read the temporary as it grows.
     [[nodiscard]] Status<Error> write(std::span<const std::uint8_t> data);
+
+    /// Where the bytes are until finish() moves them.
+    [[nodiscard]] const std::filesystem::path& temporary() const { return temporary_; }
 
     /// Checks the size and digest (INTEGRITY_FAILED, temporary removed), then moves the file to
     /// the target, numbered when that name is taken; the final path.

@@ -275,6 +275,7 @@ Status<Error> FileWriter::write(std::span<const std::uint8_t> data) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast): bytes as the stream's chars
     stream_->write(reinterpret_cast<const char*>(data.data()),
                    static_cast<std::streamsize>(data.size()));
+    stream_->flush();
     if (!*stream_) {
         const auto space = free_space(target_.parent_path());
         return Status<Error>::failure(space && *space < data.size() ? Error::NoSpace
