@@ -16,6 +16,7 @@
 #include <span>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -106,6 +107,18 @@ public:
         return id;
     }
     void cancel(std::uint64_t transfer_id) override { cancelled.push_back(transfer_id); }
+};
+
+/// Cancels a drag when it goes, so a read still waiting ends before its future is destroyed.
+struct CancelOnExit {
+    explicit CancelOnExit(std::shared_ptr<drag::NetworkDrag> cancelled)
+        : drag(std::move(cancelled)) {}
+    ~CancelOnExit() { drag->cancel(); }
+    std::shared_ptr<drag::NetworkDrag> drag;
+    CancelOnExit(const CancelOnExit&) = delete;
+    CancelOnExit& operator=(const CancelOnExit&) = delete;
+    CancelOnExit(CancelOnExit&&) = delete;
+    CancelOnExit& operator=(CancelOnExit&&) = delete;
 };
 
 class NetworkDragTest : public ::testing::Test {
@@ -212,9 +225,12 @@ TEST_F(NetworkDragTest, ReadingWaitsForTheCheckThenFollowsTheFileToItsPlace) {
     std::vector<std::uint8_t> buffer(10);
     EXPECT_EQ(reader->read(buffer), 9U) << "every byte but the last";
     auto last = std::async(std::launch::async, [&] { return reader->read(buffer); });
+    const CancelOnExit unblock{network}; // a failed check below must not leave the read waiting
     EXPECT_EQ(last.wait_for(milliseconds(50)), std::future_status::timeout);
+    // Core moves the file to its place; the reader keeps reading the file it opened (Windows does
+    // not rename a file a std::ifstream holds, so the test copies it instead).
     const fs::path placed = staging.path() / "0" / "a.bin";
-    fs::rename(temporary, placed);
+    fs::copy_file(temporary, placed);
     transfers.router.written(100, 0, placed, 10, true);
     ASSERT_EQ(last.wait_for(milliseconds(2000)), std::future_status::ready);
     EXPECT_EQ(last.get(), 1U);
@@ -234,6 +250,7 @@ TEST_F(NetworkDragTest, AFailedTransferBreaksTheReadInsteadOfEndingIt) {
     drag::FileStream stream(*network, 0, 10);
     std::vector<std::uint8_t> buffer(10);
     auto read = std::async(std::launch::async, [&] { return stream.read(buffer); });
+    const CancelOnExit unblock{network};
     EXPECT_EQ(read.wait_for(milliseconds(50)), std::future_status::timeout);
     transfers.router.finished(100, OSDROP_ERROR_CONNECTION_CLOSED, {});
     ASSERT_EQ(read.wait_for(milliseconds(2000)), std::future_status::ready);
@@ -252,6 +269,7 @@ TEST_F(NetworkDragTest, CancellingStopsWhatStillRunsAndEndsReads) {
     const auto reader = network->open(1);
     std::vector<std::uint8_t> buffer(5);
     auto read = std::async(std::launch::async, [&] { return reader->read(buffer); });
+    const CancelOnExit unblock{network};
     network->cancel();
     EXPECT_EQ(transfers.cancelled, std::vector<std::uint64_t>{101}) << "only what still runs";
     ASSERT_EQ(read.wait_for(milliseconds(2000)), std::future_status::ready);
