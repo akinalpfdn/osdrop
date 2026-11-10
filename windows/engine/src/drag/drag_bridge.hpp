@@ -40,6 +40,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -51,10 +52,18 @@ namespace osdrop::engine::drag {
 
 class DragBridge {
 public:
-    using Log = std::function<void(const char* message)>;
+    /// Called on the bridge's thread.
+    struct Listener {
+        std::function<void(const char* message)> log;
+        /// A transfer receiving an item of a drag from `source` started.
+        std::function<void(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                           const std::string& name, std::uint64_t size)>
+            receiving;
+    };
 
     /// `staging`: where arriving drags are received, emptied now.
-    DragBridge(win::GroupEngine& group, InputBridge& input, std::filesystem::path staging, Log log);
+    DragBridge(win::GroupEngine& group, InputBridge& input, std::filesystem::path staging,
+               Listener listener);
     ~DragBridge();
     DragBridge(const DragBridge&) = delete;
     DragBridge& operator=(const DragBridge&) = delete;
@@ -93,6 +102,7 @@ private:
         std::filesystem::path staging;
     };
 
+    void log(const char* message) const;
     void post(std::function<void()> task);
     void post_after(Clock::duration delay, std::function<void()> task);
     void run();
@@ -110,7 +120,7 @@ private:
     win::GroupEngine& group_;
     InputBridge& input_;
     const std::filesystem::path staging_;
-    const Log log_;
+    const Listener listener_;
 
     std::mutex mutex_;
     std::condition_variable wake_;

@@ -292,6 +292,16 @@ void NetworkDrag::cancel() {
     }
 }
 
+std::vector<std::optional<std::uint64_t>> NetworkDrag::transfers() {
+    const std::scoped_lock lock(mutex_);
+    std::vector<std::optional<std::uint64_t>> ids;
+    ids.reserve(state_.size());
+    for (const Item& item : state_) {
+        ids.push_back(item.transfer);
+    }
+    return ids;
+}
+
 std::uint64_t NetworkDrag::total_bytes() const {
     std::uint64_t total = 0;
     for (const ArrivingItem& item : items_) {

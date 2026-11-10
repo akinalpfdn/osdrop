@@ -11,6 +11,8 @@ namespace osdrop::win {
 namespace {
 
 constexpr std::uint8_t kTransferStreams = 4;
+/// This PC's drags whose item names are kept for the members that fetch them.
+constexpr std::size_t kRememberedDrags = 32;
 
 template <std::size_t Size>
 std::array<std::uint8_t, Size> bytes_of(const std::uint8_t* bytes) {
@@ -311,6 +313,7 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
             created.push_back(path_of(item));
         }
         engine->transfers_.finished(id, outcome, created); // a drag's, or nobody's
+        engine->events_.transfer_finished(id, outcome);
         if (engine->clipboard_) {
             std::vector<std::string> paths;
             for (const char* item : std::span(items, count)) {
@@ -323,9 +326,14 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     drag_callbacks(result);
     result.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* engine = static_cast<GroupEngine*>(context);
-        if (engine->clipboard_ && progress != nullptr) {
+        if (progress == nullptr) {
+            return;
+        }
+        if (engine->clipboard_) {
             engine->clipboard_->transfer_progress(progress->transfer_id, progress->bytes_done);
         }
+        engine->events_.transfer_progress(progress->transfer_id, progress->bytes_done,
+                                          progress->bytes_total);
     };
     return result;
 }
@@ -399,6 +407,31 @@ void GroupEngine::drag_callbacks(osdrop_mesh_callbacks& result) {
                                .modified_us = entry.modified_us});
         }
         static_cast<GroupEngine*>(context)->transfers_.planned(id, planned);
+    };
+    result.send_progress = [](void* context, const std::uint8_t* device,
+                              const osdrop_object_ref* item, std::uint64_t sent,
+                              std::uint64_t total, std::uint8_t state) {
+        if (item == nullptr || item->kind != OSDROP_OBJECT_DRAG) {
+            return; // the clipboard's copies show no transfers
+        }
+        auto* engine = static_cast<GroupEngine*>(context);
+        const auto drag_id = static_cast<std::uint32_t>(item->object_id);
+        SendUpdate update{.device = bytes_of<OSDROP_DEVICE_ID_SIZE>(device),
+                          .drag_id = drag_id,
+                          .index = item->item_index,
+                          .name = {},
+                          .sent = sent,
+                          .total = total,
+                          .state = state};
+        {
+            const std::scoped_lock lock(engine->mutex_);
+            const auto names = std::ranges::find(engine->drag_names_, drag_id,
+                                                 &decltype(drag_names_)::value_type::first);
+            if (names != engine->drag_names_.end() && item->item_index < names->second.size()) {
+                update.name = names->second[item->item_index];
+            }
+        }
+        engine->events_.send_progress(update);
     };
     result.entry_written = [](void* context, std::uint64_t id, std::uint32_t entry,
                               const char* path, std::uint64_t bytes, std::uint8_t complete) {
@@ -663,6 +696,16 @@ GroupEngine::drag_started(std::span<const std::filesystem::path> items) {
     if (osdrop_mesh_drag_started(mesh_, dragged.data(), dragged.size(), &drag_id) != OSDROP_OK) {
         return std::nullopt;
     }
+    std::vector<std::string> names;
+    names.reserve(items.size());
+    for (const std::filesystem::path& item : items) {
+        names.push_back(utf8_of(item.filename()));
+    }
+    const std::scoped_lock lock(mutex_);
+    drag_names_.emplace_back(drag_id, std::move(names));
+    while (drag_names_.size() > kRememberedDrags) {
+        drag_names_.pop_front();
+    }
     return drag_id;
 }
 
@@ -676,6 +719,10 @@ void GroupEngine::drag_stopped() {
 
 void GroupEngine::drop_finished(std::uint32_t drag_id, osdrop_drag_outcome outcome) {
     static_cast<void>(osdrop_mesh_drop_finished(mesh_, drag_id, outcome));
+}
+
+void GroupEngine::withdraw_drag(std::uint32_t drag_id) {
+    static_cast<void>(osdrop_mesh_withdraw(mesh_, OSDROP_OBJECT_DRAG, drag_id));
 }
 
 std::optional<std::uint64_t> GroupEngine::receive(const drag::SourceId& source,

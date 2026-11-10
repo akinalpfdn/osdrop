@@ -166,6 +166,8 @@ TEST_F(NetworkDragTest, EveryItemIsReceivedAtOnceIntoAFolderOfItsOwn) {
     EXPECT_EQ(transfers.received[1].folder, staging.path() / "1");
     EXPECT_TRUE(fs::is_directory(staging.path() / "1"));
     EXPECT_EQ(network->total_bytes(), 13U);
+    EXPECT_EQ(network->transfers(),
+              (std::vector<std::optional<std::uint64_t>>{std::uint64_t{100}, std::uint64_t{101}}));
 }
 
 TEST_F(NetworkDragTest, ATransferThatCannotStartCancelsTheOthers) {

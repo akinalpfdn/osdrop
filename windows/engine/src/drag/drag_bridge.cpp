@@ -151,8 +151,9 @@ void remove_folder(const fs::path& folder) {
 
 } // namespace
 
-DragBridge::DragBridge(win::GroupEngine& group, InputBridge& input, fs::path staging, Log log)
-    : group_(group), input_(input), staging_(std::move(staging)), log_(std::move(log)),
+DragBridge::DragBridge(win::GroupEngine& group, InputBridge& input, fs::path staging,
+                       Listener listener)
+    : group_(group), input_(input), staging_(std::move(staging)), listener_(std::move(listener)),
       targets_(std::make_unique<EdgeTargets>(EdgeTargets::Handler{
           .entered =
               [this](std::vector<fs::path> files, bool virtual_files) {
@@ -236,6 +237,12 @@ void DragBridge::update_strips() {
     }
 }
 
+void DragBridge::log(const char* message) const {
+    if (listener_.log) {
+        listener_.log(message);
+    }
+}
+
 void DragBridge::post(std::function<void()> task) {
     const std::scoped_lock lock(mutex_);
     if (!stopping_) {
@@ -296,12 +303,12 @@ void DragBridge::report(std::vector<fs::path> files, bool virtual_files) {
     if (!files.empty()) {
         if (group_.drag_started(files)) {
             reported_ = true;
-            log_(("A drag of " + std::to_string(files.size()) + " items reached an edge").c_str());
+            log(("A drag of " + std::to_string(files.size()) + " items reached an edge").c_str());
         }
     } else if (virtual_files) {
         group_.drag_promised();
         reported_ = true;
-        log_("A drag of virtual files reached an edge");
+        log("A drag of virtual files reached an edge");
     }
 }
 
@@ -319,8 +326,8 @@ void DragBridge::release() {
 void DragBridge::ended(std::uint32_t /*drag_id*/, osdrop_drag_outcome outcome) {
     post([this, outcome] {
         taking_ = outcome == OSDROP_DRAG_DROPPED ? DropTaking::Accept : DropTaking::Refuse;
-        log_(outcome == OSDROP_DRAG_DROPPED ? "This PC's drag was dropped elsewhere: it ends here"
-                                            : "This PC's drag was not dropped: it ends here");
+        log(outcome == OSDROP_DRAG_DROPPED ? "This PC's drag was dropped elsewhere: it ends here"
+                                           : "This PC's drag was not dropped: it ends here");
         input_.release_drag(); // on the hold window or the strip it waits on
     });
 }
@@ -330,11 +337,11 @@ void DragBridge::wanted() {
         taking_ = DropTaking::Take;
         taking_files_ = true;
         const std::uint64_t attempt = ++take_attempt_;
-        log_("Taking the files of this PC's drag at the edge");
+        log("Taking the files of this PC's drag at the edge");
         input_.release_drag();
         post_after(kTakeTimeout, [this, attempt] {
             if (taking_files_ && take_attempt_ == attempt) {
-                log_("The drop of a wanted drag did not reach the edge");
+                log("The drop of a wanted drag did not reach the edge");
                 end_taking({});
             }
         });
@@ -388,7 +395,7 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
     auto network = std::make_shared<shared::NetworkDrag>(group_, arrival.source, arrival.drag_id,
                                                          arrival.items, staging, open_shared);
     if (!network->start()) {
-        log_("The items of a drag that arrived could not be requested");
+        log("The items of a drag that arrived could not be requested");
         group_.drop_finished(arrival.drag_id, OSDROP_DRAG_FAILED);
         remove_folder(staging);
         return;
@@ -417,7 +424,14 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
         return;
     }
     arrival_ = entry;
-    log_(("A drag of " + std::to_string(arrival.items.size()) + " items arrived").c_str());
+    log(("A drag of " + std::to_string(arrival.items.size()) + " items arrived").c_str());
+    const auto transfers = network->transfers();
+    for (std::size_t index = 0; index < transfers.size() && listener_.receiving; ++index) {
+        if (const std::optional<std::uint64_t>& transfer = transfers[index]; transfer.has_value()) {
+            listener_.receiving(transfer.value(), arrival.source, arrival.items[index].name,
+                                arrival.items[index].size);
+        }
+    }
     // The window the drag starts from shows before the press reaches it.
     post_after(kPressDelay, [this, entry, x = arrival.x, y = arrival.y] {
         if (arrival_ == entry && !entry->handle->cancelled()) {
@@ -427,7 +441,7 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
 }
 
 void DragBridge::arrival_ended(std::uint32_t drag_id, DragOutcome outcome) {
-    log_(describe(outcome));
+    log(describe(outcome));
     group_.drop_finished(drag_id, outcome_of(outcome)); // ignored once withdrawn
 }
 

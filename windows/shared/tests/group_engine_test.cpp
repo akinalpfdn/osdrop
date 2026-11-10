@@ -160,6 +160,10 @@ public:
     void drag_withdrawn(std::uint32_t /*drag_id*/) override {}
     void drag_ended(std::uint32_t /*drag_id*/, osdrop_drag_outcome /*outcome*/) override {}
     void drag_wanted() override {}
+    void transfer_progress(std::uint64_t /*transfer_id*/, std::uint64_t /*done*/,
+                           std::uint64_t /*total*/) override {}
+    void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/) override {}
+    void send_progress(const osdrop::win::SendUpdate& /*update*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);

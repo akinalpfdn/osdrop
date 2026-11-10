@@ -133,6 +133,8 @@ public:
     void cancel();
 
     [[nodiscard]] const std::vector<ArrivingItem>& items() const { return items_; }
+    /// Each item's transfer, once start() started it.
+    [[nodiscard]] std::vector<std::optional<std::uint64_t>> transfers();
     [[nodiscard]] std::uint64_t total_bytes() const;
     [[nodiscard]] const std::filesystem::path& staging() const { return staging_; }
 

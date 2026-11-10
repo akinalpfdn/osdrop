@@ -235,6 +235,40 @@ public:
             drag->wanted();
         }
     }
+    void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
+                           std::uint64_t total) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_PROGRESS);
+        event.connection = transfer_id;
+        event.bytes_done = done;
+        event.bytes_total = total;
+        send(event);
+    }
+    void transfer_finished(std::uint64_t transfer_id, osdrop_result result) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_FINISHED);
+        event.connection = transfer_id;
+        event.reason = result;
+        send(event);
+    }
+    void send_progress(const win::SendUpdate& update) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_PROGRESS);
+        event.connection = (std::uint64_t{update.drag_id} << 32U) | update.index;
+        std::ranges::copy(update.device, std::begin(event.device_id));
+        copy_name(update.name, event.name);
+        event.bytes_done = update.sent;
+        event.bytes_total = update.total;
+        event.code = update.state;
+        send(event);
+    }
+    /// From the drag bridge's thread: a transfer receiving an item of a drag started.
+    void receiving(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                   const std::string& name, std::uint64_t size) {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_RECEIVING);
+        event.connection = transfer_id;
+        std::ranges::copy(source, std::begin(event.device_id));
+        copy_name(name, event.name);
+        event.bytes_total = size;
+        send(event);
+    }
     /// From the input bridge's thread, before it parks the cursor for a capture.
     void parking(POINT park) {
         if (DragBridge* drag = drag_.load()) {
@@ -471,7 +505,13 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
     engine->drag = std::make_unique<DragBridge>(
         *engine->group, *engine->input,
         std::filesystem::temp_directory_path(no_temp) / L"Osdrop" / L"arriving",
-        [events](const char* message) { events->log(OSDROP_LOG_INFO, message); });
+        DragBridge::Listener{
+            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
+            .receiving =
+                [events](std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                         const std::string& name, std::uint64_t size) {
+                    events->receiving(transfer_id, source, name, size);
+                }});
     engine->events.set_drag(engine->drag.get());
     engine->clipboard.listen(
         [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
@@ -628,6 +668,22 @@ osdrop_result osdrop_engine_resume(osdrop_engine* engine) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->group->resume();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* engine, uint64_t transfer_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->cancel(transfer_id);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine, uint32_t drag_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->withdraw_drag(drag_id);
     return OSDROP_OK;
 }
 

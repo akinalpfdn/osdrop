@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -114,6 +115,17 @@ struct DragArrival {
     std::vector<drag::ArrivingItem> items;
 };
 
+/// A member fetching an item of this PC's drag (osdrop_mesh_callbacks.send_progress).
+struct SendUpdate {
+    DeviceIdBytes device{};
+    std::uint32_t drag_id = 0;
+    std::uint32_t index = 0;
+    std::string name; ///< the item's name, empty when not known
+    std::uint64_t sent = 0;
+    std::uint64_t total = 0;
+    std::uint8_t state = 1; ///< 1 sending, 2 every byte went out, 3 stopped
+};
+
 /// What the shell hears, on core's or DNS-SD's threads. Callbacks must return quickly and must
 /// not call the engine back; queue the work instead.
 class EngineEvents {
@@ -163,6 +175,12 @@ public:
     /// This PC's drag of virtual files is wanted elsewhere: take them at the edge and report
     /// them with drag_started(), or report no files.
     virtual void drag_wanted() = 0;
+    /// A transfer this PC receives moved on, or ended (clipboard ones included).
+    virtual void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
+                                   std::uint64_t total) = 0;
+    virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result) = 0;
+    /// A member fetches an item of this PC's drag.
+    virtual void send_progress(const SendUpdate& update) = 0;
 };
 
 /// What a PC can do: be controlled through the input process (DEVPLAN Phase 3), share the
@@ -248,6 +266,8 @@ public:
     void drag_promised();
     void drag_stopped();
     void drop_finished(std::uint32_t drag_id, osdrop_drag_outcome outcome);
+    /// As osdrop_mesh_withdraw for a drag: members fetching its items stop.
+    void withdraw_drag(std::uint32_t drag_id);
     // drag::DragTransfers: the items of drags that arrive.
     [[nodiscard]] std::optional<std::uint64_t>
     receive(const drag::SourceId& source, std::uint32_t drag_id, std::uint32_t index,
@@ -283,7 +303,9 @@ private:
     std::unique_ptr<ClipboardSync> clipboard_;
     std::unique_ptr<CoreClipboardMesh> clipboard_mesh_;
     drag::TransferRouter transfers_; ///< drag items' transfer events
-    DeviceIdBytes self_{};           ///< set before port_, which publishes it
+    /// The item names of this PC's latest drags, for send_progress; guarded by mutex_.
+    std::deque<std::pair<std::uint32_t, std::vector<std::string>>> drag_names_;
+    DeviceIdBytes self_{}; ///< set before port_, which publishes it
 
     mutable std::mutex mutex_;
     std::uint16_t port_ = 0;                               ///< 0 until started; guarded by mutex_
