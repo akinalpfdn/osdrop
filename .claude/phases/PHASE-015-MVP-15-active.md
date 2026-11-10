@@ -77,7 +77,7 @@ User decision: drops on the PC stream; Explorer copies while the files arrive.
    Mac <-> PC); CI.
 
 ## Status (Windows half, 2026-11-10)
-- Steps 1-5 and 7 done in code on `feature/phase-14-windows-drag` (zig mingw build and Windows
-  clang-tidy clean on the Mac). Step 6 (transfers in the PC panel) next.
+- Steps 1-7 done in code on `feature/phase-14-windows-drag`, PR #25 (zig mingw build and Windows
+  clang-tidy clean on the Mac; the shell builds there, its tests run in CI).
 - Hardware: TESTING D1-D11 in the Mac <-> PC directions; the service must be reinstalled (input
   pipe version 2).
