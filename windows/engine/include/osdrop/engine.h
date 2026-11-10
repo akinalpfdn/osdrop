@@ -194,6 +194,10 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_set_hotkeys(osdrop_engine* engine,
 /* Whether no crossing happens while an application (a game) holds the cursor in a rectangle. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_set_respects_cursor_clip(osdrop_engine* engine,
                                                                        uint8_t respects);
+/* Developer tool (debug builds of the shell): a drag dropped at one of the PC's edges comes back as
+   an Osdrop drag at the left edge of the same monitor (DEVPLAN Phase 4). Results are LOG events. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_drag_loopback(osdrop_engine* engine,
+                                                                uint8_t enabled);
 /* "Lock input here" (also toggled by the lock hotkey); INPUT_CHANGED follows. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_lock_input(osdrop_engine* engine, uint8_t locked);
 OSDROP_ENGINE_API osdrop_result osdrop_engine_get_input_state(osdrop_engine* engine,

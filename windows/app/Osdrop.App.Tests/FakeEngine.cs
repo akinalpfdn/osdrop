@@ -127,6 +127,8 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.FromResult(CoreResult.Ok);
     }
 
+    public Task<CoreResult> SetDragLoopbackAsync(bool enabled) => Task.FromResult(CoreResult.Ok);
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);

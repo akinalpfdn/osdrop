@@ -46,12 +46,22 @@ public sealed partial class PanelViewModel(
 
     public bool IsRunning => Group is not null;
 
-    internal void Started(GroupViewModel group, ControlViewModel control, SettingsViewModel settings)
+    private Func<bool, Task>? _setDragLoopback;
+
+    /// <summary>Developer tool (debug builds): the drag bridge's loopback.</summary>
+    [ObservableProperty]
+    public partial bool IsDragLoopback { get; set; }
+
+    internal void Started(
+        GroupViewModel group, ControlViewModel control, SettingsViewModel settings, Func<bool, Task> setDragLoopback)
     {
+        _setDragLoopback = setDragLoopback;
         Control = control;
         Settings = settings;
         Group = group;
     }
+
+    partial void OnIsDragLoopbackChanged(bool value) => _ = _setDragLoopback?.Invoke(value);
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void OpenSettings() => openSettings();

@@ -130,6 +130,8 @@ internal interface IGroupEngine
     /// <summary>Whether no crossing happens while a game holds the cursor on its monitor.</summary>
     Task<CoreResult> SetRespectsGameCursorAsync(bool respects);
     Task<CoreResult> LockInputAsync(bool locked);
+    /// <summary>Developer tool: a drag dropped at an edge comes back at the left edge (Phase 4).</summary>
+    Task<CoreResult> SetDragLoopbackAsync(bool enabled);
     Task<InputState> GetInputStateAsync();
     Task DismissInputNoticeAsync();
     /// <summary>Stops and starts the engine with new options (a new name); every session restarts.</summary>

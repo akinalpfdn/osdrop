@@ -546,4 +546,7 @@
   <data name="SettingsGameCursorDescription" xml:space="preserve">
     <value>İmleci kendi monitöründe tutan bir oyun onu bu PC'de de tutar. İmleci tutmayan pencereli oyunlar geçişe yine izin verir.</value>
   </data>
+  <data name="PanelDragLoopback" xml:space="preserve">
+    <value>Sürükleme döngüsü (geliştirici)</value>
+  </data>
 </root>

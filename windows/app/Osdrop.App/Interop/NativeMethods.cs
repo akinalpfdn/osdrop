@@ -113,6 +113,10 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult SetRespectsCursorClip(nint engine, byte respects);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_drag_loopback")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetDragLoopback(nint engine, byte enabled);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_lock_input")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult LockInput(nint engine, byte locked);

@@ -127,7 +127,7 @@ public partial class App : Application, IDisposable
         _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        _panelModel.Started(_group, control, _settingsModel);
+        _panelModel.Started(_group, control, _settingsModel, engine.SetDragLoopbackAsync);
         await SettingsViewModel.ApplyPointerSpeedsAsync(engine, _settings).ConfigureAwait(true);
         await _group.RefreshAsync().ConfigureAwait(true);
         await control.RefreshAsync().ConfigureAwait(true);

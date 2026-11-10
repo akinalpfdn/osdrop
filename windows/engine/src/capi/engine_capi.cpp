@@ -1,5 +1,6 @@
 #include "clipboard/win_clipboard.hpp"
 #include "discovery/dns_sd_discovery.hpp"
+#include "drag/loopback.hpp"
 #include "input/input_bridge.hpp"
 #include "screens/monitors.hpp"
 #include "store/dpapi_store.hpp"
@@ -347,12 +348,14 @@ struct osdrop_engine {
     osdrop::engine::WinClipboard clipboard;
     CallbackEvents events;
     std::unique_ptr<osdrop::engine::InputBridge> input;
+    std::unique_ptr<osdrop::engine::drag::Loopback> loopback;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
     [[nodiscard]] osdrop_result report_screens() const {
         const auto monitors = osdrop::engine::physical_monitors();
         input->set_monitors(monitors);
+        loopback->set_monitors(monitors);
         const auto report = win::screen_report(monitors);
         if (!report) {
             return report.error();
@@ -398,6 +401,8 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
         engine->events.log(OSDROP_LOG_WARNING, "The stored input settings were refused");
     }
     CallbackEvents* events = &engine->events;
+    engine->loopback = std::make_unique<osdrop::engine::drag::Loopback>(
+        [events](const char* message) { events->log(OSDROP_LOG_INFO, message); });
     engine->input = std::make_unique<osdrop::engine::InputBridge>(
         *engine->group,
         osdrop::engine::InputBridge::Listener{
@@ -657,6 +662,14 @@ osdrop_result osdrop_engine_set_respects_cursor_clip(osdrop_engine* engine, uint
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->input->set_respects_clip(respects == 1);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_set_drag_loopback(osdrop_engine* engine, uint8_t enabled) {
+    if (engine == nullptr || enabled > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->loopback->set_enabled(enabled == 1);
     return OSDROP_OK;
 }
 

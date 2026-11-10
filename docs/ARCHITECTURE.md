@@ -391,6 +391,28 @@ Built in Phase 2 (`macos/Osdrop/Services/Drag`):
   sandboxed targets, delivery of received promises). Those callbacks are nonisolated and tested
   from background queues.
 
+## Windows drag bridge
+
+Built in Phase 4 (`windows/engine/src/drag`, portable parts in `windows/shared` `drag_files`):
+
+- **Capture at an edge** — `EdgeTargets` keeps nearly transparent, topmost windows that never take
+  the focus along the monitors' outer edges (`edge_strips`), shown while the left button is down.
+  A drop is taken as a copy (the source keeps its files): CF_HDROP gives the paths; virtual files
+  (Outlook attachments, zip folders) are saved into `%TEMP%\Osdrop\drags` first, on a thread of
+  their own when the source supports IDataObjectAsyncCapability. Names that would leave the
+  staging folder are refused. Elevated sources cannot reach the targets (UIPI).
+- **Start from injected input** — `start_drag` shows a tiny window under a point on an STA
+  thread; the left button pressed there starts DoDragDrop, and the moves that follow carry the
+  drag. The data object offers a FILEGROUPDESCRIPTORW for every file and folder
+  (`virtual_files`: paths a descriptor can hold, parents first) and one stream per file
+  (`FileStream` over a `ContentSource`: reading front to back, seeking forward by reading, back
+  by starting over), so Explorer copies with its own progress. It supports
+  IDataObjectAsyncCapability and keeps its thread pumping until the target finished reading.
+  Drags up to 64 MB are also offered as CF_HDROP to copies staged on request. The drag image is
+  the first item's shell icon.
+- **Loopback** — a developer tool in Debug builds: a drag dropped at an edge comes back at the
+  left edge of the same monitor as an Osdrop drag of local files.
+
 ## Windows input process
 
 Built in Phase 3, with the PC's controller half of Phase 11. Hooking and injecting over elevated

@@ -16,6 +16,15 @@
 
 namespace osdrop::win {
 
+/// A rectangle of physical pixels in virtual screen coordinates; right and bottom are outside it.
+struct PixelRect {
+    std::int32_t left = 0;
+    std::int32_t top = 0;
+    std::int32_t right = 0;
+    std::int32_t bottom = 0;
+    bool operator==(const PixelRect&) const = default;
+};
+
 /// One monitor as Windows reports it to a per-monitor DPI aware thread.
 struct PhysicalMonitor {
     std::array<std::uint8_t, OSDROP_MONITOR_KEY_SIZE> key{};
