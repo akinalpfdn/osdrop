@@ -64,6 +64,9 @@ public:
         if (read != nullptr) {
             *read = static_cast<ULONG>(got);
         }
+        if (got < count && stream_.broken()) {
+            return STG_E_READFAULT; // not the end: the target must not keep a short file
+        }
         return got == count ? S_OK : S_FALSE;
     }
     HRESULT STDMETHODCALLTYPE Write(const void* /*buffer*/, ULONG /*count*/,

@@ -135,12 +135,14 @@ FileStream::FileStream(ContentSource& source, std::size_t entry, std::uint64_t s
 
 bool FileStream::reopen() {
     position_ = 0;
+    broken_ = false;
     reader_ = source_->open(entry_);
     return reader_ != nullptr;
 }
 
 std::size_t FileStream::read(std::span<std::uint8_t> buffer) {
     if (!reader_ && (position_ != 0 || !reopen())) {
+        broken_ = position_ < size_;
         return 0;
     }
     const auto wanted =
@@ -149,7 +151,8 @@ std::size_t FileStream::read(std::span<std::uint8_t> buffer) {
     while (done < wanted) {
         const std::size_t got = reader_->read(buffer.subspan(done, wanted - done));
         if (got == 0) {
-            break; // the content ended early or broke off
+            broken_ = true; // the content ended early or broke off
+            break;
         }
         done += got;
     }

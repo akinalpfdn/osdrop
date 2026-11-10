@@ -81,6 +81,9 @@ public:
     [[nodiscard]] bool seek(std::uint64_t offset);
     [[nodiscard]] std::uint64_t position() const { return position_; }
     [[nodiscard]] std::uint64_t size() const { return size_; }
+    /// The content ended before its size, or could not be read: a reader must not take what was
+    /// read as the whole file.
+    [[nodiscard]] bool broken() const { return broken_; }
 
 private:
     [[nodiscard]] bool reopen();
@@ -89,6 +92,7 @@ private:
     std::size_t entry_;
     std::uint64_t size_;
     std::uint64_t position_ = 0;
+    bool broken_ = false;
     std::unique_ptr<ContentReader> reader_;
 };
 
