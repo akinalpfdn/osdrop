@@ -75,3 +75,9 @@ User decision: drops on the PC stream; Explorer copies while the files arrive.
 6. Shell: transfers in the panel (progress, cancel) and notifications, as on the Mac.
 7. Announce DRAG_SOURCE and DRAG_TARGET; docs (ARCHITECTURE, DECISIONS, TESTING D rows for
    Mac <-> PC); CI.
+
+## Status (Windows half, 2026-11-10)
+- Steps 1-5 and 7 done in code on `feature/phase-14-windows-drag` (zig mingw build and Windows
+  clang-tidy clean on the Mac). Step 6 (transfers in the PC panel) next.
+- Hardware: TESTING D1-D11 in the Mac <-> PC directions; the service must be reinstalled (input
+  pipe version 2).

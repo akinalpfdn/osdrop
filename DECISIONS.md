@@ -688,3 +688,39 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The same paired group and the drag gesture Osdrop already has replace sending files through a messenger, which recompresses them. Requiring the app open keeps iOS and Android alike and avoids background services.
 **Trade-offs:** Two more apps to build and ship; a phone receives nothing while its app is closed.
 **Revisit if:** Users want the phone to receive with the app closed (Android foreground service).
+
+---
+
+## 2026-11-10 — Drops on the PC stream into Explorer as the files arrive
+**Chosen:** User decision: a drag from another computer is received at once into a staging folder, and Explorer copies each file from there while it arrives (virtual files whose streams follow the file core is writing). Core reports a received item's entries before any content (`transfer_planned`) and every chunk on disk (`entry_written`); a file's last byte waits for core's check.
+**Alternatives:** Receiving everything first and handing Explorer the finished files (no core change).
+**Why:** A 10 GB drop shows Explorer's own progress and cancel from the first byte instead of waiting for the whole download; the Phase 4 decision chose virtual files for this.
+**Trade-offs:** Each file is written twice (staging, then the destination), at the same time, so the staging volume (`%TEMP%`) needs room for the drag until the drop finished. A failed transfer leaves Explorer a read error, not a short file.
+**Revisit if:** Core gains a receive that writes into a sink the platform supplies, so the bytes go straight to the destination.
+
+---
+
+## 2026-11-10 — A hold window keeps a PC's drag while the cursor is away
+**Chosen:** When the cursor crosses with a drag of the PC, a drop target is placed at the capture's park point before the cursor is parked there; the outcome releases the left button over it (or over the edge strip, when the cursor came back first).
+**Alternatives:** Parking the cursor at the edge (captured movement toward the edge would be clipped there); not parking while a drag is carried.
+**Why:** The OLE drag follows the cursor, so the parked cursor would carry the drag to whatever window sits at the monitor's centre and drop the files there.
+**Trade-offs:** One more invisible window during such a capture.
+**Revisit if:** Captured movement no longer needs the cursor parked away from the edges.
+
+---
+
+## 2026-11-10 — The input pipe keeps a parked drag's button (version 2)
+**Chosen:** The engine sends core's releases before EndControl instead of dropping them; `HoldDrag` keeps an injected left button that core left down past EndControl, and `ReleaseDrag` releases the left button in any state. The pipe's version is 2.
+**Alternatives:** OsdropInput leaving every button down at EndControl and trusting the engine; the engine pressing the button again after the control.
+**Why:** A drag started on the PC under remote control waits at the edge with its button down while the controller carries it on; releasing everything at EndControl dropped it at the edge at once.
+**Trade-offs:** The service must be reinstalled with the shell: a version 1 OsdropInput refuses the new engine.
+**Revisit if:** Another state needs a button kept past the control.
+
+---
+
+## 2026-11-10 — Drags arriving on the PC offer paths only up to 16 MB
+**Chosen:** A drag from another computer is also offered as CF_HDROP to the received files when its items add up to 16 MB or less; an app that asks for the paths waits until everything arrived.
+**Alternatives:** The 64 MB cap of local drags; no CF_HDROP for arriving drags.
+**Why:** Explorer and other targets may read CF_HDROP while the drag only hovers over them, and then wait for the whole download; 16 MB keeps that wait short on Wi-Fi while photos, documents and most installers still reach apps that take only paths.
+**Trade-offs:** Larger drags reach only apps that take virtual files.
+**Revisit if:** Hovering over Explorer with a small arriving drag stalls noticeably, or users miss paths for larger drags.

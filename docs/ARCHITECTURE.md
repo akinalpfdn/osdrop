@@ -160,6 +160,11 @@ fetches it into a folder.
   offered to.
 - **Received files are not marked** (no quarantine attribute, no Mark of the Web), by the user's
   decision.
+- **Reading while it arrives.** Once a transfer's folders exist, the receiver reports its entries as
+  mapped for this computer (`transfer_planned`), then every chunk written to a file
+  (`entry_written`: the temporary while it grows, the file in its place once verified). The writer
+  flushes each chunk, so the platform can read a file as it arrives: the PC's drops stream into
+  Explorer this way.
 
 ## Shared clipboard
 
@@ -240,8 +245,8 @@ inject, hide the cursor and show state.
 
 ## Drag and drop across computers
 
-Built in Phase 14 for `core` and the Mac; the PC's drag bridge comes with Phase 4. The protocol
-rules are in PROTOCOL.md, "Drag messages".
+Built in Phase 14 for `core`, the Mac and the PC (on Phase 4's drag bridge). The protocol rules
+are in PROTOCOL.md, "Drag messages".
 
 - **Core** (`control/control_drag.cpp`, part of `Control`). As a source it offers each item of a
   drag on this computer to the transfers when the platform reports the drag, and answers probes
@@ -264,6 +269,8 @@ rules are in PROTOCOL.md, "Drag messages".
   thread so a staged copy asked for on the main thread cannot wait for it. A drag that moves on is
   cancelled with Escape. This Mac's own drag that waited at the edge ends over a small drop target
   at the cursor that takes it as a copy or refuses it.
+- **Windows** (`windows/engine/src/drag/drag_bridge`, portable parts in `windows/shared`
+  `network_drag`). See "Windows drag bridge" below.
 - **Progress** — the receiving side follows each transfer by its ID; the sending side gets
   `SendProgress` from core's sender for every member fetching an item, until every byte went out or
   the member stopped. The menu lists both directions with their progress and a cancel button
@@ -393,14 +400,38 @@ Built in Phase 2 (`macos/Osdrop/Services/Drag`):
 
 ## Windows drag bridge
 
-Built in Phase 4 (`windows/engine/src/drag`, portable parts in `windows/shared` `drag_files`):
+Built in Phases 4 and 14 (`windows/engine/src/drag`, portable parts in `windows/shared`
+`drag_files` and `network_drag`):
 
 - **Capture at an edge** — `EdgeTargets` keeps nearly transparent, topmost windows that never take
-  the focus along the monitors' outer edges (`edge_strips`), shown while the left button is down.
-  A drop is taken as a copy (the source keeps its files): CF_HDROP gives the paths; virtual files
+  the focus along the monitors' outer edges (`edge_strips`), shown while the left button is down
+  and a member is connected. A drag reaching one is reported with its CF_HDROP paths, or as
+  promised when it carries only virtual files; Osdrop's own drags carry a private format and are
+  left alone. How a drop is taken is decided at the drop: refused, accepted as a copy with nothing
+  read (its files went to another computer), or taken: CF_HDROP gives the paths; virtual files
   (Outlook attachments, zip folders) are saved into `%TEMP%\Osdrop\drags` first, on a thread of
   their own when the source supports IDataObjectAsyncCapability. Names that would leave the
   staging folder are refused. Elevated sources cannot reach the targets (UIPI).
+- **This PC as the source** — `DragBridge` reports the drag (`osdrop_mesh_drag_started` with each
+  file's type from its extension, so a Mac target such as Photos takes it, or
+  `osdrop_mesh_drag_promised`), and `drag_stopped` when the left button comes up anywhere else.
+  When the cursor crosses, the input bridge parks the cursor at the monitor's centre; before it
+  does, a hold window (the same drop target) is placed there, so the drag stays on Osdrop's target
+  while the input is captured. Its outcome releases the left button where the cursor is
+  (`ReleaseDrag`): a copy, a refusal, or, when another computer wants a drag of virtual files,
+  those files saved and reported. A drag started under remote control waits at the edge where the
+  controller left: the input bridge sends core's releases before EndControl and keeps a left
+  button core left down (`HoldDrag`).
+- **This PC as the target** — a drag that arrives is received at once, every item into its own
+  folder under `%TEMP%\Osdrop\arriving`, and started under the cursor with an injected press.
+  `NetworkDrag` knows the tree once core planned every item and follows each file as core writes
+  it (read through a handle that shares write, rename and delete), holding back its last byte
+  until core verified it; a failed transfer makes the stream's read fail rather than end, so
+  Explorer keeps no short file. Its outcome goes to core as soon as the drag ends; it is withdrawn
+  by cancelling it. Drags up to 16 MB are also offered as CF_HDROP to the received files (an app
+  asking for paths waits until everything arrived); those folders stay for later reads (the four
+  newest), the rest is removed once the target finished reading, and everything at the next
+  start.
 - **Start from injected input** — `start_drag` shows a tiny window under a point on an STA
   thread; the left button pressed there starts DoDragDrop, and the moves that follow carry the
   drag. The data object offers a FILEGROUPDESCRIPTORW for every file and folder
@@ -408,8 +439,9 @@ Built in Phase 4 (`windows/engine/src/drag`, portable parts in `windows/shared` 
   (`FileStream` over a `ContentSource`: reading front to back, seeking forward by reading, back
   by starting over), so Explorer copies with its own progress. It supports
   IDataObjectAsyncCapability and keeps its thread pumping until the target finished reading.
-  Drags up to 64 MB are also offered as CF_HDROP to copies staged on request. The drag image is
-  the first item's shell icon.
+  The files are described when a target first asks, so a drag whose content is still on its way
+  can start at once. Drags up to a size cap are also offered as CF_HDROP to the content's local
+  files. The drag image is the first item's shell icon.
 - **Loopback** — a developer tool in Debug builds: a drag dropped at an edge comes back at the
   left edge of the same monitor as an Osdrop drag of local files.
 
@@ -445,12 +477,13 @@ process").
   breaks. While controlled, this PC's own input is reported as LocalInput, at most every 100 ms.
 - **Input pipe** (`windows/shared/input_protocol`, portable and tested on every host). A
   message-mode pipe per session, one message per pipe message, little-endian: magic `ODPI`,
-  version u16 (1), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
+  version u16 (2), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
   (x, y i32 pixels), Press (button u8 0-4, down u8), Scroll (vertical, horizontal i32 in
   WHEEL_DELTA units), Key (scan code u16, extended u8, down u8), StartCapture (park x, y, home
   x, y), StopCapture (x, y), QueryStats, Watch (on u8), Heartbeat, SetChords (return, lock: each
   modifiers u8, scan code u16, extended u8; the defaults until a client sends them and after it
-  goes). Reports: CapturedMotion (dx,
+  goes), HoldDrag (the injected left button stays down past EndControl: a drag of this PC waits
+  for its outcome) and ReleaseDrag (releases the left button in any state). Reports: CapturedMotion (dx,
   dy i32, ticks u64), PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64,
   p50, p99, max u32 in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version,
   3 injection without control or capture), WatchedMotion (x, y, dx, dy i32, ticks u64),
@@ -459,7 +492,7 @@ process").
   most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.
   `InputSession` applies them: injection while the client controls this PC or captures its input
   (keys released here, Caps Lock), what the client pressed is released when control or capture
-  ends or the client goes, and a capture without a Heartbeat for a second ends here. Absolute
+  ends or the client goes (a held drag's button only when the client goes), and a capture without a Heartbeat for a second ends here. Absolute
   moves use SendInput's 0-65535 scale over the virtual desktop, rounded so every pixel is reached
   exactly (`absolute`).
 - **Engine** (`windows/engine/src/input`). `InputBridge` connects to the pipe (again every 2 s
