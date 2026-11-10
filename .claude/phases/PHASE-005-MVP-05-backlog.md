@@ -1,5 +1,5 @@
 # Phase 005 (MVP-05) — Windows drag bridge
-Status: ACTIVE — code on `feature/phase-04-windows-drag`; the loopback runs on the PC next (TESTING DW1–DW7)
+Status: BACKLOG — the go/no-go gate passed on the PC (2026-11-10, DW1–DW3); DW4–DW7 still to run
 
 DEVPLAN reference: Phase 4 (go/no-go gate). Depends on: Phase 3
 
@@ -18,9 +18,9 @@ On one PC, a file dragged to a screen edge is captured, and Osdrop can start a v
 - [ ] Loopback copies one file, many files, a folder tree and a 10 GB file into Explorer and onto the desktop with Explorer's progress dialog, and Explorer never stops responding.
 - [ ] Dropping into Outlook, Teams and a browser upload field works through virtual files or staged paths.
 - [ ] Drags out of Outlook attachments and zip folders are captured.
-- [ ] The elevated-source limitation is documented in `docs/TROUBLESHOOTING.md`.
-- [ ] **If a live drag cannot be captured or started from injected input, stop and document findings before any further phase.**
-- [ ] Tests — Unit (portable): descriptor building, name mapping corpus, stream read/seek logic with fake readers.
+- [x] The elevated-source limitation is documented in `docs/TROUBLESHOOTING.md`.
+- [x] **If a live drag cannot be captured or started from injected input, stop and document findings before any further phase.** Passed: captured and started.
+- [x] Tests — Unit (portable): descriptor building, name mapping corpus, stream read/seek logic with fake readers.
 - [ ] Tests — Hardware: loopback scenarios with the developer tool.
 
 ## Decisions Made This Phase
@@ -28,3 +28,6 @@ On one PC, a file dragged to a screen edge is captured, and Osdrop can start a v
 - 2026-11-09: virtual files with async capability, CF_HDROP staged up to 64 MB; strips shown while
   the left button is down. Name mapping: local names already fit; names from other computers are
   mapped by core (Phase 13's `map_name`), wired in Phase 14.
+- 2026-11-10: PC loopback (Debug, two monitors): a file, a folder and a large file reached Explorer
+  with its progress dialog, originals untouched. Strips exist only on outer desktop edges; TESTING
+  said "right edge", which is inner on this PC, and now says outer edge.

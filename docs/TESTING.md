@@ -210,12 +210,13 @@ Run with Osdrop on every computer, members of one group. The rows marked PC need
 ### Windows drag bridge (Phase 4)
 
 On the PC with a Debug build of the shell: open the panel and turn on "Drag loopback (developer)".
-A drag dropped at an outer edge of a monitor comes back at its left edge, held by Osdrop; move the
-mouse and click where it should drop. Esc cancels it.
+A drag dropped at an outer edge of the desktop (an edge with no monitor beyond it; between two
+monitors there is no strip) comes back at that monitor's left edge, held by Osdrop; move the mouse
+and click where it should drop. Esc cancels it.
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
-| DW1 | One file | Drag a file from Explorer to the right edge and let go; click inside an Explorer window | The file is copied there; the original stays where it was |
+| DW1 | One file | Drag a file from Explorer to an outer edge of the desktop and let go; click inside an Explorer window | The file is copied there; the original stays where it was |
 | DW2 | Many files and a folder | As DW1 with several files and a folder with subfolders, dropped on the desktop | Everything arrives with the same tree; Explorer shows its progress |
 | DW3 | Large file | As DW1 with a 10 GB file | Explorer's progress dialog shows; Explorer keeps responding during the copy |
 | DW4 | Apps | As DW1, dropping into a browser upload field, Teams and an Outlook message | Each one takes the file |
