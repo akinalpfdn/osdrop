@@ -39,9 +39,9 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
 ## Project-Specific Constraints
 - Production grade from the first phase: no throwaway prototypes or spikes in the codebase (user
   decision 2026-11-02). Platform risks are retired by the go/no-go phases 1–4.
-- Public repository `akinalpfdn/osdrop`. One branch per DEVPLAN phase
-  (`feature/phase-XX-<slug>`, created with `--no-track`), merged by the user through a PR after CI
-  is green. Phase files and plan docs are commits on the phase branch, never a docs-only PR.
+- Public repository `akinalpfdn/osdrop`. Day-to-day work is committed and pushed straight to
+  `dev`: no feature branches, no PRs, no CI (user decision, 2026-11-10). `dev` reaches `main`
+  through a PR when a release is prepared; CI runs there and on `main`.
 - Work is tracked only in `.claude/phases/` and `DECISIONS.md`, not in Lore.
 - Identifier prefix: `com.akinalpfdn.osdrop`. Bonjour service type `_osdrop._tcp`.
 - Code taken from Osplay is copied at a recorded commit and owned here; security fixes in either
@@ -56,13 +56,14 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
   process return error codes, never text.
 - Every visual value comes from the platform theme source.
 - Docs and READMEs use a plain tone: no emoji, no marketing headings.
-- Run `scripts/lint.sh` before committing; CI fails on formatting and lint violations.
+- Before pushing to `dev`: clang-format and the tests of what changed. `scripts/lint.sh` (with
+  clang-tidy) runs before the PR into `main`, where CI fails on formatting and lint violations.
 - Builds and checks are described in `docs/BUILDING.md` — keep it exact; it is an acceptance criterion.
 
 ## Context
 - Developer hardware: MacBook Air M3 (macOS 26) with an external monitor, a second Mac, a Windows PC
   with two monitors and a second Windows computer; tests run wired and over Wi-Fi.
-- The Mac developer verifies Windows code through CI (`windows` job) and runs hardware tests on the
-  PCs by hand.
+- Windows code is checked on the Mac with zig's mingw-w64 headers, then built and tested on the PC
+  by hand; CI's `windows` job checks it again on the PR into `main`.
 - Claude builds and relaunches the Mac app itself; signing uses the maintainer's Developer ID so TCC
   grants (Accessibility) survive rebuilds.

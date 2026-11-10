@@ -724,3 +724,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Explorer and other targets may read CF_HDROP while the drag only hovers over them, and then wait for the whole download; 16 MB keeps that wait short on Wi-Fi while photos, documents and most installers still reach apps that take only paths.
 **Trade-offs:** Larger drags reach only apps that take virtual files.
 **Revisit if:** Hovering over Explorer with a small arriving drag stalls noticeably, or users miss paths for larger drags.
+
+---
+
+## 2026-11-10 — Work goes to dev without CI; main gets it through a release PR
+**Chosen:** User decision: day-to-day work is committed straight to `dev`, with no feature branches, pull requests or CI runs. When a release is prepared, `dev` goes to `main` through a pull request, and CI runs there and on `main`.
+**Alternatives:** A branch and a PR per phase with CI on every push (each round took 15–17 minutes, 12 of them clang-tidy on Windows); faster CI (clang-tidy in parallel and only on changed files) with the PR flow kept.
+**Why:** Waiting for CI rounds slowed development more than anything else; the PC builds the Windows code itself when it is tested.
+**Trade-offs:** clang-tidy findings, MSVC-only errors and slow-runner test failures surface late, in one batch on the release PR. `dev` has no protection against a bad push.
+**Revisit if:** The release PR keeps collecting many fixes, or a second contributor joins.
