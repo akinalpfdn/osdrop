@@ -36,6 +36,12 @@ internal static class AppTunables
     public const double MinPointerSpeed = 0.25;
     public const double MaxPointerSpeed = 4.0;
 
+    /// <summary>Ended transfers the panel still shows, newest first (as on the Mac).</summary>
+    public const int TransfersEndedRows = 5;
+
+    /// <summary>Ends of transfers kept until the transfer is listed; clipboard ones never are.</summary>
+    public const int TransfersEarlyEnds = 64;
+
     /// <summary>Copied files are fetched up to this total by default (user decision, Phase 15), and the choices offered.</summary>
     public const ulong DefaultClipboardFilesLimit = 512UL * 1024 * 1024;
 

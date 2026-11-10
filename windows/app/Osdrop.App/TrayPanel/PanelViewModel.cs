@@ -4,6 +4,7 @@ using Osdrop.App.Control;
 using Osdrop.App.Group;
 using Osdrop.App.Services;
 using Osdrop.App.Settings;
+using Osdrop.App.Transfers;
 
 namespace Osdrop.App.TrayPanel;
 
@@ -37,6 +38,10 @@ public sealed partial class PanelViewModel(
     [ObservableProperty]
     public partial SettingsViewModel? Settings { get; private set; }
 
+    /// <summary>Dragged files on their way, in both directions.</summary>
+    [ObservableProperty]
+    public partial TransfersViewModel? Transfers { get; private set; }
+
     /// <summary>Why the engine did not start; null while it starts or runs.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStartFailure))]
@@ -53,9 +58,11 @@ public sealed partial class PanelViewModel(
     public partial bool IsDragLoopback { get; set; }
 
     internal void Started(
-        GroupViewModel group, ControlViewModel control, SettingsViewModel settings, Func<bool, Task> setDragLoopback)
+        GroupViewModel group, ControlViewModel control, SettingsViewModel settings, TransfersViewModel transfers,
+        Func<bool, Task> setDragLoopback)
     {
         _setDragLoopback = setDragLoopback;
+        Transfers = transfers;
         Control = control;
         Settings = settings;
         Group = group;

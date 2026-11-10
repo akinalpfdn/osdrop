@@ -116,6 +116,10 @@ internal interface IGroupEngine
     Task<CoreResult> LeaveGroupAsync();
     /// <summary>Stops fetching copied files; the clipboard keeps what it had.</summary>
     Task CancelClipboardFetchAsync();
+    /// <summary>Cancels a transfer this PC receives for a drag; what it wrote goes.</summary>
+    Task CancelTransferAsync(ulong transferId);
+    /// <summary>Withdraws this PC's drag: the computers fetching its items stop.</summary>
+    Task WithdrawDragAsync(uint dragId);
 
     Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions);
     Task<IReadOnlyList<LayoutComputer>> GetLayoutAsync();

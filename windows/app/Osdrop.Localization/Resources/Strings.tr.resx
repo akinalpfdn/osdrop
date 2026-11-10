@@ -549,4 +549,52 @@
   <data name="PanelDragLoopback" xml:space="preserve">
     <value>Sürükleme döngüsü (geliştirici)</value>
   </data>
+  <data name="TransfersTitle" xml:space="preserve">
+    <value>Aktarımlar</value>
+  </data>
+  <data name="TransfersFrom" xml:space="preserve">
+    <value>Gönderen: {0}</value>
+  </data>
+  <data name="TransfersTo" xml:space="preserve">
+    <value>Alıcı: {0}</value>
+  </data>
+  <data name="TransfersFromItem" xml:space="preserve">
+    <value>{0} (gönderen: {1})</value>
+  </data>
+  <data name="TransfersToItem" xml:space="preserve">
+    <value>{0} (alıcı: {1})</value>
+  </data>
+  <data name="TransfersBytes" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="TransfersDone" xml:space="preserve">
+    <value>Tamamlandı</value>
+  </data>
+  <data name="TransfersFailed" xml:space="preserve">
+    <value>Tamamlanamadı</value>
+  </data>
+  <data name="TransfersCancelled" xml:space="preserve">
+    <value>İptal edildi</value>
+  </data>
+  <data name="TransfersCancel" xml:space="preserve">
+    <value>Aktarımı iptal et</value>
+  </data>
+  <data name="TransfersProgress" xml:space="preserve">
+    <value>İlerleme</value>
+  </data>
+  <data name="TransfersCopiedFiles" xml:space="preserve">
+    <value>Kopyalanan dosyalar</value>
+  </data>
+  <data name="TransfersNotifyReceived" xml:space="preserve">
+    <value>Dosya alındı</value>
+  </data>
+  <data name="TransfersNotifyNotReceived" xml:space="preserve">
+    <value>Dosya alınamadı</value>
+  </data>
+  <data name="TransfersNotifySent" xml:space="preserve">
+    <value>Dosya gönderildi</value>
+  </data>
+  <data name="TransfersNotifyNotSent" xml:space="preserve">
+    <value>Gönderim durdu</value>
+  </data>
 </root>

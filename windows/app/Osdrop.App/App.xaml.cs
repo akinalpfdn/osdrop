@@ -9,6 +9,7 @@ using Osdrop.App.Group;
 using Osdrop.App.Interop;
 using Osdrop.App.Services;
 using Osdrop.App.Settings;
+using Osdrop.App.Transfers;
 using Osdrop.App.Tray;
 using Osdrop.App.TrayPanel;
 using Wpf.Ui.Appearance;
@@ -125,9 +126,11 @@ public partial class App : Application, IDisposable
         _pairingWindow = new PairingWindowPresenter(_group);
         _clipboardFetchWindow = new ClipboardFetchWindowPresenter(_group);
         _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
+        var transfers = new TransfersViewModel(
+            engine, _group.NameOf, (title, message) => _trayIcon?.ShowNotification(title, message));
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        _panelModel.Started(_group, control, _settingsModel, engine.SetDragLoopbackAsync);
+        _panelModel.Started(_group, control, _settingsModel, transfers, engine.SetDragLoopbackAsync);
         await SettingsViewModel.ApplyPointerSpeedsAsync(engine, _settings).ConfigureAwait(true);
         await _group.RefreshAsync().ConfigureAwait(true);
         await control.RefreshAsync().ConfigureAwait(true);

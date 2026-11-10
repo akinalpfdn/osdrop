@@ -549,4 +549,52 @@
   <data name="PanelDragLoopback" xml:space="preserve">
     <value>Drag loopback (developer)</value>
   </data>
+  <data name="TransfersTitle" xml:space="preserve">
+    <value>Transfers</value>
+  </data>
+  <data name="TransfersFrom" xml:space="preserve">
+    <value>From {0}</value>
+  </data>
+  <data name="TransfersTo" xml:space="preserve">
+    <value>To {0}</value>
+  </data>
+  <data name="TransfersFromItem" xml:space="preserve">
+    <value>{0} from {1}</value>
+  </data>
+  <data name="TransfersToItem" xml:space="preserve">
+    <value>{0} to {1}</value>
+  </data>
+  <data name="TransfersBytes" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="TransfersDone" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="TransfersFailed" xml:space="preserve">
+    <value>Did not finish</value>
+  </data>
+  <data name="TransfersCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="TransfersCancel" xml:space="preserve">
+    <value>Cancel transfer</value>
+  </data>
+  <data name="TransfersProgress" xml:space="preserve">
+    <value>Progress</value>
+  </data>
+  <data name="TransfersCopiedFiles" xml:space="preserve">
+    <value>Copied files</value>
+  </data>
+  <data name="TransfersNotifyReceived" xml:space="preserve">
+    <value>File received</value>
+  </data>
+  <data name="TransfersNotifyNotReceived" xml:space="preserve">
+    <value>File not received</value>
+  </data>
+  <data name="TransfersNotifySent" xml:space="preserve">
+    <value>File sent</value>
+  </data>
+  <data name="TransfersNotifyNotSent" xml:space="preserve">
+    <value>Sending stopped</value>
+  </data>
 </root>

@@ -101,6 +101,41 @@
         <TextBlock Text="{x:Static res:Strings.PanelShareClipboard}" Style="{StaticResource Osdrop.Text.Body}" />
       </ui:ToggleSwitch>
 
+      <!-- Dragged files on their way, in both directions. -->
+      <StackPanel DataContext="{Binding Transfers}"
+                  Visibility="{Binding HasRows, Converter={StaticResource Osdrop.Converter.Visible}, FallbackValue=Collapsed}">
+        <Border Style="{StaticResource Osdrop.Divider}" />
+        <TextBlock Margin="{StaticResource Osdrop.Thickness.SectionGap}" Text="{x:Static res:Strings.TransfersTitle}"
+                   Style="{StaticResource Osdrop.Text.Section}" />
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <DockPanel Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                <ui:Button DockPanel.Dock="Right" VerticalAlignment="Top" Appearance="Transparent"
+                           Command="{Binding CancelCommand}"
+                           Visibility="{Binding IsRunning, Converter={StaticResource Osdrop.Converter.Visible}}"
+                           ToolTip="{x:Static res:Strings.TransfersCancel}"
+                           AutomationProperties.Name="{x:Static res:Strings.TransfersCancel}">
+                  <ui:SymbolIcon Symbol="DismissCircle24" FontSize="{StaticResource Osdrop.FontSize.SmallIcon}" />
+                </ui:Button>
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Direction}" Style="{StaticResource Osdrop.Text.Caption}" TextWrapping="Wrap" />
+                  <StackPanel Visibility="{Binding IsRunning, Converter={StaticResource Osdrop.Converter.Visible}}">
+                    <ProgressBar Margin="{StaticResource Osdrop.Thickness.ItemGap}" Value="{Binding Percent, Mode=OneWay}"
+                                 Maximum="100" Height="{StaticResource Osdrop.Height.ProgressBar}"
+                                 AutomationProperties.Name="{x:Static res:Strings.TransfersProgress}" />
+                    <TextBlock Text="{Binding Progress}" Style="{StaticResource Osdrop.Text.Caption}" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding Status}" Style="{StaticResource Osdrop.Text.Caption}"
+                             Visibility="{Binding IsRunning, Converter={StaticResource Osdrop.Converter.Hidden}}" />
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
       <StackPanel DataContext="{Binding Group}" Visibility="{Binding Converter={StaticResource Osdrop.Converter.NotNull}}">
         <!-- Copied files on their way from another computer. -->
         <StackPanel DataContext="{Binding ClipboardFetch}"

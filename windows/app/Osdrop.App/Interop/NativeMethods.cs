@@ -72,6 +72,14 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult CloseAll(nint engine, byte sleeping);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_cancel_transfer")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult CancelTransfer(nint engine, ulong transferId);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_withdraw_drag")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult WithdrawDrag(nint engine, uint dragId);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_cancel_clipboard_fetch")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult CancelClipboardFetch(nint engine);

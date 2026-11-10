@@ -331,8 +331,10 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
 - **Tray icon and panel.** The icon is the Mac menu bar glyph, dark or light to match the taskbar,
   filled while another computer controls this PC (`TrayIconTheme`). A click opens the panel above
   the taskbar, the Mac menu's counterpart: where the mouse and keyboard are, the lock and
-  clipboard sharing, copied files on their way, the group and nearby computers, and Settings and
-  Quit as icons. Problems come first: an engine that did not start, the input service, an update.
+  clipboard sharing, dragged files on their way in both directions (progress, cancel, the five
+  newest that ended, a notification when one ends; `TransfersViewModel`, from the engine's
+  TRANSFER_* and SEND_PROGRESS events), copied files on their way, the group and nearby
+  computers, and Settings and Quit as icons. Problems come first: an engine that did not start, the input service, an update.
   A second start of Osdrop opens the running one's panel (`SingleInstance`).
 - **Settings.** The Mac's tabs: General (start with Windows through the Run key, daily update
   check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
