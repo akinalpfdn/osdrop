@@ -36,6 +36,13 @@ struct FakeDevice final : input::InputDevice {
     void key(ScanCode scan, bool down) override {
         calls.push_back("key " + std::to_string(scan.code) + (down ? " down" : " up"));
     }
+    bool press_held_left() override {
+        if (left_held) {
+            calls.push_back("drag press");
+        }
+        return left_held;
+    }
+    bool left_held = false; ///< this PC's own left button
     void start_capture(std::int32_t x, std::int32_t y) override {
         calls.push_back("capture " + std::to_string(x) + "," + std::to_string(y));
     }
@@ -139,6 +146,37 @@ TEST_F(InputSessionTest, AClientThatGoesReleasesAHeldDrag) {
     send(input::Press{.button = input::Button::Left, .down = true});
     send(input::HoldDrag{});
     send(input::EndControl{});
+    device.calls.clear();
+    session.reset();
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
+}
+
+TEST_F(InputSessionTest, ADragThatCameHomeIsPressedOnlyWhileThisPcsLeftButtonIsHeld) {
+    const auto refused = send(input::PressForDrag{});
+    ASSERT_TRUE(refused.has_value()) << "the hand let go: nothing would release it";
+    EXPECT_EQ(std::get<input::Rejected>(*refused).reason, input::Refusal::NotHeld);
+    EXPECT_TRUE(device.calls.empty());
+    EXPECT_EQ(log.warnings.size(), 1U);
+
+    device.left_held = true;
+    EXPECT_FALSE(send(input::PressForDrag{}).has_value())
+        << "neither control nor capture is needed";
+    EXPECT_EQ(device.calls, std::vector<std::string>{"drag press"});
+}
+
+TEST_F(InputSessionTest, TheHandsReleaseEndsADragThatCameHome) {
+    device.left_held = true;
+    send(input::PressForDrag{});
+    session.forwarding(input::PhysicalPress{.button = input::Button::Left, .down = false});
+    device.calls.clear();
+    session.reset();
+    EXPECT_TRUE(device.calls.empty()) << "already released by the hand";
+}
+
+TEST_F(InputSessionTest, AClientThatGoesReleasesADragThatCameHome) {
+    device.left_held = true;
+    send(input::PressForDrag{});
+    session.forwarding(input::PhysicalPress{.button = input::Button::Right, .down = false});
     device.calls.clear();
     session.reset();
     EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});

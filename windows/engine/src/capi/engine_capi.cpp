@@ -275,6 +275,12 @@ public:
             drag->parking(park);
         }
     }
+    /// From the input bridge's threads: a drag that came home could not be pressed here.
+    void drag_unpressed() {
+        if (DragBridge* drag = drag_.load()) {
+            drag->unpressed();
+        }
+    }
     /// From the input bridge's threads.
     void input_reachable(bool reachable) {
         change_input(
@@ -492,7 +498,8 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
             .reachable = [events](bool reachable) { events->input_reachable(reachable); },
             .locked = [events](bool locked) { events->input_locked(locked); },
             .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
-            .parking = [events](POINT park) { events->parking(park); }});
+            .parking = [events](POINT park) { events->parking(park); },
+            .drag_unpressed = [events] { events->drag_unpressed(); }});
     engine->input->set_respects_clip(config->respects_cursor_clip == 1);
     if (const auto chords = chords_of(config->return_hotkey, config->lock_hotkey)) {
         engine->input->set_chords(chords->first, chords->second);

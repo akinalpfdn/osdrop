@@ -43,6 +43,9 @@ public:
         std::function<void(const char* message)> log;  ///< a line for the shell's log
         /// Before the cursor is parked at `park` for a capture; returns once ready for it.
         std::function<void(POINT park)> parking;
+        /// A drag that came home could not be pressed here: the hand let go first, or
+        /// OsdropInput cannot be reached.
+        std::function<void()> drag_unpressed;
     };
 
     InputBridge(win::GroupEngine& group, Listener listener);
@@ -76,6 +79,11 @@ public:
     /// Releases the left button where the cursor is, in any state: this PC's drag that waits at
     /// the edge for its outcome ends there (DEVPLAN Phase 14). Any thread.
     void release_drag();
+    /// The press that starts a drag arriving here (DEVPLAN Phase 14). While another computer
+    /// controls this PC it is injected like the controller's input; otherwise the drag came home
+    /// with this PC's own hand, and OsdropInput presses it only while that hand holds the button.
+    /// Any thread.
+    void press_for_drag(const osdrop_input& press);
 
     /// Ends the bridge's thread; what arrives later is dropped. Before the group engine goes.
     void stop();
@@ -95,6 +103,7 @@ private:
         bool watching = false;
         Chords chords;
         bool release_drag = false;
+        bool drag_press = false; ///< also among `inputs`
         bool stopping = false;
     };
 
@@ -131,6 +140,7 @@ private:
     Chords chords_wanted_;
     bool chords_changed_ = false;
     bool release_drag_ = false;
+    bool drag_press_ = false;
     bool stopping_ = false;
 
     // The forwarder turns reports into core's input on the reader thread; captures move it.

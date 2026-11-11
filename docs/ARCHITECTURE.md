@@ -425,7 +425,12 @@ Built in Phases 4 and 14 (`windows/engine/src/drag`, portable parts in `windows/
   controller left: the input bridge sends core's releases before EndControl and keeps a left
   button core left down (`HoldDrag`).
 - **This PC as the target** — a drag that arrives is received at once, every item into its own
-  folder under `%TEMP%\Osdrop\arriving`, and started under the cursor with an injected press.
+  folder under `%TEMP%\Osdrop\arriving`, and started under the cursor with an injected press:
+  under remote control the controller's, and for a drag that came home with this PC's own hand
+  (its press went to the other computer during the capture) `PressForDrag`, which OsdropInput
+  carries out only while that hand still holds the button. That press goes where the hand has
+  moved the cursor by then, so the drag's window covers the whole desktop for the few
+  milliseconds until it comes; a press refused because the hand let go ends the drag at once.
   `NetworkDrag` knows the tree once core planned every item and follows each file as core writes
   it (read through a handle that shares write, rename and delete), holding back its last byte
   until core verified it; a failed transfer makes the stream's read fail rather than end, so
@@ -479,17 +484,20 @@ process").
   breaks. While controlled, this PC's own input is reported as LocalInput, at most every 100 ms.
 - **Input pipe** (`windows/shared/input_protocol`, portable and tested on every host). A
   message-mode pipe per session, one message per pipe message, little-endian: magic `ODPI`,
-  version u16 (2), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
+  version u16 (3), type u16, body length u32, body. Requests: BeginControl, EndControl, Move
   (x, y i32 pixels), Press (button u8 0-4, down u8), Scroll (vertical, horizontal i32 in
   WHEEL_DELTA units), Key (scan code u16, extended u8, down u8), StartCapture (park x, y, home
   x, y), StopCapture (x, y), QueryStats, Watch (on u8), Heartbeat, SetChords (return, lock: each
   modifiers u8, scan code u16, extended u8; the defaults until a client sends them and after it
   goes), HoldDrag (the injected left button stays down past EndControl: a drag of this PC waits
-  for its outcome) and ReleaseDrag (releases the left button in any state). Reports: CapturedMotion (dx,
-  dy i32, ticks u64), PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64,
-  p50, p99, max u32 in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version,
-  3 injection without control or capture), WatchedMotion (x, y, dx, dy i32, ticks u64),
-  HotkeyPressed (u8: 1 return, 2 lock) and Released (u8: 1 return chord, 2 no heartbeat). Ticks
+  for its outcome), ReleaseDrag (releases the left button in any state) and PressForDrag (the
+  left button down where the cursor is, in any state, but only while this PC's own left
+  button is held, as the hook last saw it; a drag that came home with this PC's own hand starts
+  with it, and the hand's release ends it). Reports: CapturedMotion (dx, dy i32, ticks u64),
+  PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64, p50, p99, max u32
+  in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version, 3 injection without
+  control or capture, 4 PressForDrag while the left button is up), WatchedMotion (x, y, dx, dy
+  i32, ticks u64), HotkeyPressed (u8: 1 return, 2 lock) and Released (u8: 1 return chord, 2 no heartbeat). Ticks
   are QueryPerformanceCounter values, so the engine knows how old an input is. Positions are at
   most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.
   `InputSession` applies them: injection while the client controls this PC or captures its input

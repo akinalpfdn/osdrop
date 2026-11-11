@@ -23,8 +23,6 @@ namespace shared = win::drag;
 
 /// How thick the drop targets along the edges are, in physical pixels.
 constexpr std::int32_t kStripThickness = 6;
-/// The window an arriving drag starts from shows this long before the press reaches it.
-constexpr auto kPressDelay = std::chrono::milliseconds(150);
 /// A wanted drag's drop must reach the targets this soon after its button is released.
 constexpr auto kTakeTimeout = std::chrono::seconds(3);
 /// Arriving drags up to this size are also offered as paths, received in full before an app that
@@ -412,7 +410,16 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
                                 .y = win::Injection::pixel(arrival.y)},
                     .items = arrival.items,
                     .content = std::make_shared<NetworkContent>(network, entry->paths_given),
-                    .staged_limit = kStagedLimit},
+                    .staged_limit = kStagedLimit,
+                    .shown =
+                        [this, entry, x = arrival.x, y = arrival.y] {
+                            post([this, entry, x, y] {
+                                if (arrival_ == entry && !entry->handle->cancelled()) {
+                                    input_.press_for_drag(left_press(x, y));
+                                }
+                            });
+                        },
+                    .covers_desktop = true},
         [this, drag_id](DragOutcome outcome) {
             post([this, drag_id, outcome] { arrival_ended(drag_id, outcome); });
         },
@@ -432,10 +439,12 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
                                 arrival.items[index].size);
         }
     }
-    // The window the drag starts from shows before the press reaches it.
-    post_after(kPressDelay, [this, entry, x = arrival.x, y = arrival.y] {
-        if (arrival_ == entry && !entry->handle->cancelled()) {
-            input_.inject(left_press(x, y));
+}
+
+void DragBridge::unpressed() {
+    post([this] {
+        if (arrival_) {
+            arrival_->handle->cancel();
         }
     });
 }

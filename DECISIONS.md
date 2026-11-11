@@ -733,3 +733,21 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Waiting for CI rounds slowed development more than anything else; the PC builds the Windows code itself when it is tested.
 **Trade-offs:** clang-tidy findings, MSVC-only errors and slow-runner test failures surface late, in one batch on the release PR. `dev` has no protection against a bad push.
 **Revisit if:** The release PR keeps collecting many fixes, or a second contributor joins.
+
+---
+
+## 2026-11-11 — A drag that comes home to the PC is pressed by OsdropInput while the hand holds it (input pipe version 3)
+**Chosen:** User decision: when the PC's own mouse carries a drag from another computer back to the PC, the engine sends `PressForDrag` (x, y), and OsdropInput moves the cursor there and presses the left button only while the hook last saw the PC's own left button down; the hand's release then ends the drag. If the button was let go between the check and the press, the press is undone. Rejected with NotHeld otherwise. The pipe's version is 3.
+**Alternatives:** SendInput from Osdrop.exe itself (no protocol change, but injection outside the input process and a left button left down if the hand lets go first); allowing a plain Press outside control and capture.
+**Why:** Such a drag arrives with the PC neither controlled nor capturing (the capture just ended), so the press that starts it was refused twice, by the engine's bridge and by OsdropInput, and the drag ended as "did not start" (hardware test 2026-11-10). Tying the press to the physical button keeps the invariant that nothing Osdrop presses stays down.
+**Trade-offs:** The service must be reinstalled with the shell again. A release already queued but not yet seen by the hook when the press is made can still leave the button down until the next click.
+**Revisit if:** A drag that comes home stays stuck or fails to start in hardware tests.
+
+---
+
+## 2026-11-11 — The window a drag that comes home starts from covers the desktop
+**Chosen:** User decision: for a drag that arrives from another computer, the starter window covers the whole virtual desktop (alpha 1, topmost) instead of 16 px around the arrival point, and `PressForDrag` carries no point: OsdropInput presses where the cursor is. A press refused (NotHeld) or not sent cancels the drag at once, so no later click starts it.
+**Alternatives:** Moving the cursor back to the arrival point in the same SendInput as the press (the previous entry); a small window moved under the cursor before the press.
+**Why:** Measured on hardware: the drag started in 1 of 5 attempts, exactly when the cursor was still on the 16 px window at the press. The hand moves the mouse 28–160 px within the ~15 ms before the press, and the move back in the same SendInput did not bring the press onto the window. A window that covers the desktop takes the press wherever the cursor is, and the cursor does not jump back to the edge.
+**Trade-offs:** For those milliseconds every click on the PC goes to Osdrop's window. Why the move back did not work is not known.
+**Revisit if:** Clicks right after a drag arrives go missing, or a multi-monitor setup with mixed scaling shows the covering window wrong.

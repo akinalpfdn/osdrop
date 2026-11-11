@@ -1,14 +1,15 @@
 #pragma once
 
-// Starting a drag on the PC from injected input (DEVPLAN Phases 4 and 14). A small, nearly
-// invisible window waits under a point; the left button pressed there (by the user's hand or
-// injected) starts DoDragDrop on the window's own STA thread, and the moves that follow carry the
-// drag to the drop. The data object offers the files as virtual files: a FILEGROUPDESCRIPTORW for
-// every file and folder, and a stream per file read through the drag's content, so Explorer copies
-// them with its own progress and never waits on Osdrop's thread (IDataObjectAsyncCapability).
-// The content may still be on its way (a drag from another computer): the files are described
-// when a target first asks, and a stream reads a file as it arrives. Drags up to a size cap are
-// also offered as CF_HDROP to the content's local files, for apps that take no virtual files.
+// Starting a drag on the PC from injected input (DEVPLAN Phases 4 and 14). A nearly invisible
+// window waits under a point, or over the whole desktop; the left button pressed there (by the
+// user's hand or injected) starts DoDragDrop on the window's own STA thread, and the moves that
+// follow carry the drag to the drop. The data object offers the files as virtual files: a
+// FILEGROUPDESCRIPTORW for every file and folder, and a stream per file read through the drag's
+// content, so Explorer copies them with its own progress and never waits on Osdrop's thread
+// (IDataObjectAsyncCapability). The content may still be on its way (a drag from another computer):
+// the files are described when a target first asks, and a stream reads a file as it arrives. Drags
+// up to a size cap are also offered as CF_HDROP to the content's local files, for apps that take no
+// virtual files.
 
 #include <osdrop/win/drag_files.hpp>
 #include <osdrop/win/network_drag.hpp>
@@ -50,6 +51,13 @@ struct DragRequest {
     std::vector<win::drag::ArrivingItem> items;
     std::shared_ptr<DragContent> content;
     std::uint64_t staged_limit = 64ULL * 1024 * 1024; ///< CF_HDROP only up to this total
+    /// On the drag's thread once the window waits, shown: an injected press goes out only then,
+    /// or it reaches whatever lies under the cursor and drags that instead.
+    std::function<void()> shown;
+    /// The window covers the whole desktop instead of a few pixels around `at`, so a press lands
+    /// on it wherever the cursor is by then: a hand that holds a drag keeps moving the mouse
+    /// meanwhile. The press must follow `shown` at once, since every click goes to it.
+    bool covers_desktop = false;
 };
 
 /// A drag that was started; cancel() ends it without a drop, before or after the press.

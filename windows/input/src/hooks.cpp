@@ -153,6 +153,10 @@ bool Hooks::mouse(WPARAM message, const MSLLHOOKSTRUCT& event, std::int64_t tick
     if (injected_by_osdrop(event.flags, LLMHF_INJECTED, event.dwExtraInfo)) {
         return false;
     }
+    if ((event.flags & LLMHF_INJECTED) == 0 &&
+        (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP)) {
+        left_held_ = message == WM_LBUTTONDOWN; // before Windows acts on it
+    }
     if (capturing_.load(std::memory_order_relaxed)) {
         report(message, event, ticks, true);
         return true;

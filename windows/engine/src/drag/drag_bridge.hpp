@@ -87,6 +87,9 @@ public:
     /// From the input bridge's thread, before it parks the cursor for a capture: a drag of this
     /// PC that the cursor carries away gets the hold window there first.
     void parking(POINT park);
+    /// From the input bridge's threads: the press of a drag that came home did not happen (the
+    /// hand let go first), so the drag waiting for it ends now, before a later click starts it.
+    void unpressed();
 
     /// Ends the bridge's thread and every drag. Before the group engine and the input bridge go.
     void stop();

@@ -23,6 +23,7 @@ enum class Type : std::uint8_t {
     SetChords = 12,
     HoldDrag = 13,
     ReleaseDrag = 14,
+    PressForDrag = 15,
     CapturedMotion = 101,
     PhysicalPress = 102,
     PhysicalScroll = 103,
@@ -297,7 +298,7 @@ Field<Rejected> read_rejected(Reader& r) {
         return Field<Rejected>::failure(DecodeError::Truncated);
     }
     if (*reason < static_cast<std::uint16_t>(Refusal::Malformed) ||
-        *reason > static_cast<std::uint16_t>(Refusal::NotControlling)) {
+        *reason > static_cast<std::uint16_t>(Refusal::NotHeld)) {
         return Field<Rejected>::failure(DecodeError::ValueOutOfRange);
     }
     return Rejected{.type = *type, .reason = static_cast<Refusal>(*reason)};
@@ -400,6 +401,7 @@ Bytes encode(const Request& request) {
                                      },
                                      [](const HoldDrag&) { return Type::HoldDrag; },
                                      [](const ReleaseDrag&) { return Type::ReleaseDrag; },
+                                     [](const PressForDrag&) { return Type::PressForDrag; },
                                  },
                                  request);
     return w.message(type);
@@ -477,6 +479,8 @@ Expected<Request, DecodeError> decode_request(std::span<const std::uint8_t> mess
         return empty<Request, HoldDrag>(bytes);
     case Type::ReleaseDrag:
         return empty<Request, ReleaseDrag>(bytes);
+    case Type::PressForDrag:
+        return empty<Request, PressForDrag>(bytes);
     case Type::SetChords:
         return body<Request, SetChords>(bytes, read_set_chords);
     case Type::Watch:
@@ -605,13 +609,14 @@ std::uint16_t type_of(const Request& request) {
                                      [](const SetChords&) { return Type::SetChords; },
                                      [](const HoldDrag&) { return Type::HoldDrag; },
                                      [](const ReleaseDrag&) { return Type::ReleaseDrag; },
+                                     [](const PressForDrag&) { return Type::PressForDrag; },
                                  },
                                  request);
     return static_cast<std::uint16_t>(type);
 }
 
 std::string_view type_name(std::uint16_t type) {
-    static constexpr std::array<std::pair<Type, std::string_view>, 24> kNames{{
+    static constexpr std::array<std::pair<Type, std::string_view>, 25> kNames{{
         {Type::BeginControl, "BeginControl"},
         {Type::EndControl, "EndControl"},
         {Type::Move, "Move"},
@@ -626,6 +631,7 @@ std::string_view type_name(std::uint16_t type) {
         {Type::SetChords, "SetChords"},
         {Type::HoldDrag, "HoldDrag"},
         {Type::ReleaseDrag, "ReleaseDrag"},
+        {Type::PressForDrag, "PressForDrag"},
         {Type::CapturedMotion, "CapturedMotion"},
         {Type::PhysicalPress, "PhysicalPress"},
         {Type::PhysicalScroll, "PhysicalScroll"},

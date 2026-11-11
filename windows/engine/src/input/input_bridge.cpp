@@ -136,6 +136,16 @@ void InputBridge::inject(const osdrop_input& input) {
     wake_.notify_one();
 }
 
+void InputBridge::press_for_drag(const osdrop_input& press) {
+    const std::scoped_lock lock(mutex_);
+    if (stopping_) {
+        return;
+    }
+    pending_.push_back(press); // in order with the controller's input, while controlled
+    drag_press_ = true;
+    wake_.notify_one();
+}
+
 void InputBridge::capture_began(const std::vector<osdrop_input>& release_here) {
     capturing_ = true; // the reader thread's input is captured input from now on
     const std::scoped_lock lock(mutex_);
@@ -221,6 +231,7 @@ InputBridge::Work InputBridge::take_work() {
               .watching = watching_wanted_,
               .chords = chords_wanted_,
               .release_drag = std::exchange(release_drag_, false),
+              .drag_press = std::exchange(drag_press_, false),
               .stopping = stopping_};
     pending_.clear();
     return work;
@@ -286,6 +297,11 @@ void InputBridge::apply(const Work& work) {
     }
     if (client_ && controlled_ && !ending) {
         send_all(work.inputs);
+    } else if (!controlled_ && work.drag_press) {
+        // The drag came home with this PC's own hand, whose press went to the other computer.
+        if ((!client_ || !client_->send(protocol::PressForDrag{})) && listener_.drag_unpressed) {
+            listener_.drag_unpressed();
+        }
     }
     if (work.release_drag && client_) {
         left_down_ = false;
@@ -472,6 +488,16 @@ void InputBridge::received(const protocol::Report& report) {
     if (const auto* released = std::get_if<protocol::Released>(&report)) {
         // OsdropInput gave the input back already; core brings the cursor home.
         group_.return_home(released->reason == protocol::ReleaseReason::Watchdog);
+        return;
+    }
+    if (const auto* rejected = std::get_if<protocol::Rejected>(&report);
+        rejected != nullptr && rejected->reason == protocol::Refusal::NotHeld) {
+        if (listener_.log) {
+            listener_.log("A drag that came home was let go before it could start here");
+        }
+        if (listener_.drag_unpressed) {
+            listener_.drag_unpressed();
+        }
         return;
     }
     std::optional<win::Forwarded> forwarded;

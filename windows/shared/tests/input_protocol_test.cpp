@@ -32,6 +32,7 @@ TEST(InputProtocol, EveryRequestRoundTrips) {
         input::Heartbeat{},
         input::HoldDrag{},
         input::ReleaseDrag{},
+        input::PressForDrag{},
         input::SetChords{},
         input::SetChords{.return_home = {.key = kRightArrow, .modifiers = input::kControl},
                          .lock_input = {.key = kA, .modifiers = input::kAlt | input::kShift}},
@@ -56,6 +57,7 @@ TEST(InputProtocol, EveryReportRoundTrips) {
         input::LocalInput{},
         input::Stats{.events = 1ULL << 40U, .p50_us = 4, .p99_us = 90, .max_us = 2'000},
         input::Rejected{.type = 3, .reason = input::Refusal::NotControlling},
+        input::Rejected{.type = 15, .reason = input::Refusal::NotHeld},
         input::HotkeyPressed{.hotkey = input::Hotkey::LockInput},
         input::Released{.reason = input::ReleaseReason::Watchdog},
     };

@@ -627,18 +627,32 @@ void run_drag(Starter& starter) {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): COM object, owned by the ComPtr
     starter.data = ComPtr<DataObject>(new DataObject(starter.request, GetCurrentThreadId()));
     set_drag_image(starter.data.get(), starter.request.items);
+    const RECT area = starter.request.covers_desktop
+                          ? RECT{.left = GetSystemMetrics(SM_XVIRTUALSCREEN),
+                                 .top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+                                 .right = GetSystemMetrics(SM_XVIRTUALSCREEN) +
+                                          GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                                 .bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) +
+                                           GetSystemMetrics(SM_CYVIRTUALSCREEN)}
+                          : RECT{.left = starter.request.at.x - kHalfSize,
+                                 .top = starter.request.at.y - kHalfSize,
+                                 .right = starter.request.at.x + kHalfSize,
+                                 .bottom = starter.request.at.y + kHalfSize};
     HWND window =
         starter.handle->cancelled()
             ? nullptr
             : CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                              kClassName, L"", WS_POPUP, starter.request.at.x - kHalfSize,
-                              starter.request.at.y - kHalfSize, 2 * kHalfSize, 2 * kHalfSize,
-                              nullptr, nullptr, GetModuleHandleW(nullptr), &starter);
+                              kClassName, L"", WS_POPUP, area.left, area.top,
+                              area.right - area.left, area.bottom - area.top, nullptr, nullptr,
+                              GetModuleHandleW(nullptr), &starter);
     if (window != nullptr) {
         SetLayeredWindowAttributes(window, 0, kAlpha, LWA_ALPHA);
         SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         SetTimer(window, kPressTimer, kPressTimeoutMilliseconds, nullptr);
+        if (starter.request.shown) {
+            starter.request.shown();
+        }
         while (GetMessageW(&message, nullptr, 0, 0) > 0) {
             if (message.hwnd == nullptr && message.message == kCancelMessage) {
                 PostQuitMessage(0); // cancelled before the press: the drag never starts

@@ -21,7 +21,7 @@
 namespace osdrop::win::input {
 
 inline constexpr std::uint32_t kMagic = 0x4950'444F; // "ODPI" as little-endian bytes
-inline constexpr std::uint16_t kVersion = 2;
+inline constexpr std::uint16_t kVersion = 3;
 inline constexpr std::size_t kHeaderSize = 12;
 inline constexpr std::size_t kMaxMessageSize = 64;
 /// Virtual-desktop pixels, either sign.
@@ -117,10 +117,18 @@ struct HoldDrag {
 struct ReleaseDrag {
     bool operator==(const ReleaseDrag&) const = default;
 };
+/// A drag that came home with this PC's own hand starts here: the left button goes down where the
+/// cursor is, in any state, but only while this PC's own left button is held, so its release ends
+/// the drag (Rejected NotHeld otherwise). The hand pressed the button during the capture, where the
+/// press went to the other computer and not to this PC (DEVPLAN Phase 14). The cursor stays where
+/// the hand moved it: the engine's window that starts the drag covers the desktop.
+struct PressForDrag {
+    bool operator==(const PressForDrag&) const = default;
+};
 
 using Request =
     std::variant<BeginControl, EndControl, Move, Press, Scroll, Key, StartCapture, StopCapture,
-                 QueryStats, Watch, Heartbeat, SetChords, HoldDrag, ReleaseDrag>;
+                 QueryStats, Watch, Heartbeat, SetChords, HoldDrag, ReleaseDrag, PressForDrag>;
 
 /// How often a capturing client sends Heartbeat, and how long OsdropInput waits for one.
 inline constexpr std::chrono::milliseconds kHeartbeatInterval{250};
@@ -179,6 +187,7 @@ enum class Refusal : std::uint8_t {
     Malformed = 1,          ///< the message could not be decoded
     UnsupportedVersion = 2, ///< another version of the protocol
     NotControlling = 3,     ///< injection while the client neither controls nor captures
+    NotHeld = 4,            ///< PressForDrag while this PC's own left button is up
 };
 
 /// A request was not carried out; OsdropInput logs it too.

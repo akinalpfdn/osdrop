@@ -1,9 +1,10 @@
 #pragma once
 
 // OsdropInput's side of one pipe client (DEVPLAN Phases 3 and 11): requests are checked and
-// carried out, injection only while the client controls this PC or captures its input, and
-// whatever it pressed is released when control or capture ends or the client goes, so no key or
-// button stays down. A capture lasts only while the client confirms it, and the return chord ends
+// carried out, injection only while the client controls this PC or captures its input (and a
+// drag's press only while this PC's own left button holds it), and whatever it pressed is
+// released when control or capture ends or the client goes, so no key or button stays down. A
+// capture lasts only while the client confirms it, and the return chord ends
 // it here whatever the client does. Portable, so the rules are tested on every host; the Windows
 // process supplies the device, the log and the clock.
 
@@ -26,6 +27,9 @@ public:
     virtual void press(Button button, bool down) = 0;
     virtual void scroll(std::int32_t vertical, std::int32_t horizontal) = 0;
     virtual void key(ScanCode scan, bool down) = 0;
+    /// If this PC's own left button is held now, the left button goes down where the cursor is;
+    /// false, with nothing left down, when it is up or was let go meanwhile.
+    [[nodiscard]] virtual bool press_held_left() = 0;
     virtual void start_capture(std::int32_t park_x, std::int32_t park_y) = 0;
     /// Also when the capture already ended here (Released): the cursor goes to (x, y).
     virtual void stop_capture(std::int32_t x, std::int32_t y) = 0;
@@ -63,14 +67,16 @@ public:
     /// Handles one pipe message; returns a report to send back (Stats, Rejected) when there is one.
     [[nodiscard]] std::optional<Report> handle(std::span<const std::uint8_t> message,
                                                Clock::time_point now);
-    /// A report from the hooks, on its way to the client: the return chord ends the capture here.
+    /// A report from the hooks, on its way to the client: the return chord ends the capture here,
+    /// and the release of this PC's left button ends a drag that came home.
     void forwarding(const Report& report);
     /// When the capture ends unless a Heartbeat comes first; nullopt while nothing is captured.
     [[nodiscard]] std::optional<Clock::time_point> deadline() const;
     /// Past the deadline the capture ends here; the Released to send the client.
     [[nodiscard]] std::optional<Report> expire(Clock::time_point now);
     /// The client is gone: capture ends where the cursor left, what it pressed is released (a
-    /// held drag's left button too), and this PC's input is no longer watched.
+    /// held drag's left button too, and one pressed for a drag that came home), and this PC's
+    /// input is no longer watched.
     void reset();
 
     [[nodiscard]] bool controlling() const { return controlling_; }
@@ -96,6 +102,7 @@ private:
     std::optional<Report> set_chords(const SetChords& chords);
     std::optional<Report> hold_drag();
     std::optional<Report> release_drag();
+    std::optional<Report> press_for_drag(const PressForDrag& press);
     /// Ends a capture that is still on here; whether there was one.
     bool end_capture_here();
     std::optional<Report> refuse(std::uint16_t type, Refusal reason, std::string_view why);
@@ -110,6 +117,8 @@ private:
     std::set<ScanCode> keys_down_;
     std::set<Button> buttons_down_;
     bool drag_held_ = false; ///< the left button stays down past the control (HoldDrag)
+    /// Pressed for a drag that came home (PressForDrag); this PC's own release ends it.
+    bool drag_pressed_ = false;
 };
 
 } // namespace osdrop::win::input
