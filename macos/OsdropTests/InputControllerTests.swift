@@ -168,7 +168,7 @@ struct InputControllerTests {
             ])
         mesh.send(.controlled(by: nil))
         try await waitUntil { controller.controller == nil }
-        #expect(injector.calls.last == .releaseAll)
+        #expect(injector.calls.last == .releaseAllButDrag)
         controller.stop()
     }
 

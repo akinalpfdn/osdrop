@@ -112,13 +112,21 @@ final class CGEventInjector: InputInjecting {
     }
 
     func releaseAll() {
+        release(keepingLeft: false)
+    }
+
+    func releaseAllButDrag() {
+        release(keepingLeft: true)
+    }
+
+    private func release(keepingLeft: Bool) {
         for key in heldKeys.reversed() {
             self.key(key, .up)
         }
         for entry in ModifierKeys.entries where modifiers.contains(entry.state) {
             self.key(.keyboard(entry.usage), .up)
         }
-        for button in heldButtons.reversed() {
+        for button in heldButtons.reversed() where !(keepingLeft && button == .left) {
             self.button(button, isDown: false, at: cursorLocation)
         }
         clickCounter.reset()

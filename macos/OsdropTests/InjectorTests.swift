@@ -94,6 +94,21 @@ struct InjectorTests {
         #expect(poster.events.isEmpty)
     }
 
+    @Test("At the end of a control, a left button core left down holds a drag and stays down")
+    func releaseAllButDrag() throws {
+        injector.key(.keyboard(0x04), .down)
+        injector.button(.left, isDown: true, at: CGPoint(x: 100, y: 100))
+        injector.button(.right, isDown: true, at: CGPoint(x: 100, y: 100))
+        poster.clear()
+
+        injector.releaseAllButDrag()
+        #expect(poster.events.map(\.type) == [.keyUp, .rightMouseUp])
+
+        poster.clear()
+        injector.releaseDrag(at: CGPoint(x: 100, y: 100))
+        #expect(poster.events.last?.type == .leftMouseUp)
+    }
+
     @Test("Releasing something not pressed posts nothing")
     func strayRelease() {
         injector.key(.keyboard(0x04), .up)

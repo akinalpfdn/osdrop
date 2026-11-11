@@ -295,7 +295,8 @@ final class InputController {
             controller = by
             if by == nil {
                 stopCursorWatch()
-                injector.releaseAll()  // core released what it pressed; this covers the rest
+                // Core released what it pressed; this covers the rest, but not a parked drag.
+                injector.releaseAllButDrag()
             } else {
                 startCursorWatch()
             }
