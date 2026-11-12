@@ -115,11 +115,12 @@ final class DragController: DragCoordinating {
             mesh.dragStopped()
             return
         }
-        let files = watcher.draggedFiles()
-        if files.isEmpty, watcher.carriesPromises() {
+        // Promised files come first: Photos also puts the URL of a small preview on the
+        // pasteboard, beside its promise of the photo itself.
+        if watcher.carriesPromises() {
             mesh.dragPromised()
         } else {
-            offer(files)
+            offer(watcher.draggedFiles())
         }
     }
 

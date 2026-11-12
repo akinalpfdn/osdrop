@@ -123,6 +123,20 @@ struct DragControllerTests {
         controller.stop()
     }
 
+    @Test("A drag with promises and file URLs is taken as promised: Photos adds a preview's URL")
+    func promisesComeBeforeFiles() {
+        let controller = start()
+        watcher.files = [
+            DraggedFile(
+                url: URL(filePath: "/Users/me/Pictures/Photos Library.photoslibrary/resources/derivatives/A_1_105_c.jpeg"),
+                contentType: "public.jpeg")
+        ]
+        watcher.promises = true
+        watcher.onChange?(true)
+        #expect(mesh.calls == [.dragPromised])
+        controller.stop()
+    }
+
     @Test("Promised files whose drop does not reach the edge are given up")
     func givesUpUntakenFiles() async throws {
         let controller = start()
