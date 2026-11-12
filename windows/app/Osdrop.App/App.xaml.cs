@@ -46,6 +46,7 @@ public partial class App : Application, IDisposable
             Shutdown(); // the running Osdrop opens its panel instead
             return;
         }
+        StartupRegistration.FollowThisCopy();
         ApplySystemTheme();
 
         _settings = AppSettings.Load();
