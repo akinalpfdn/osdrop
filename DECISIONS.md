@@ -769,3 +769,21 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** After InputHello became a sign of life, the PC never saw the Mac unresponsive, but the Mac still saw the PC unresponsive every 1–5 min for about 1.3 s. A capture on the wired PC showed it never stopped sending (largest gap 0.27 s). The Mac's kernel log showed why: every ~1 s macOS counts the Wi-Fi packets, calls the traffic real-time above about 50 in and out together, and otherwise lets AWDL take the radio off the network's channel; an idle session (30–45 a second) kept flipping between the two, and traffic to the Mac was held for over a second after a flip. At 25 ms a session carries about 100 packets a second.
 **Trade-offs:** About 4 KB/s each way per peer, about 40 wakeups a second per peer, and a Mac's Wi-Fi radio stays awake during a session, which costs battery (not measured yet). The threshold is undocumented macOS behaviour and may change.
 **Revisit if:** A battery measurement shows a large cost, or Mac logs still show the traffic leaving real-time during a session.
+
+---
+
+## 2026-11-12 — The core is optimized in Debug builds of the apps
+**Chosen:** User decision: the Mac app (SwiftPM, `-O2` for the Debug configuration) and the Windows build (`OSDROP_CORE_OPTIMIZE_DEBUG`, `/O2` without `/RTC1`) compile the core optimized in Debug; the apps' own code stays unoptimized. The core's own CMake presets keep plain Debug for its tests and sanitizers.
+**Alternatives:** Running hardware tests on Release builds; optimizing only Monocypher (24 MB/s, not enough).
+**Why:** A 110 MB transfer on loopback ran at 17 MB/s in Debug and 241 MB/s in Release. The user measured 4–5 s for 110 MB between the Mac and the PC, both on Debug builds, and took it for the network.
+**Trade-offs:** Stepping through core code in a debugger is harder in the apps; the core's unit tests are still the place to debug it.
+**Revisit if:** A core bug shows only in the apps and needs a debugger there.
+
+---
+
+## 2026-11-12 — A Mac that sleeps leaves the mesh until it wakes; AWDL switch gets its own phase
+**Chosen:** User decisions: (1) a computer that goes to sleep tells its peers so and closes its sessions, and the peers do not dial it again until it announces that it is awake; on waking it reconnects by itself (both platforms). (2) An opt-in switch that keeps AWDL off while Osdrop runs, as its own phase after Phase 15.
+**Alternatives:** Leaving sleep to Phase 19; reverting the 25 ms InputHello; waiting 2 s before the cursor comes home.
+**Why:** The 47 s "Peer unresponsive" cycle seen after the 25 ms change was the Mac sleeping, not Wi-Fi: the PC's traffic woke it about 2 s after every sleep (`pmset -g log`, "DarkWake … wifibt"), so a Mac with a peer never stays asleep (20–48 wakes an hour overnight against about 4). With the user at the Mac, the 25 ms change brought interruptions from every 1–5 min to one in 26 min. With AWDL turned off by hand the mouse was visibly smoother; transfers were not faster (that was the Debug build, entry above).
+**Trade-offs:** While the AWDL switch is on, AirDrop, AirPlay and Sidecar do not work; it needs administrator approval once.
+**Revisit if:** A sleeping computer still wakes for Osdrop traffic, or AWDL stays a problem with the switch on.
