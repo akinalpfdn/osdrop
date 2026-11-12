@@ -41,14 +41,17 @@ typedef enum osdrop_engine_event_kind {
     OSDROP_ENGINE_CLIPBOARD_FETCHING = 13,    /* device_id, name, bytes_done, bytes_total: its
                                                  copied files on their way, as they come */
     OSDROP_ENGINE_CLIPBOARD_FETCH_ENDED = 14, /* copied files are no longer on their way */
-    OSDROP_ENGINE_CLIPBOARD_READY = 15,       /* device_id, name: its copied files can be pasted */
+    OSDROP_ENGINE_CLIPBOARD_READY = 15,       /* device_id, name: its copied files can be pasted;
+                                                 code: the links in them that did not arrive */
     OSDROP_ENGINE_LAYOUT_CHANGED = 16,        /* the arrangement changed: read it again */
     OSDROP_ENGINE_INPUT_CHANGED = 17,         /* the input state changed: read it again */
     OSDROP_ENGINE_TRANSFER_RECEIVING = 18,    /* connection: a transfer receiving an item of a drag
                                                  from device_id; name, bytes_total */
     OSDROP_ENGINE_TRANSFER_PROGRESS = 19, /* connection, bytes_done, bytes_total: a transfer this
                                              PC receives, at most every 100 ms */
-    OSDROP_ENGINE_TRANSFER_FINISHED = 20, /* connection, reason: OK, CANCELLED, or why not */
+    OSDROP_ENGINE_TRANSFER_FINISHED = 20, /* connection, reason: OK, CANCELLED, or why not;
+                                             code: the links in the item, which a drop on this
+                                             PC leaves out */
     OSDROP_ENGINE_SEND_PROGRESS = 21,     /* connection: drag ID << 32 | item index; device_id
                                              (the member fetching it), name, bytes_done,
                                              bytes_total; code: 1 sending, 2 every byte went out,

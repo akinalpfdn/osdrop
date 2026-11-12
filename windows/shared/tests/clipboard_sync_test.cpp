@@ -118,11 +118,14 @@ protected:
     FakeHost host;
     FakeMesh mesh;
     std::vector<std::tuple<ClipboardNotice, ClipDevice, std::string>> notices;
+    std::vector<std::uint64_t> links_left_out; ///< one per notice
     std::vector<std::optional<ClipboardFetch>> fetches;
     ClipboardSync sync{
         host,
-        [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
+        [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name,
+               std::uint64_t links) {
             notices.emplace_back(notice, device, name);
+            links_left_out.push_back(links);
         },
         [this](const std::optional<ClipboardFetch>& fetch) { fetches.push_back(fetch); },
         ClipboardLimits{.text = 100, .image = 100, .files = 1000}};
@@ -187,7 +190,7 @@ TEST_F(ClipboardSyncTest, AnotherComputersCopyIsWrittenOnceEverythingArrived) {
     sync.content_received(std::get<0>(mesh.fetches[1]), OSDROP_OK, {9, 9});
     host.drain();
     EXPECT_TRUE(host.written.empty()) << "the files are still on their way";
-    sync.transfer_finished(files_id, OSDROP_OK, {"C:/staging/1/report.pdf"});
+    sync.transfer_finished(files_id, OSDROP_OK, {"C:/staging/1/report.pdf"}, 2);
     host.drain();
     ASSERT_EQ(host.written.size(), 1U);
     EXPECT_EQ(host.written[0],
@@ -197,6 +200,7 @@ TEST_F(ClipboardSyncTest, AnotherComputersCopyIsWrittenOnceEverythingArrived) {
     EXPECT_EQ(host.kept.back(), "C:/staging/1") << "the pasted files' folder stays";
     ASSERT_EQ(notices.size(), 1U);
     EXPECT_EQ(notices[0], std::tuple(ClipboardNotice::Ready, kMac, std::string("Mac")));
+    EXPECT_EQ(links_left_out[0], 2U) << "the links in the files that did not arrive";
 }
 
 TEST_F(ClipboardSyncTest, CopiedFilesReportTheirProgressUntilTheyArrive) {
@@ -212,7 +216,7 @@ TEST_F(ClipboardSyncTest, CopiedFilesReportTheirProgressUntilTheyArrive) {
     host.drain();
     ASSERT_EQ(fetches.size(), 2U);
     EXPECT_EQ(fetches[1]->bytes_done, 200U);
-    sync.transfer_finished(files_id, OSDROP_OK, {"C:/staging/1/report.pdf"});
+    sync.transfer_finished(files_id, OSDROP_OK, {"C:/staging/1/report.pdf"}, 0);
     host.drain();
     ASSERT_EQ(fetches.size(), 3U);
     EXPECT_EQ(fetches[2], std::nullopt) << "no longer on their way";
@@ -227,7 +231,7 @@ TEST_F(ClipboardSyncTest, CancellingCopiedFilesKeepsTheClipboardAsItWas) {
     host.drain();
     EXPECT_EQ(mesh.cancelled, std::vector<std::uint64_t>{files_id});
     EXPECT_EQ(fetches.back(), std::nullopt);
-    sync.transfer_finished(files_id, OSDROP_ERROR_CANCELLED, {});
+    sync.transfer_finished(files_id, OSDROP_ERROR_CANCELLED, {}, 0);
     host.drain();
     EXPECT_TRUE(host.written.empty());
     EXPECT_TRUE(notices.empty()) << "the user cancelled it: nothing to tell";

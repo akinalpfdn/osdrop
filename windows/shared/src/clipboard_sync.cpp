@@ -180,8 +180,11 @@ void ClipboardSync::content_received(std::uint64_t id, osdrop_result result,
 }
 
 void ClipboardSync::transfer_finished(std::uint64_t id, osdrop_result result,
-                                      std::vector<std::string> items) {
-    host_.post([this, id, result, items = std::move(items)]() mutable {
+                                      std::vector<std::string> items, std::uint64_t skipped_links) {
+    host_.post([this, id, result, items = std::move(items), skipped_links]() mutable {
+        if (incoming_ && incoming_->pending.contains(id)) {
+            incoming_->skipped_links += skipped_links;
+        }
         settle(id, result, {}, std::move(items));
     });
 }
@@ -234,7 +237,7 @@ void ClipboardSync::begin(const ClipDevice& device, std::uint64_t clip_id,
     incoming_->requests = wanted.size();
     if (wanted.empty()) {
         if (incoming_->too_large) {
-            notify_(ClipboardNotice::TooLarge, device, name_of(device));
+            notify_(ClipboardNotice::TooLarge, device, name_of(device), 0);
         }
         incoming_.reset();
         return;
@@ -313,16 +316,16 @@ void ClipboardSync::finish() {
     if (copy.received.contents.empty() && copy.received.files.empty()) {
         host_.clear_staging(std::nullopt);
         notify_(copy.too_large ? ClipboardNotice::TooLarge : ClipboardNotice::Unavailable,
-                copy.device, name_of(copy.device));
+                copy.device, name_of(copy.device), 0);
         return;
     }
     host_.write(copy.received);
     host_.clear_staging(copy.received.files.empty() ? std::nullopt : copy.folder);
     if (copy.too_large) {
-        notify_(ClipboardNotice::TooLarge, copy.device, name_of(copy.device));
+        notify_(ClipboardNotice::TooLarge, copy.device, name_of(copy.device), 0);
     }
     if (!copy.received.files.empty()) {
-        notify_(ClipboardNotice::Ready, copy.device, name_of(copy.device));
+        notify_(ClipboardNotice::Ready, copy.device, name_of(copy.device), copy.skipped_links);
     }
 }
 

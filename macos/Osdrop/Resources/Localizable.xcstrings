@@ -4438,6 +4438,47 @@
         }
       }
     },
+    "transfers.linksLeftOut %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "A link inside did not arrive"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld links inside did not arrive"
+                }
+              }
+            }
+          }
+        },
+        "tr" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "İçindeki bir bağlantı aktarılmadı"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "İçindeki %lld bağlantı aktarılmadı"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "transfers.notify.notReceived" : {
       "extractionState" : "manual",
       "localizations" : {

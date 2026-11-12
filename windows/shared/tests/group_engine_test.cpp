@@ -155,7 +155,7 @@ public:
     void stats(const DeviceIdBytes& /*device*/, const osdrop_session_stats& /*stats*/) override {}
     void log(osdrop_log_level /*level*/, const char* /*message*/) override {}
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
-                          const std::string& /*name*/) override {}
+                          const std::string& /*name*/, std::uint64_t /*links_left_out*/) override {}
     void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
     void layout_changed() override {
         change([&] { ++layout_changes_; });
@@ -171,7 +171,8 @@ public:
     void drag_wanted() override {}
     void transfer_progress(std::uint64_t /*transfer_id*/, std::uint64_t /*done*/,
                            std::uint64_t /*total*/) override {}
-    void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/) override {}
+    void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/,
+                           std::uint64_t /*links_left_out*/) override {}
     void send_progress(const osdrop::win::SendUpdate& /*update*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {

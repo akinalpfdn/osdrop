@@ -97,6 +97,11 @@ public sealed class GroupViewModelTests
         engine.Raise(new EngineEvent(EngineEventKind.ClipboardTooLarge, DeviceId: _laptop, Name: "Laptop"));
         Assert.Equal(2, notifications.Count);
         Assert.Equal(Localization.Strings.ClipboardNoticeTitle, notifications[1].Title);
+
+        engine.Raise(new EngineEvent(EngineEventKind.ClipboardReady, DeviceId: _laptop, Name: "Laptop", Code: 1));
+        Assert.Equal(
+            Formatted(Localization.Strings.ClipboardReady, "Laptop") + Environment.NewLine + Localization.Strings.TransfersLinkLeftOut,
+            notifications[2].Body);
     }
 
     [Fact]

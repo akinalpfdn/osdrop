@@ -65,7 +65,7 @@ final class ClipboardController {
 
     private enum Fetched {
         case content(Data)
-        case files([URL])
+        case files([URL], linksLeftOut: UInt64)
     }
 
     /// Another computer's copy while it is being fetched.
@@ -77,6 +77,7 @@ final class ClipboardController {
         var pending: [UInt64: ClipboardFormat] = [:]
         var received: [ClipboardFormat: Data] = [:]
         var files: [URL] = []
+        var linksLeftOut: UInt64 = 0
         var folder: URL?
         var tooLarge = false
 
@@ -225,7 +226,7 @@ final class ClipboardController {
         case .contentReceived(let id, let result):
             settle(id, result.map { .content($0) })
         case .transferFinished(let id, let result):
-            settle(id, result.map { .files($0.items) })
+            settle(id, result.map { .files($0.items, linksLeftOut: $0.skippedLinks) })
         case .transferProgress(let progress):
             if fetching != nil, incoming?.pending[progress.id] == .files {
                 fetching?.bytesDone = progress.bytesDone
@@ -316,8 +317,9 @@ final class ClipboardController {
         switch result {
         case .success(.content(let data)):
             copy.received[format] = data
-        case .success(.files(let urls)):
+        case .success(.files(let urls, let linksLeftOut)):
             copy.files = urls
+            copy.linksLeftOut = linksLeftOut
         case .failure(let error):
             Log.clipboard.error(
                 "A copy's \(String(describing: format), privacy: .public) did not arrive: \(String(describing: error), privacy: .public)"
@@ -364,9 +366,11 @@ final class ClipboardController {
         fetching = nil
         set(copy.tooLarge ? .tooLarge(name: nameOf(copy.device)) : nil)
         if !copy.files.isEmpty {
-            notifier?.notify(
-                title: String(localized: "clipboard.ready.title"),
-                body: String(localized: "clipboard.ready \(nameOf(copy.device))"))
+            var body = String(localized: "clipboard.ready \(nameOf(copy.device))")
+            if copy.linksLeftOut > 0 {
+                body += "\n" + TransfersController.linksNote(copy.linksLeftOut)
+            }
+            notifier?.notify(title: String(localized: "clipboard.ready.title"), body: body)
         }
     }
 

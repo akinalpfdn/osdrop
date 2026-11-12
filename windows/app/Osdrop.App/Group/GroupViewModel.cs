@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Interop;
+using Osdrop.App.Transfers;
 
 namespace Osdrop.App.Group;
 
@@ -275,8 +276,12 @@ public sealed partial class GroupViewModel : ObservableObject
                 ClipboardFetch = null;
                 break;
             case EngineEventKind.ClipboardReady:
-                NotificationRequested?.Invoke(
-                    Localization.Strings.ClipboardReadyTitle, Describe(Localization.Strings.ClipboardReady, received.Name));
+                string ready = Describe(Localization.Strings.ClipboardReady, received.Name);
+                if (received.Code > 0)
+                {
+                    ready += Environment.NewLine + TransferRow.LinksNoteFor(received.Code);
+                }
+                NotificationRequested?.Invoke(Localization.Strings.ClipboardReadyTitle, ready);
                 break;
             default:
                 break;

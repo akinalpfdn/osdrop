@@ -149,9 +149,9 @@ public:
     virtual void stats(const DeviceIdBytes& device, const osdrop_session_stats& stats) = 0;
     virtual void log(osdrop_log_level level, const char* message) = 0;
     /// Another computer's copy is not on the clipboard, or its files are now; `name` is empty
-    /// when not known.
+    /// when not known. `links_left_out`: Ready only, the links in the files that did not arrive.
     virtual void clipboard_notice(ClipboardNotice notice, const DeviceIdBytes& device,
-                                  const std::string& name) = 0;
+                                  const std::string& name, std::uint64_t links_left_out) = 0;
     /// Copied files on their way from another computer; nullopt once they no longer are.
     virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
     /// The arrangement or a member's screens changed: read layout() again.
@@ -180,7 +180,9 @@ public:
     /// A transfer this PC receives moved on, or ended (clipboard ones included).
     virtual void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
                                    std::uint64_t total) = 0;
-    virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result) = 0;
+    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold.
+    virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
+                                   std::uint64_t links_left_out) = 0;
     /// A member fetches an item of this PC's drag.
     virtual void send_progress(const SendUpdate& update) = 0;
 };
@@ -315,6 +317,8 @@ private:
     std::uint16_t port_ = 0;                               ///< 0 until started; guarded by mutex_
     std::optional<GroupIdBytes> group_;                    ///< guarded by mutex_
     std::map<std::string, DiscoveredComputer> discovered_; ///< by label; guarded by mutex_
+    /// The links in the items of transfers in progress, by transfer; guarded by mutex_.
+    std::map<std::uint64_t, std::uint64_t> planned_links_;
 };
 
 } // namespace osdrop::win

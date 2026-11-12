@@ -89,8 +89,9 @@ GroupEngine::GroupEngine(Config config, StateStore& store, Discovery& discovery,
     if (config_.clipboard != nullptr) {
         clipboard_ = std::make_unique<ClipboardSync>(
             *config_.clipboard,
-            [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name) {
-                events_.clipboard_notice(notice, device, name);
+            [this](ClipboardNotice notice, const ClipDevice& device, const std::string& name,
+                   std::uint64_t links_left_out) {
+                events_.clipboard_notice(notice, device, name, links_left_out);
             },
             [this](const std::optional<ClipboardFetch>& fetch) { events_.clipboard_fetch(fetch); },
             config_.clipboard_limits);
@@ -306,20 +307,30 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
     };
     result.transfer_finished = [](void* context, std::uint64_t id, osdrop_result outcome,
                                   const char* const* items, std::size_t count,
-                                  std::uint64_t /*skipped_links*/) {
+                                  std::uint64_t skipped_links) {
         auto* engine = static_cast<GroupEngine*>(context);
         std::vector<std::filesystem::path> created;
         for (const char* item : std::span(items, count)) {
             created.push_back(path_of(item));
         }
+        std::uint64_t planned_links = 0;
+        {
+            const std::scoped_lock lock(engine->mutex_);
+            if (const auto it = engine->planned_links_.find(id);
+                it != engine->planned_links_.end()) {
+                planned_links = it->second;
+                engine->planned_links_.erase(it);
+            }
+        }
         engine->transfers_.finished(id, outcome, created); // a drag's, or nobody's
-        engine->events_.transfer_finished(id, outcome);
+        // Only a drag's transfers are listed, and a drop on this PC leaves every link out.
+        engine->events_.transfer_finished(id, outcome, planned_links);
         if (engine->clipboard_) {
             std::vector<std::string> paths;
             for (const char* item : std::span(items, count)) {
                 paths.emplace_back(item);
             }
-            engine->clipboard_->transfer_finished(id, outcome, std::move(paths));
+            engine->clipboard_->transfer_finished(id, outcome, std::move(paths), skipped_links);
         }
     };
     control_callbacks(result);
@@ -398,15 +409,23 @@ void GroupEngine::drag_callbacks(osdrop_mesh_callbacks& result) {
     };
     result.transfer_planned = [](void* context, std::uint64_t id,
                                  const osdrop_received_entry* entries, std::size_t count) {
+        constexpr std::uint8_t kLink = 3;
+        auto* engine = static_cast<GroupEngine*>(context);
         std::vector<drag::PlannedEntry> planned;
+        std::uint64_t links = 0;
         for (const osdrop_received_entry& entry :
              std::span(entries, entries == nullptr ? 0 : count)) {
             planned.push_back({.path = entry.path,
                                .kind = entry.kind,
                                .size = entry.byte_count,
                                .modified_us = entry.modified_us});
+            links += entry.kind == kLink ? 1 : 0;
         }
-        static_cast<GroupEngine*>(context)->transfers_.planned(id, planned);
+        if (links > 0) {
+            const std::scoped_lock lock(engine->mutex_);
+            engine->planned_links_[id] = links;
+        }
+        engine->transfers_.planned(id, planned);
     };
     result.send_progress = [](void* context, const std::uint8_t* device,
                               const osdrop_object_ref* item, std::uint64_t sent,

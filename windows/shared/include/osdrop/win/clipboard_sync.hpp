@@ -132,8 +132,9 @@ private:
 
 class ClipboardSync {
 public:
+    /// `links_left_out`: Ready only, the links in the copied files that did not arrive.
     using Notify = std::function<void(ClipboardNotice notice, const ClipDevice& device,
-                                      const std::string& name)>;
+                                      const std::string& name, std::uint64_t links_left_out)>;
     /// Copied files on their way; nullopt once they are no longer (arrived, failed, cancelled,
     /// replaced by a newer copy).
     using Progress = std::function<void(const std::optional<ClipboardFetch>& fetch)>;
@@ -168,7 +169,8 @@ public:
                            std::vector<osdrop_announced_format> formats);
     void content_received(std::uint64_t id, osdrop_result result,
                           std::vector<std::uint8_t> content);
-    void transfer_finished(std::uint64_t id, osdrop_result result, std::vector<std::string> items);
+    void transfer_finished(std::uint64_t id, osdrop_result result, std::vector<std::string> items,
+                           std::uint64_t skipped_links);
     void transfer_progress(std::uint64_t id, std::uint64_t bytes_done);
 
 private:
@@ -181,6 +183,7 @@ private:
         ClipData received;
         std::optional<std::string> folder;
         bool too_large = false;
+        std::uint64_t skipped_links = 0;
         std::optional<ClipboardFetch> fetch; ///< its files, while they come
     };
 

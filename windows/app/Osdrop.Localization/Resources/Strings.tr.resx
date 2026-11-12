@@ -585,6 +585,12 @@
   <data name="TransfersCopiedFiles" xml:space="preserve">
     <value>Kopyalanan dosyalar</value>
   </data>
+  <data name="TransfersLinkLeftOut" xml:space="preserve">
+    <value>İçindeki bir bağlantı aktarılmadı</value>
+  </data>
+  <data name="TransfersLinksLeftOut" xml:space="preserve">
+    <value>İçindeki {0} bağlantı aktarılmadı</value>
+  </data>
   <data name="TransfersNotifyReceived" xml:space="preserve">
     <value>Dosya alındı</value>
   </data>

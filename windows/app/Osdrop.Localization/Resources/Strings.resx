@@ -585,6 +585,12 @@
   <data name="TransfersCopiedFiles" xml:space="preserve">
     <value>Copied files</value>
   </data>
+  <data name="TransfersLinkLeftOut" xml:space="preserve">
+    <value>A link inside did not arrive</value>
+  </data>
+  <data name="TransfersLinksLeftOut" xml:space="preserve">
+    <value>{0} links inside did not arrive</value>
+  </data>
   <data name="TransfersNotifyReceived" xml:space="preserve">
     <value>File received</value>
   </data>

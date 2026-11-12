@@ -19,9 +19,11 @@
 #include <array>
 #include <atomic>
 #include <climits>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -77,6 +79,12 @@ void copy_name(std::string_view name, std::span<char, OSDROP_TXT_VALUE_SIZE> out
     const std::size_t length = std::min(name.size(), out.size() - 1);
     std::copy_n(name.begin(), length, out.begin());
     out[length] = '\0';
+}
+
+/// A count in the event's 32-bit code.
+std::uint32_t clamped_count(std::uint64_t count) {
+    return static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(count, std::numeric_limits<std::uint32_t>::max()));
 }
 
 osdrop_engine_event blank_event(osdrop_engine_event_kind kind) {
@@ -163,10 +171,11 @@ public:
         send(event);
     }
     void clipboard_notice(win::ClipboardNotice notice, const win::DeviceIdBytes& device,
-                          const std::string& name) override {
+                          const std::string& name, std::uint64_t links_left_out) override {
         osdrop_engine_event event = blank_event(kind_of(notice));
         std::ranges::copy(device, std::begin(event.device_id));
         copy_name(name, event.name);
+        event.code = clamped_count(links_left_out);
         send(event);
     }
     void layout_changed() override { send(blank_event(OSDROP_ENGINE_LAYOUT_CHANGED)); }
@@ -243,10 +252,12 @@ public:
         event.bytes_total = total;
         send(event);
     }
-    void transfer_finished(std::uint64_t transfer_id, osdrop_result result) override {
+    void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
+                           std::uint64_t links_left_out) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_FINISHED);
         event.connection = transfer_id;
         event.reason = result;
+        event.code = clamped_count(links_left_out);
         send(event);
     }
     void send_progress(const win::SendUpdate& update) override {

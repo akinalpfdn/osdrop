@@ -47,6 +47,25 @@ public sealed class TransfersViewModelTests
     }
 
     [Fact]
+    public void LinksAFolderLeftOutAreNamedOnItsRowAndInItsNotification()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();
+        engine.Raise(new EngineEvent(
+            EngineEventKind.TransferReceiving, Connection: 8, DeviceId: _laptop, Name: "Photos", BytesTotal: 10));
+        engine.Raise(new EngineEvent(EngineEventKind.TransferFinished, Connection: 8, Reason: CoreResult.Ok, Code: 2));
+        TransferRow row = Assert.Single(transfers.Rows);
+        Assert.True(row.HasLinksNote);
+        Assert.Equal(string.Format(System.Globalization.CultureInfo.CurrentCulture, Localization.Strings.TransfersLinksLeftOut, "2"), row.LinksNote);
+        Assert.EndsWith(row.LinksNote, Assert.Single(notes).Body, StringComparison.Ordinal);
+
+        // Reported before the transfer was listed, and a single one.
+        engine.Raise(new EngineEvent(EngineEventKind.TransferFinished, Connection: 9, Reason: CoreResult.Ok, Code: 1));
+        engine.Raise(new EngineEvent(
+            EngineEventKind.TransferReceiving, Connection: 9, DeviceId: _laptop, Name: "Notes", BytesTotal: 10));
+        Assert.Equal(Localization.Strings.TransfersLinkLeftOut, transfers.Rows[0].LinksNote);
+    }
+
+    [Fact]
     public void AnEndThatCameBeforeTheTransferWasListedIsApplied()
     {
         (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();

@@ -129,6 +129,8 @@
                   </StackPanel>
                   <TextBlock Text="{Binding Status}" Style="{StaticResource Osdrop.Text.Caption}"
                              Visibility="{Binding IsRunning, Converter={StaticResource Osdrop.Converter.Hidden}}" />
+                  <TextBlock Text="{Binding LinksNote}" Style="{StaticResource Osdrop.Text.Caption}" TextWrapping="Wrap"
+                             Visibility="{Binding HasLinksNote, Converter={StaticResource Osdrop.Converter.Visible}}" />
                 </StackPanel>
               </DockPanel>
             </DataTemplate>

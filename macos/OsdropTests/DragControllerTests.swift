@@ -128,7 +128,8 @@ struct DragControllerTests {
         let controller = start()
         watcher.files = [
             DraggedFile(
-                url: URL(filePath: "/Users/me/Pictures/Photos Library.photoslibrary/resources/derivatives/A_1_105_c.jpeg"),
+                url: URL(
+                    filePath: "/Users/me/Pictures/Photos Library.photoslibrary/resources/derivatives/A_1_105_c.jpeg"),
                 contentType: "public.jpeg")
         ]
         watcher.promises = true

@@ -83,6 +83,24 @@ public sealed partial class TransferRow : ObservableObject
         _ => string.Empty,
     };
 
+    /// <summary>The links in a received item that did not arrive, known once it arrived.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LinksNote))]
+    [NotifyPropertyChangedFor(nameof(HasLinksNote))]
+    public partial ulong LinksLeftOut { get; internal set; }
+
+    /// <summary>"2 links inside did not arrive"; empty when none.</summary>
+    public string LinksNote => LinksNoteFor(LinksLeftOut);
+
+    public bool HasLinksNote => LinksLeftOut > 0;
+
+    internal static string LinksNoteFor(ulong count) => count switch
+    {
+        0 => string.Empty,
+        1 => Localization.Strings.TransfersLinkLeftOut,
+        _ => Format(Localization.Strings.TransfersLinksLeftOut, count.ToString(CultureInfo.CurrentCulture)),
+    };
+
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private Task CancelAsync() => _owner.CancelAsync(this);
 
@@ -113,7 +131,7 @@ public sealed class TransfersViewModel : ObservableObject
     private readonly Action<string, string> _notify;
     private readonly HashSet<TransferKey> _cancelled = [];
     /// <summary>Ends of transfers reported before they were listed (clipboard ones never are).</summary>
-    private readonly Dictionary<ulong, CoreResult> _early = [];
+    private readonly Dictionary<ulong, (CoreResult Result, ulong LinksLeftOut)> _early = [];
 
     internal TransfersViewModel(IGroupEngine engine, Func<string, string> nameOf, Action<string, string> notify)
     {
@@ -149,7 +167,7 @@ public sealed class TransfersViewModel : ObservableObject
                 Update(TransferKey.Receive(received.Connection), received.BytesDone, received.BytesTotal);
                 break;
             case EngineEventKind.TransferFinished:
-                Finished(received.Connection, received.Reason);
+                Finished(received.Connection, received.Reason, received.Code);
                 break;
             case EngineEventKind.SendProgress:
                 Sent(received);
@@ -163,18 +181,18 @@ public sealed class TransfersViewModel : ObservableObject
     {
         var key = TransferKey.Receive(received.Connection);
         Insert(new TransferRow(this, key, received.Name, _nameOf(received.DeviceId), 0, received.BytesTotal));
-        if (_early.Remove(received.Connection, out CoreResult result))
+        if (_early.Remove(received.Connection, out var ended))
         {
-            Finished(received.Connection, result);
+            Finished(received.Connection, ended.Result, ended.LinksLeftOut);
         }
     }
 
-    private void Finished(ulong transferId, CoreResult result)
+    private void Finished(ulong transferId, CoreResult result, ulong linksLeftOut)
     {
         var key = TransferKey.Receive(transferId);
-        if (Find(key) is null)
+        if (Find(key) is not { } row)
         {
-            _early[transferId] = result;
+            _early[transferId] = (result, linksLeftOut);
             if (_early.Count > AppTunables.TransfersEarlyEnds)
             {
                 _early.Remove(_early.Keys.Min());
@@ -187,6 +205,10 @@ public sealed class TransfersViewModel : ObservableObject
             CoreResult.Cancelled when _cancelled.Contains(key) => TransferState.Cancelled,
             _ => TransferState.Failed,
         };
+        if (state == TransferState.Done && row.IsRunning)
+        {
+            row.LinksLeftOut = linksLeftOut;
+        }
         End(key, state);
     }
 
@@ -265,6 +287,10 @@ public sealed class TransfersViewModel : ObservableObject
         string body = string.Format(
             CultureInfo.CurrentCulture, row.IsSending ? Localization.Strings.TransfersToItem : Localization.Strings.TransfersFromItem,
             row.Name, row.Peer);
+        if (row.HasLinksNote)
+        {
+            body += Environment.NewLine + row.LinksNote;
+        }
         string? title = (row.IsSending, row.State) switch
         {
             (false, TransferState.Done) => Localization.Strings.TransfersNotifyReceived,
