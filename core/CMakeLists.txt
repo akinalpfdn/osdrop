@@ -15,6 +15,21 @@ project(OsdropCore
 
 option(OSDROP_CORE_BUILD_TESTS "Build the core unit tests" ${PROJECT_IS_TOP_LEVEL})
 option(OSDROP_CORE_BUILD_FUZZER "Build the libFuzzer decoder fuzzers (Clang only)" OFF)
+option(OSDROP_CORE_OPTIMIZE_DEBUG "Optimize the core in Debug builds of the apps" OFF)
+
+if(OSDROP_CORE_OPTIMIZE_DEBUG)
+    # Unoptimized, a transfer moves 17 MB/s instead of 240; the app around the core stays
+    # debuggable. MSVC's run-time checks cannot be combined with optimization.
+    foreach(_lang C CXX)
+        if(MSVC)
+            string(REGEX REPLACE "/O[bd][0-9]?|/RTC[1csu]+" "" CMAKE_${_lang}_FLAGS_DEBUG
+                   "${CMAKE_${_lang}_FLAGS_DEBUG}")
+            string(APPEND CMAKE_${_lang}_FLAGS_DEBUG " /O2")
+        else()
+            string(APPEND CMAKE_${_lang}_FLAGS_DEBUG " -O2")
+        endif()
+    endforeach()
+endif()
 
 if(OSDROP_CORE_BUILD_FUZZER)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
