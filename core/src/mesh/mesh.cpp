@@ -44,6 +44,9 @@ struct Mesh::Peer {
     Microseconds backoff{0};
     bool refused = false; ///< refused this computer: no dial until trust changes or rediscovered
     bool held = false;    ///< disconnected on purpose: no dial until rediscovered
+    /// Said it is going to sleep. Dialling it would wake it (a sleep proxy answers for it), so it
+    /// is dialled again only once it is seen anew; on waking it dials this computer itself.
+    bool sleeping = false;
 };
 
 struct Mesh::Connection {
@@ -307,6 +310,7 @@ void Mesh::session_established(Connection& connection, const protocol::Capabilit
     connection.next_stream_id = connection.engine->role() == session::SessionRole::Dialer ? 1U : 2U;
     if (const auto it = peers_.find(device); it != peers_.end()) {
         it->second.backoff = Microseconds{0};
+        it->second.sleeping = false;
     }
     log(LogLevel::Info, "Connected to " + short_id(device));
     observer_.on_peer_connected(device, connection.engine->peer_static_key(),
@@ -338,6 +342,8 @@ void Mesh::session_state(Connection& connection, session::SessionState state,
     }
     if (blocks_redial(reason)) {
         it->second.refused = true;
+    } else if (connection.engine->peer_bye() == protocol::ByeReason::Sleeping) {
+        it->second.sleeping = true;
     } else if (connection.engine->peer_bye() != protocol::ByeReason::Duplicate) {
         schedule_retry(it->second, now);
     }
@@ -550,7 +556,7 @@ void Mesh::on_closed(ConnectionId id, Error reason, TimePoint now) {
 // --- Time and dialling ---------------------------------------------------------------------------
 
 bool Mesh::wants_session(const Peer& peer) const {
-    return peer.discovered && peer.address && !peer.refused && !peer.held &&
+    return peer.discovered && peer.address && !peer.refused && !peer.held && !peer.sleeping &&
            !is_zero(config_.group_id) && peer.group == config_.group_id;
 }
 
@@ -673,6 +679,7 @@ void Mesh::peer_discovered(const DeviceId& device, const protocol::Id& group,
     if (changed) {
         peer.next_dial = now;
         peer.backoff = Microseconds{0};
+        peer.sleeping = false; // an advertisement repeated by a sleep proxy changes nothing
     }
     dial_due_peers(now);
     settle(now);

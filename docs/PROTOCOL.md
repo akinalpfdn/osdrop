@@ -731,7 +731,10 @@ codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED, GROUP_FULL, IN_AN
 UNSUPPORTED_VERSION are shown as
 such, any other code as a generic peer error. Bye 3 (going to sleep) ends the session with
 PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
-error; every other reason with CONNECTION_CLOSED.
+error; every other reason with CONNECTION_CLOSED. A computer that received Bye 3 does not dial the
+sleeper again until its advertisement goes away and comes back or its address changes: a sleep
+proxy keeps answering for a sleeping computer and would wake it for every attempt. The sleeper
+dials its peers itself when it wakes.
 
 | Timing | Value |
 |--------|-------|

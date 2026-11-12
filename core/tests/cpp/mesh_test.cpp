@@ -512,4 +512,44 @@ TEST(Mesh, SleepingPeersAreReportedAsSuch) {
     EXPECT_EQ(network.node(1).observer.disconnects.size(), 1U);
 }
 
+TEST(Mesh, AComputerThatWentToSleepIsNotDialledUntilItWakesAndDialsBack) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.node(1).mesh.close_all(protocol::ByeReason::Sleeping, network.now);
+    network.node(1).frozen = true; // asleep: a dial would wake it
+    network.node(0).dials = 0;
+    network.run_for(std::chrono::seconds(120));
+    // A sleep proxy repeating its advertisement is no sign that it woke.
+    network.node(0).mesh.peer_discovered(network.node(1).mesh.device_id(), kGroup,
+                                         network.node(1).address, network.now);
+    network.run_for(std::chrono::seconds(10));
+    EXPECT_EQ(network.node(0).dials, 0U);
+
+    network.node(1).frozen = false; // wakes and browses again
+    network.node(1).mesh.peer_discovered(network.node(0).mesh.device_id(), kGroup,
+                                         network.node(0).address, network.now);
+    network.run_for(milliseconds(300));
+    EXPECT_TRUE(network.node(0).mesh.is_connected(network.node(1).mesh.device_id()));
+    EXPECT_TRUE(network.node(1).mesh.is_connected(network.node(0).mesh.device_id()));
+}
+
+TEST(Mesh, AComputerThatWentToSleepIsDialledOnceItIsAdvertisedAnew) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.node(1).mesh.close_all(protocol::ByeReason::Sleeping, network.now);
+    network.run_for(milliseconds(10));
+    // Without a sleep proxy its advertisement goes away while it sleeps and comes back on waking.
+    network.node(0).mesh.peer_lost(network.node(1).mesh.device_id(), network.now);
+    network.node(0).dials = 0;
+    network.node(0).mesh.peer_discovered(network.node(1).mesh.device_id(), kGroup,
+                                         network.node(1).address, network.now);
+    network.run_for(std::chrono::seconds(5));
+    EXPECT_GE(network.node(0).dials, 1U);
+    EXPECT_TRUE(network.node(0).mesh.is_connected(network.node(1).mesh.device_id()));
+}
+
 } // namespace

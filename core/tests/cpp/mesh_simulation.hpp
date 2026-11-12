@@ -390,6 +390,7 @@ public:
     mesh::Mesh mesh;
     mesh::PeerAddress address;
     bool frozen = false; ///< power loss: processes and sends nothing
+    std::size_t dials = 0;
 
 private:
     mesh::MeshObserver& after_clipboard() {
@@ -773,6 +774,7 @@ private:
 };
 
 inline void SimulatedTransport::dial(ConnectionId id, const mesh::PeerAddress& address) {
+    ++network_->node(node_).dials;
     const auto target = network_->node_at(address.host);
     if (!target) {
         network_->dial_nowhere(node_, id);
