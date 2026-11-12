@@ -67,7 +67,9 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
   The timer is set to the mesh's next deadline instead of ticking, so an idle group costs a few
   wakeups per second per peer (heartbeats).
 - **Peer loss.** A silent peer is reported unresponsive after 750 ms, so input to and from it stops
-  well within the one-second budget; its session survives a Wi-Fi stall and ends only after 10 s.
+  well within the one-second budget. Input datagrams (an InputHello every 250 ms) count as signs of
+  life, so a control connection resending a lost Wi-Fi packet is not mistaken for loss; the session
+  survives a stall and ends only after 10 s without control bytes.
 - **Orderly close.** When the mesh ends a connection, its last bytes (a pairing refusal, a Bye)
   go out, then only the sending side is shut and the node reads until the peer closes or 2 s
   pass. Closing a socket with unread bytes resets the connection, and Windows then drops what the

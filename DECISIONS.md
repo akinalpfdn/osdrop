@@ -751,3 +751,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Measured on hardware: the drag started in 1 of 5 attempts, exactly when the cursor was still on the 16 px window at the press. The hand moves the mouse 28–160 px within the ~15 ms before the press, and the move back in the same SendInput did not bring the press onto the window. A window that covers the desktop takes the press wherever the cursor is, and the cursor does not jump back to the edge.
 **Trade-offs:** For those milliseconds every click on the PC goes to Osdrop's window. Why the move back did not work is not known.
 **Revisit if:** Clicks right after a drag arrives go missing, or a multi-monitor setup with mixed scaling shows the covering window wrong.
+
+---
+
+## 2026-11-12 — Input datagrams are signs of life; the 750 ms peer-loss threshold stays
+**Chosen:** User decision: every input datagram that opens (authentic, not a replay) counts as hearing from the peer, and InputHello goes every 250 ms for the whole session instead of every 5 s once bound. A peer is unresponsive after 750 ms with neither; the session still times out after 10 s without control bytes.
+**Alternatives:** Raising `unresponsive_after` to 2 s (one constant, but DEVPLAN's "mouse back within one second" becomes two); both together.
+**Why:** On the home Wi-Fi a Mac and a PC reported each other unresponsive every 10 s to 2 min for 1.1–1.4 s (172 times in one Mac log from 21:37 to 12:30 the next day), and each one brought a controlled cursor home. The control connection's counters showed 74 ms average round trip and 2 % of bytes resent: on a connection that carries only heartbeats, TCP resends a lost segment only after about a second, while the next datagram gets through.
+**Trade-offs:** Keys and buttons travel on the control connection, so during such a stall they still arrive late; only the cursor no longer goes home. If the Wi-Fi stops entirely for longer than 750 ms, the peer is still reported unresponsive. Four more small datagrams a second per peer.
+**Revisit if:** Hardware logs still show "Peer unresponsive" during normal use on Wi-Fi.

@@ -172,6 +172,8 @@ private:
     void handle_frame(std::span<const std::uint8_t> payload, TimePoint now);
     void handle_message(const protocol::ControlMessage& message, TimePoint now);
     [[nodiscard]] bool is_expected(protocol::ControlType type) const;
+    /// The latest sign of life: control bytes or an input datagram.
+    [[nodiscard]] TimePoint last_heard() const;
     void handle_hello(const protocol::Hello& hello, TimePoint now);
     void handle_handshake(const protocol::HandshakeMessage& message, TimePoint now);
     void handshake_complete(TimePoint now);
@@ -233,7 +235,8 @@ private:
     TimePoint connected_at_;
     TimePoint keyed_at_;
     TimePoint last_sent_;
-    TimePoint last_received_;
+    TimePoint last_received_; ///< control bytes; the session times out without them
+    TimePoint last_datagram_; ///< an input datagram that opened; keeps the peer responsive
     TimePoint next_ping_;
     TimePoint next_input_hello_;
     TimePoint next_stats_;
