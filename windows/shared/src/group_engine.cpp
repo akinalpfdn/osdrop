@@ -748,13 +748,20 @@ void GroupEngine::cancel(std::uint64_t transfer_id) {
 
 void GroupEngine::close_all(bool sleeping) {
     static_cast<void>(osdrop_mesh_close_all(mesh_, sleeping ? 1 : 0));
+    if (sleeping) {
+        discovery_.withdraw();
+    }
 }
 
 void GroupEngine::resume() {
+    static_cast<void>(osdrop_mesh_resume(mesh_));
+    std::optional<GroupIdBytes> group;
     {
         const std::scoped_lock lock(mutex_);
+        group = group_;
         discovered_.clear();
     }
+    advertise(group);
     events_.nearby_changed();
     browse();
 }

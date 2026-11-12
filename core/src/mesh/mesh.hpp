@@ -199,8 +199,13 @@ public:
                         TimePoint now);
     /// Ends the session with a peer; it is not redialled until discovered again.
     void disconnect(const DeviceId& device, protocol::ByeReason reason, TimePoint now);
-    /// Ends every session (sleep, quit); nothing is redialled until discovered again.
+    /// Ends every session (sleep, quit); nothing is redialled until discovered again. After
+    /// Sleeping, until resume, nothing is dialled and a session a peer opens ends with Bye
+    /// (sleeping): the computer also wakes in the dark, without its user, and goes back to sleep
+    /// without telling anyone.
     void close_all(protocol::ByeReason reason, TimePoint now);
+    /// The computer woke and its user is back: every discovered member is dialled again.
+    void resume(TimePoint now);
 
     [[nodiscard]] bool is_connected(const DeviceId& device) const;
     [[nodiscard]] std::vector<DeviceId> connected_peers() const;
@@ -252,7 +257,8 @@ private:
     std::vector<ConnectionId> duplicates_; // control connections to close as duplicates
     std::vector<std::function<void(Mesh&, TimePoint)>> deferred_;
     bool settling_ = false;
-    TimePoint now_; // the time of the entry point being run, for session callbacks
+    bool asleep_ = false; // from close_all(Sleeping) until resume
+    TimePoint now_;       // the time of the entry point being run, for session callbacks
 };
 
 } // namespace osdrop::mesh

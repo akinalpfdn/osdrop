@@ -180,14 +180,22 @@ final class GroupController {
             })
     }
 
-    /// Ends every session before the Mac sleeps or Osdrop quits.
+    /// Ends every session before the Mac sleeps or Osdrop quits. A sleeping Mac also withdraws its
+    /// advertisement, so members see it come back when it wakes and dial it themselves.
     func closeAll(sleeping: Bool) {
         mesh?.closeAll(sleeping: sleeping)
+        if sleeping {
+            advertisement?.cancel()
+            advertisement = nil
+        }
     }
 
-    /// After waking: Bonjour is browsed again, so the mesh rediscovers and redials its members.
+    /// After waking: members are dialled again, the Mac is advertised again, and Bonjour is
+    /// browsed again for members whose address changed meanwhile.
     func resumeAfterSleep() {
-        guard mesh != nil else { return }
+        guard let mesh else { return }
+        mesh.resume()
+        advertise()
         discovered.removeAll()
         browse()
     }

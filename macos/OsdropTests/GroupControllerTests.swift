@@ -137,6 +137,23 @@ struct GroupControllerTests {
         try await waitUntil { controller.wasRemoved }
     }
 
+    @Test("A Mac going to sleep withdraws its advertisement; waking dials members and advertises again")
+    func sleepAndWake() async throws {
+        let controller = fixture.start()
+        try await waitUntil { !fixture.discovery.advertisements.isEmpty }
+        let advertised = fixture.discovery.advertisements.count
+
+        controller.closeAll(sleeping: false)
+        #expect(fixture.discovery.withdrawals == 0, "quitting withdraws nothing itself")
+        controller.closeAll(sleeping: true)
+        #expect(fixture.mesh.calls.contains(.closeAll(sleeping: true)))
+        #expect(fixture.discovery.withdrawals == 1)
+
+        controller.resumeAfterSleep()
+        #expect(fixture.mesh.calls.contains(.resume))
+        #expect(fixture.discovery.advertisements.count == advertised + 1)
+    }
+
     @Test("A group stored by a newer Osdrop stops the start and is kept")
     func newerGroupStopsTheStart() {
         fixture.keyStore.storedGroup = [7, 7]
@@ -268,6 +285,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
         case leave
         case permissions(MemberPermissions, DeviceID)
         case setLayout([Placement])
+        case closeAll(sleeping: Bool)
+        case resume
     }
 
     static let port: UInt16 = 50_000
@@ -335,7 +354,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }
-    func closeAll(sleeping: Bool) {}
+    func closeAll(sleeping: Bool) { lock.withLock { recorded.append(.closeAll(sleeping: sleeping)) } }
+    func resume() { lock.withLock { recorded.append(.resume) } }
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {
         lock.withLock { recorded.append(.permissions(permissions, device)) }
     }
@@ -361,19 +381,22 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
 
 final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {
     private struct Registration: Advertising {
-        func cancel() {}
+        let withdraw: @Sendable () -> Void
+        func cancel() { withdraw() }
     }
 
     private let lock = NSLock()
     private var registered: [(Advertisement, UInt16)] = []
+    private var withdrawn = 0
     private var continuation: AsyncStream<DiscoveryEvent>.Continuation?
 
     var advertisements: [Advertisement] { lock.withLock { registered.map(\.0) } }
     var ports: [UInt16] { lock.withLock { registered.map(\.1) } }
+    var withdrawals: Int { lock.withLock { withdrawn } }
 
     func advertise(_ advertisement: Advertisement, port: UInt16) throws(DiscoveryError) -> any Advertising {
         lock.withLock { registered.append((advertisement, port)) }
-        return Registration()
+        return Registration { [self] in lock.withLock { withdrawn += 1 } }
     }
 
     func browse() -> AsyncStream<DiscoveryEvent> {

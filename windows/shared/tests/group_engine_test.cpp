@@ -72,6 +72,10 @@ public:
         port_ = port;
         return true;
     }
+    void withdraw() override {
+        const std::scoped_lock lock(mutex_);
+        ++withdrawals_;
+    }
     bool browse(Callbacks callbacks) override {
         const std::scoped_lock lock(mutex_);
         callbacks_ = std::move(callbacks);
@@ -107,6 +111,10 @@ public:
         const std::scoped_lock lock(mutex_);
         return advertisements_.size();
     }
+    std::size_t withdrawals() {
+        const std::scoped_lock lock(mutex_);
+        return withdrawals_;
+    }
     std::optional<osdrop_advertisement> last() {
         const std::scoped_lock lock(mutex_);
         return advertisements_.empty() ? std::nullopt : std::optional(advertisements_.back());
@@ -115,6 +123,7 @@ public:
 private:
     std::mutex mutex_;
     std::vector<osdrop_advertisement> advertisements_;
+    std::size_t withdrawals_ = 0;
     std::uint16_t port_ = 0;
     Callbacks callbacks_;
 };
@@ -329,6 +338,20 @@ TEST(GroupEngine, StartsWithANewIdentityAndAdvertisesIt) {
     EXPECT_EQ(advertised->has_group, 0);
     EXPECT_EQ(std::string(advertised->name), "PC");
     EXPECT_EQ(pc.store.get(StoredItem::ListenPort)->size(), 2U);
+}
+
+TEST(GroupEngine, ASleepingPcWithdrawsItsAdvertisementAndAdvertisesAgainOnWaking) {
+    Computer pc(1, "PC");
+    ASSERT_NE(pc.engine, nullptr);
+    const std::size_t advertised = pc.discovery.advertisement_count();
+
+    pc.engine->close_all(false);
+    EXPECT_EQ(pc.discovery.withdrawals(), 0U) << "quitting withdraws nothing itself";
+    pc.engine->close_all(true);
+    EXPECT_EQ(pc.discovery.withdrawals(), 1U);
+
+    pc.engine->resume();
+    EXPECT_EQ(pc.discovery.advertisement_count(), advertised + 1);
 }
 
 TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {

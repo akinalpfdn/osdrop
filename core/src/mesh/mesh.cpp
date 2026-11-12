@@ -306,6 +306,17 @@ TrustVerdict Mesh::trust_query(Connection& connection, const crypto::Key& peer_k
 
 void Mesh::session_established(Connection& connection, const protocol::Capabilities& peer) {
     const DeviceId& device = connection.peer;
+    if (asleep_) {
+        // A peer reached this computer in a dark wake; it is told this computer sleeps, which
+        // stops it dialling, and nothing above the mesh sees the session.
+        log(LogLevel::Info, "Asleep; ending the session " + short_id(device) + " opened");
+        defer([id = connection.id](Mesh& mesh, TimePoint now) {
+            if (Connection* opened = mesh.find(id); opened != nullptr && !opened->closed) {
+                opened->engine->close(protocol::ByeReason::Sleeping, now);
+            }
+        });
+        return;
+    }
     connection.connected_reported = true;
     connection.next_stream_id = connection.engine->role() == session::SessionRole::Dialer ? 1U : 2U;
     if (const auto it = peers_.find(device); it != peers_.end()) {
@@ -556,8 +567,8 @@ void Mesh::on_closed(ConnectionId id, Error reason, TimePoint now) {
 // --- Time and dialling ---------------------------------------------------------------------------
 
 bool Mesh::wants_session(const Peer& peer) const {
-    return peer.discovered && peer.address && !peer.refused && !peer.held && !peer.sleeping &&
-           !is_zero(config_.group_id) && peer.group == config_.group_id;
+    return !asleep_ && peer.discovered && peer.address && !peer.refused && !peer.held &&
+           !peer.sleeping && !is_zero(config_.group_id) && peer.group == config_.group_id;
 }
 
 TimePoint Mesh::dial_due(const Peer& peer) const {
@@ -860,6 +871,9 @@ void Mesh::disconnect(const DeviceId& device, protocol::ByeReason reason, TimePo
 
 void Mesh::close_all(protocol::ByeReason reason, TimePoint now) {
     now_ = now;
+    if (reason == protocol::ByeReason::Sleeping) {
+        asleep_ = true;
+    }
     for (auto& [device, peer] : peers_) {
         peer.held = true;
     }
@@ -874,6 +888,18 @@ void Mesh::close_all(protocol::ByeReason reason, TimePoint now) {
             transport_.close(id);
         }
     }
+    settle(now);
+}
+
+void Mesh::resume(TimePoint now) {
+    now_ = now;
+    asleep_ = false;
+    for (auto& [device, peer] : peers_) {
+        peer.held = false;
+        peer.next_dial = now;
+        peer.backoff = Microseconds{0};
+    }
+    dial_due_peers(now);
     settle(now);
 }
 

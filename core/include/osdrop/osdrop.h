@@ -575,8 +575,14 @@ osdrop_result osdrop_mesh_blocked(osdrop_mesh* mesh, osdrop_blocked_device* out,
 /* What this computer accepts from one member; the member is told at once. */
 osdrop_result osdrop_mesh_set_permissions(osdrop_mesh* mesh, const uint8_t* device_id,
                                           const osdrop_permissions* permissions);
-/* Ends every session before sleep (peers see PEER_SLEEPING) or quitting. */
+/*
+ * Ends every session before sleep (peers see PEER_SLEEPING) or quitting. After sleeping == 1
+ * nothing is dialled, and a peer that connects is told this computer sleeps, until
+ * osdrop_mesh_resume: the computer also wakes in the dark, without its user.
+ */
 osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping);
+/* The computer woke and its user is back: the group's members are dialled again. */
+osdrop_result osdrop_mesh_resume(osdrop_mesh* mesh);
 
 /*
  * The shared arrangement (PROTOCOL.md "Arrangement"). Coordinates are int32 in 1/16 of a unit:

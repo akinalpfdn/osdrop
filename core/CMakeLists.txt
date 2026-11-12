@@ -90,6 +90,7 @@ add_library(osdrop_core STATIC
     src/transfer/streams.cpp
     src/transfer/unicode.cpp
     src/transport/asio_node.cpp
+    src/transport/dial.cpp
     src/transport/traffic_class.cpp)
 add_library(osdrop::core ALIAS osdrop_core)
 

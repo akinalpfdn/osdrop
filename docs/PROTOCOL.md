@@ -701,6 +701,9 @@ Chunks of one request arrive in order and without gaps.
   byte by byte) dials as soon as it discovers the other; the higher one dials too only when no
   session exists 3 s after discovery. A computer dials only peers that advertise its own,
   non-empty group.
+- A host name resolves to every address the peer has, and a firewall may drop one of them
+  silently. Each address gets its own attempt, the next one 250 ms after the previous or at once
+  when it fails, with the address families alternating (RFC 8305); the first to connect is kept.
 - When a second connection between the same pair authenticates, both sides keep the same one: if
   the same side dialled both, the newer one; otherwise the one the lower device ID dialled. The
   other is closed with Bye 7, which ends it without an error and without a reconnect.
@@ -733,8 +736,10 @@ such, any other code as a generic peer error. Bye 3 (going to sleep) ends the se
 PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
 error; every other reason with CONNECTION_CLOSED. A computer that received Bye 3 does not dial the
 sleeper again until its advertisement goes away and comes back or its address changes: a sleep
-proxy keeps answering for a sleeping computer and would wake it for every attempt. The sleeper
-dials its peers itself when it wakes.
+proxy keeps answering for a sleeping computer and would wake it for every attempt. A computer going
+to sleep withdraws its advertisement after sending Bye 3. Until its user wakes it, it dials nobody,
+and a session a peer opens anyway (in a dark wake) it ends at once with Bye 3. On waking it
+advertises itself again and dials its peers; the peers dial it too once they see it come back.
 
 | Timing | Value |
 |--------|-------|

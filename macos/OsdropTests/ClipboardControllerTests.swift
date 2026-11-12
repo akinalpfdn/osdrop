@@ -374,4 +374,5 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func blocked() async throws(CoreError) -> [BlockedDevice] { [] }
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {}
     func closeAll(sleeping: Bool) {}
+    func resume() {}
 }

@@ -1462,4 +1462,12 @@ osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping) {
     return OSDROP_OK;
 }
 
+osdrop_result osdrop_mesh_resume(osdrop_mesh* mesh) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    mesh->node->resume();
+    return OSDROP_OK;
+}
+
 } // extern "C"

@@ -52,6 +52,7 @@ public:
     void send_motion(const mesh::DeviceId& device, const protocol::PointerMotion& motion);
     void close_transfer(const mesh::DeviceId& device, std::uint32_t stream_id);
     void close_all(protocol::ByeReason reason);
+    void resume();
 
     /// Runs `work` on the I/O thread with the mesh, for layers above it; returns at once.
     void run(std::function<void(mesh::Mesh&, TimePoint)> work);

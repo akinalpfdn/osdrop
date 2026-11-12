@@ -23,6 +23,7 @@ public:
     DnsSdDiscovery& operator=(DnsSdDiscovery&&) = delete;
 
     bool advertise(const osdrop_advertisement& advertisement, std::uint16_t port) override;
+    void withdraw() override;
     bool browse(Callbacks callbacks) override;
     void stop() override;
 

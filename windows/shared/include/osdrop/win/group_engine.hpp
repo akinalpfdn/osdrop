@@ -57,6 +57,8 @@ public:
     virtual ~Discovery() = default;
     /// Registers this computer, replacing an earlier registration; false when DNS-SD refused.
     virtual bool advertise(const osdrop_advertisement& advertisement, std::uint16_t port) = 0;
+    /// Ends the registration (other computers see this one go); browsing goes on.
+    virtual void withdraw() = 0;
     /// Starts browsing, or starts over; callbacks run one at a time on other threads.
     virtual bool browse(Callbacks callbacks) = 0;
     /// Ends browsing and the registration; no callback runs after it returns.
@@ -254,9 +256,11 @@ public:
     void return_home(bool input_lost);
     void lock_input(bool locked);
     void set_caps_lock(bool on);
-    /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.
+    /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting. A sleeping PC also
+    /// withdraws its advertisement, so members see it come back when it wakes and dial it.
     void close_all(bool sleeping);
-    /// After waking: browses again, so members are found and dialled again.
+    /// After waking: members are dialled again, the PC is advertised again, and the browse starts
+    /// over for members whose address changed meanwhile.
     void resume();
     /// This PC's drag, as osdrop_mesh_drag_started: its files and folders (absolute paths), each
     /// with the type its name gives it. The drag's ID, or nullopt when core refused it.

@@ -527,9 +527,8 @@ TEST(Mesh, AComputerThatWentToSleepIsNotDialledUntilItWakesAndDialsBack) {
     network.run_for(std::chrono::seconds(10));
     EXPECT_EQ(network.node(0).dials, 0U);
 
-    network.node(1).frozen = false; // wakes and browses again
-    network.node(1).mesh.peer_discovered(network.node(0).mesh.device_id(), kGroup,
-                                         network.node(0).address, network.now);
+    network.node(1).frozen = false; // its user wakes it
+    network.node(1).mesh.resume(network.now);
     network.run_for(milliseconds(300));
     EXPECT_TRUE(network.node(0).mesh.is_connected(network.node(1).mesh.device_id()));
     EXPECT_TRUE(network.node(1).mesh.is_connected(network.node(0).mesh.device_id()));
@@ -542,7 +541,10 @@ TEST(Mesh, AComputerThatWentToSleepIsDialledOnceItIsAdvertisedAnew) {
     network.run_for(milliseconds(300));
     network.node(1).mesh.close_all(protocol::ByeReason::Sleeping, network.now);
     network.run_for(milliseconds(10));
-    // Without a sleep proxy its advertisement goes away while it sleeps and comes back on waking.
+    // It wakes before it finds node 0 again, so only node 0 can dial.
+    network.node(1).mesh.peer_lost(network.node(0).mesh.device_id(), network.now);
+    network.node(1).mesh.resume(network.now);
+    // It withdrew its advertisement to sleep and advertises again on waking.
     network.node(0).mesh.peer_lost(network.node(1).mesh.device_id(), network.now);
     network.node(0).dials = 0;
     network.node(0).mesh.peer_discovered(network.node(1).mesh.device_id(), kGroup,
@@ -550,6 +552,45 @@ TEST(Mesh, AComputerThatWentToSleepIsDialledOnceItIsAdvertisedAnew) {
     network.run_for(std::chrono::seconds(5));
     EXPECT_GE(network.node(0).dials, 1U);
     EXPECT_TRUE(network.node(0).mesh.is_connected(network.node(1).mesh.device_id()));
+}
+
+TEST(Mesh, AComputerAsleepDialsNobodyEvenWhenItFindsItsPeersAgain) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.node(1).mesh.close_all(protocol::ByeReason::Sleeping, network.now);
+    network.run_for(milliseconds(10));
+    network.node(1).dials = 0;
+    // A dark wake: Bonjour reports node 0 again, but nobody is at the computer.
+    network.node(1).mesh.peer_discovered(network.node(0).mesh.device_id(), kGroup,
+                                         network.node(0).address, network.now);
+    network.run_for(std::chrono::seconds(120));
+    EXPECT_EQ(network.node(1).dials, 0U);
+    EXPECT_FALSE(network.node(1).mesh.is_connected(network.node(0).mesh.device_id()));
+}
+
+TEST(Mesh, APeerThatReachesASleepingComputerIsToldItSleepsAndStopsDialling) {
+    SimulatedMeshNetwork network;
+    build(network, 2);
+    network.discover_all(kGroup);
+    network.run_for(milliseconds(300));
+    network.node(1).mesh.close_all(protocol::ByeReason::Sleeping, network.now);
+    network.run_for(milliseconds(10));
+    const std::size_t asleep_disconnects = network.node(1).observer.disconnects.size();
+    // Node 0 missed the Bye (its advertisement came back, say) and dials in a dark wake.
+    network.node(0).mesh.peer_lost(network.node(1).mesh.device_id(), network.now);
+    network.node(0).dials = 0;
+    network.node(0).mesh.peer_discovered(network.node(1).mesh.device_id(), kGroup,
+                                         network.node(1).address, network.now);
+    network.run_for(std::chrono::seconds(120));
+
+    EXPECT_EQ(network.node(0).dials, 1U);
+    EXPECT_FALSE(network.node(0).mesh.is_connected(network.node(1).mesh.device_id()));
+    ASSERT_FALSE(network.node(0).observer.disconnects.empty());
+    EXPECT_EQ(network.node(0).observer.disconnects.back().second, Error::PeerSleeping);
+    EXPECT_EQ(network.node(1).observer.disconnects.size(), asleep_disconnects);
+    EXPECT_TRUE(network.node(1).observer.connected.empty()) << "nothing above the mesh saw it";
 }
 
 } // namespace

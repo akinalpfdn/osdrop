@@ -180,9 +180,15 @@ public final class Mesh: Sendable {
         try check(handle.withPointer { osdrop_mesh_set_permissions($0, device.bytes, &raw) })
     }
 
-    /// Ends every session before sleep (peers see `.peerSleeping`) or quitting.
+    /// Ends every session before sleep (peers see `.peerSleeping`) or quitting. After sleeping,
+    /// nothing is dialled until `resume()`: the Mac also wakes in the dark, without its user.
     public func closeAll(sleeping: Bool) {
         _ = handle.withPointer { osdrop_mesh_close_all($0, sleeping ? 1 : 0) }
+    }
+
+    /// The Mac woke and its user is back: the group's members are dialled again.
+    public func resume() {
+        _ = handle.withPointer { osdrop_mesh_resume($0) }
     }
 
     /// This computer's monitors, at start and after every display change.

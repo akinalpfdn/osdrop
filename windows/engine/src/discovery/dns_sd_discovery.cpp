@@ -377,6 +377,11 @@ bool DnsSdDiscovery::advertise(const osdrop_advertisement& advertisement, std::u
     return advertiser_ != nullptr;
 }
 
+void DnsSdDiscovery::withdraw() {
+    const std::scoped_lock lock(mutex_);
+    advertiser_.reset();
+}
+
 bool DnsSdDiscovery::browse(Callbacks callbacks) {
     const std::scoped_lock lock(mutex_);
     browser_.reset();

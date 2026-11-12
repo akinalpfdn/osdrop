@@ -787,3 +787,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The 47 s "Peer unresponsive" cycle seen after the 25 ms change was the Mac sleeping, not Wi-Fi: the PC's traffic woke it about 2 s after every sleep (`pmset -g log`, "DarkWake … wifibt"), so a Mac with a peer never stays asleep (20–48 wakes an hour overnight against about 4). With the user at the Mac, the 25 ms change brought interruptions from every 1–5 min to one in 26 min. With AWDL turned off by hand the mouse was visibly smoother; transfers were not faster (that was the Debug build, entry above).
 **Trade-offs:** While the AWDL switch is on, AirDrop, AirPlay and Sidecar do not work; it needs administrator approval once.
 **Revisit if:** A sleeping computer still wakes for Osdrop traffic, or AWDL stays a problem with the switch on.
+
+---
+
+## 2026-11-12 — Every address of a peer is dialled; a sleeping computer stays out until its user wakes it
+**Chosen:** User decision, all three of: (1) a dial tries each resolved address with its own attempt, the next one 250 ms later or at once on failure, families alternating (RFC 8305), first to connect wins; (2) from close_all(sleeping) until an explicit resume the mesh dials nobody and ends any session a peer opens with Bye 3; (3) a computer withdraws its advertisement when it goes to sleep and advertises again on waking, so peers dial it too.
+**Alternatives:** Only (1) and (2), leaving the woken computer's own dial as the only way back; withdrawing and re-advertising on waking with a 2 s gap instead of withdrawing at sleep.
+**Why:** In the sleep test the Mac's Bye reached the PC, but after waking every dial timed out: `akinalp.local` resolved to the PC's IPv6 link-local address first, the PC dropped it silently, and one 5 s timer covered every address, so IPv4 was never tried. During a dark wake the Mac also dialled (Bonjour reported the PC again); a session opened there is left without a Bye when the Mac sleeps again, the PC redials, and the 47 s wake cycle returns. Withdrawing at sleep lets peers see the computer come back without a timer; members are listed from the group, not from discovery, so the UI does not change.
+**Trade-offs:** A peer that dials in a dark wake is told "sleeping" only after a handshake, which wakes the radio once; a peer that misses the withdrawal still relies on the woken computer's dial.
+**Revisit if:** A woken computer stays disconnected, or a sleeping one keeps waking for Osdrop traffic.

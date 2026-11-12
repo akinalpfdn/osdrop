@@ -1,6 +1,7 @@
 #include "transport/asio_node.hpp"
 
 #include "protocol/constants.hpp"
+#include "transport/dial.hpp"
 #include "transport/traffic_class.hpp"
 
 // CMake includes Asio as a system header; SwiftPM cannot, so its warnings are silenced here.
@@ -8,7 +9,6 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #endif
-#include <asio/connect.hpp>
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
@@ -72,6 +72,7 @@ public:
         mesh::ConnectionId id;
         tcp::socket socket;
         tcp::resolver resolver;
+        std::shared_ptr<Dial> dial; ///< while a dial tries the peer's addresses
         asio::steady_timer connect_timer;
         bool connect_done = false;
         udp::socket input;
@@ -188,11 +189,25 @@ public:
                     connect_finished(connection, error);
                     return;
                 }
-                asio::async_connect(connection->socket, results,
-                                    [this, connection](const asio::error_code& connect_error,
-                                                       const tcp::endpoint& /*endpoint*/) {
-                                        connect_finished(connection, connect_error);
-                                    });
+                std::vector<tcp::endpoint> endpoints;
+                for (const auto& entry : results) {
+                    endpoints.push_back(entry.endpoint());
+                }
+                // Weak: the connection owns the dial, and closing the connection cancels it.
+                connection->dial =
+                    Dial::start(io_.get_executor(), dial_order(endpoints),
+                                [this, weak = std::weak_ptr(connection)](
+                                    const asio::error_code& connect_error, tcp::socket socket) {
+                                    const ConnectionPtr dialled = weak.lock();
+                                    if (!dialled) {
+                                        return;
+                                    }
+                                    dialled->dial.reset();
+                                    if (!connect_error) {
+                                        dialled->socket = std::move(socket);
+                                    }
+                                    connect_finished(dialled, connect_error);
+                                });
             });
     }
 
@@ -407,6 +422,7 @@ private:
                 return; // cancelled, or connected meanwhile
             }
             connection->resolver.cancel();
+            cancel_dial(*connection);
             asio::error_code ignored;
             connection->socket.close(ignored); // aborts the connect
             connect_finished(connection, asio::error::timed_out);
@@ -585,10 +601,18 @@ private:
             });
     }
 
+    static void cancel_dial(Connection& connection) {
+        if (connection.dial) {
+            connection.dial->cancel();
+            connection.dial.reset();
+        }
+    }
+
     static void close_sockets(Connection& connection) {
         asio::error_code ignored;
         connection.connect_timer.cancel();
         connection.resolver.cancel();
+        cancel_dial(connection);
         connection.socket.shutdown(tcp::socket::shutdown_both, ignored);
         connection.socket.close(ignored);
         connection.input.close(ignored);
@@ -708,6 +732,10 @@ void AsioNode::close_transfer(const mesh::DeviceId& device, std::uint32_t stream
 
 void AsioNode::close_all(protocol::ByeReason reason) {
     impl_->post([reason](mesh::Mesh& mesh, TimePoint now) { mesh.close_all(reason, now); });
+}
+
+void AsioNode::resume() {
+    impl_->post([](mesh::Mesh& mesh, TimePoint now) { mesh.resume(now); });
 }
 
 Expected<mesh::ConnectionId, Error> AsioNode::pair_with(const mesh::PeerAddress& address) {
