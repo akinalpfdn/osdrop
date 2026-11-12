@@ -115,6 +115,7 @@ struct Pair {
     TimePoint now{std::chrono::seconds(100)};
     /// Control bytes wait while true, as behind a lost segment TCP resends; datagrams still go.
     bool control_stalled = false;
+    std::size_t datagrams_delivered = 0;
 
     /// Delivers queued frames and datagrams both ways until nothing moves.
     void pump() {
@@ -129,6 +130,7 @@ struct Pair {
                 while (!from->datagrams.empty()) {
                     to->engine.on_datagram(from->datagrams.front(), now);
                     from->datagrams.pop_front();
+                    ++datagrams_delivered;
                     moved = true;
                 }
             }
@@ -311,6 +313,16 @@ TEST(SessionEngine, DatagramsKeepThePeerResponsiveWhileTheControlConnectionStall
     pair.control_stalled = false;
     pair.advance(milliseconds(10));
     EXPECT_EQ(pair.dialer.engine.state(), SessionState::Established);
+}
+
+TEST(SessionEngine, AnIdleSessionCarriesEnoughDatagramsForAMacToStayOnItsWiFiChannel) {
+    Pair pair;
+    pair.connect();
+    pair.advance(milliseconds(100));
+    pair.datagrams_delivered = 0;
+    pair.advance(std::chrono::seconds(1));
+    // macOS counts packets in and out together; below about 50 a second AWDL takes the radio away.
+    EXPECT_GE(pair.datagrams_delivered, 70U);
 }
 
 TEST(SessionEngine, DatagramsAloneDoNotKeepASessionPastItsTimeout) {

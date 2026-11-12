@@ -552,7 +552,7 @@ Input header (12 bytes):
 
 | Type | Name | Direction |
 |-----:|------|-----------|
-| 0x01 | InputHello | to the peer's input socket, every 250 ms |
+| 0x01 | InputHello | to the peer's input socket, every 250 ms, then every 25 ms |
 | 0x02 | PointerMotion | controller → endpoint |
 
 ### 0x01 InputHello
@@ -747,10 +747,13 @@ error; every other reason with CONNECTION_CLOSED.
 
 Once the peer's SessionSetup arrives, a side sends InputHello with the peer's `input_token` to the
 peer's `udp_port` at the address of the control connection: every 250 ms until the peer's
-InputHello arrives, and on at the same rate after that. A valid InputHello tells the receiver where
-to send input datagrams, so it also follows the peer to a new address. Every datagram that opens
-also counts as a sign of life: on Wi-Fi the control connection can wait about a second to resend a
-lost segment, longer than the 750 ms after which a silent peer is reported unresponsive. PointerMotion is accepted only in an
+InputHello arrives, and every 25 ms after that, for the whole session. A valid InputHello tells the
+receiver where to send input datagrams, so it also follows the peer to a new address. Every
+datagram that opens also counts as a sign of life: on Wi-Fi the control connection can wait about a
+second to resend a lost segment, longer than the 750 ms after which a silent peer is reported
+unresponsive. The 25 ms keeps a session above about 50 packets a second, the rate at which macOS
+treats Wi-Fi traffic as real-time; below it, the Mac leaves the network's channel for AWDL and the
+access point holds traffic to the Mac for over a second. PointerMotion is accepted only in an
 established session and only when its sequence is higher than that of the last one applied.
 
 ### Transfer streams

@@ -760,3 +760,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** On the home Wi-Fi a Mac and a PC reported each other unresponsive every 10 s to 2 min for 1.1–1.4 s (172 times in one Mac log from 21:37 to 12:30 the next day), and each one brought a controlled cursor home. The control connection's counters showed 74 ms average round trip and 2 % of bytes resent: on a connection that carries only heartbeats, TCP resends a lost segment only after about a second, while the next datagram gets through.
 **Trade-offs:** Keys and buttons travel on the control connection, so during such a stall they still arrive late; only the cursor no longer goes home. If the Wi-Fi stops entirely for longer than 750 ms, the peer is still reported unresponsive. Four more small datagrams a second per peer.
 **Revisit if:** Hardware logs still show "Peer unresponsive" during normal use on Wi-Fi.
+
+---
+
+## 2026-11-12 — InputHello every 25 ms for the whole session, so a Mac on Wi-Fi stays on channel
+**Chosen:** User decision: once the peer's InputHello has arrived, each side sends one every 25 ms (was 250 ms) for as long as the session lasts.
+**Alternatives:** Waiting 2 s instead of 750 ms before the cursor comes home and held input is released (no battery cost, but DEVPLAN's one-second rule becomes two and the cursor still freezes); both; an opt-in helper that turns AWDL off; leaving it.
+**Why:** After InputHello became a sign of life, the PC never saw the Mac unresponsive, but the Mac still saw the PC unresponsive every 1–5 min for about 1.3 s. A capture on the wired PC showed it never stopped sending (largest gap 0.27 s). The Mac's kernel log showed why: every ~1 s macOS counts the Wi-Fi packets, calls the traffic real-time above about 50 in and out together, and otherwise lets AWDL take the radio off the network's channel; an idle session (30–45 a second) kept flipping between the two, and traffic to the Mac was held for over a second after a flip. At 25 ms a session carries about 100 packets a second.
+**Trade-offs:** About 4 KB/s each way per peer, about 40 wakeups a second per peer, and a Mac's Wi-Fi radio stays awake during a session, which costs battery (not measured yet). The threshold is undocumented macOS behaviour and may change.
+**Revisit if:** A battery measurement shows a large cost, or Mac logs still show the traffic leaving real-time during a session.

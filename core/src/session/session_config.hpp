@@ -29,7 +29,10 @@ struct SessionTunables {
     /// InputHello repeats this often until the peer's arrives, then at input_keepalive_interval
     /// to keep the association (and firewall state) alive and tell the peer this side lives.
     Microseconds input_hello_interval{250'000};
-    Microseconds input_keepalive_interval{250'000};
+    /// Fast enough that a Mac on Wi-Fi counts the session as real-time traffic: below about 50
+    /// packets a second, macOS leaves the network's channel for AWDL and the access point holds
+    /// traffic to the Mac for over a second.
+    Microseconds input_keepalive_interval{25'000};
     Microseconds stats_interval{1'000'000};
 };
 

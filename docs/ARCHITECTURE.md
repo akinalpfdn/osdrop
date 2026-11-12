@@ -64,12 +64,13 @@ it with a simulated clock and network; one Asio layer drives it in the apps.
 
 - **Threads.** `AsioNode` owns one I/O thread for every socket and timer. Mesh callbacks run on it.
   Commands from other threads are queued to it in order; those that return a result wait for it.
-  The timer is set to the mesh's next deadline instead of ticking, so an idle group costs a few
-  wakeups per second per peer (heartbeats).
+  The timer is set to the mesh's next deadline instead of ticking; an idle group still wakes about
+  40 times a second per peer to send an InputHello (see Peer loss).
 - **Peer loss.** A silent peer is reported unresponsive after 750 ms, so input to and from it stops
-  well within the one-second budget. Input datagrams (an InputHello every 250 ms) count as signs of
+  well within the one-second budget. Input datagrams (an InputHello every 25 ms) count as signs of
   life, so a control connection resending a lost Wi-Fi packet is not mistaken for loss; the session
-  survives a stall and ends only after 10 s without control bytes.
+  survives a stall and ends only after 10 s without control bytes. The 25 ms keeps a Mac on Wi-Fi
+  from leaving the network's channel for AWDL, which held traffic to the Mac for over a second.
 - **Orderly close.** When the mesh ends a connection, its last bytes (a pairing refusal, a Bye)
   go out, then only the sending side is shut and the node reads until the peer closes or 2 s
   pass. Closing a socket with unread bytes resets the connection, and Windows then drops what the
