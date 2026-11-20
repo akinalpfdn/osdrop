@@ -30,12 +30,23 @@ targets:
     platform: macOS
     sources:
       - path: Osdrop
-      # Definitions the app shares with its capture guard.
+      # Definitions the app shares with its capture guard and its network helper.
       - path: Shared
+      # The network helper's launchd job, registered with SMAppService from the app's bundle.
+      - path: OsdropNetworkHelper/com.akinalpfdn.osdrop.network-helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
     dependencies:
       - package: OsdropCore
         product: CoreBridge
       - target: OsdropCaptureGuard
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
+      - target: OsdropNetworkHelper
         embed: true
         codeSign: true
         copy:
@@ -59,6 +70,21 @@ targets:
       base:
         PRODUCT_NAME: OsdropCaptureGuard
         PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.captureguard
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+  # Keeps AWDL off while the app asks for it (PHASE-024-NET-01); runs as root under launchd.
+  OsdropNetworkHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: OsdropNetworkHelper
+        excludes:
+          - "*.plist"
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: OsdropNetworkHelper
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.network-helper
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
   OsdropTests:
