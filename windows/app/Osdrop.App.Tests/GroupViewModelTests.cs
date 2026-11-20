@@ -101,7 +101,7 @@ public sealed class GroupViewModelTests
         engine.Raise(new EngineEvent(EngineEventKind.ClipboardReady, DeviceId: _laptop, Name: "Laptop", Code: 1));
         Assert.Equal(
             Formatted(Localization.Strings.ClipboardReady, "Laptop") + Environment.NewLine + Localization.Strings.TransfersLinkLeftOut,
-            notifications[2].Body);
+            notifications[2].Text);
     }
 
     [Fact]

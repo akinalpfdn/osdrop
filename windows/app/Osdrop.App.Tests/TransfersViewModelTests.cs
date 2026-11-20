@@ -21,6 +21,9 @@ public sealed class TransfersViewModelTests
     /// <summary>Item <paramref name="index"/> of drag <paramref name="dragId"/>, as SEND_PROGRESS names it.</summary>
     private static ulong Item(uint dragId, uint index) => ((ulong)dragId << 32) | index;
 
+    private static string Formatted(string text, string value) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, text, value);
+
     [Fact]
     public void AReceivedFileShowsItsProgressThenEndsDoneAndNotifies()
     {
@@ -55,7 +58,7 @@ public sealed class TransfersViewModelTests
         engine.Raise(new EngineEvent(EngineEventKind.TransferFinished, Connection: 8, Reason: CoreResult.Ok, Code: 2));
         TransferRow row = Assert.Single(transfers.Rows);
         Assert.True(row.HasLinksNote);
-        Assert.Equal(string.Format(System.Globalization.CultureInfo.CurrentCulture, Localization.Strings.TransfersLinksLeftOut, "2"), row.LinksNote);
+        Assert.Equal(Formatted(Localization.Strings.TransfersLinksLeftOut, "2"), row.LinksNote);
         Assert.EndsWith(row.LinksNote, Assert.Single(notes).Body, StringComparison.Ordinal);
 
         // Reported before the transfer was listed, and a single one.
