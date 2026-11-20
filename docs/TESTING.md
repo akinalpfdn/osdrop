@@ -341,6 +341,26 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 
+### Robustness (Phase 18)
+
+Two members connected, a Mac and a PC, once on Wi-Fi and once with the PC wired. "Back" means
+the members are connected again and the cursor crosses, without restarting Osdrop.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| R1 | Sleep | Put the Mac to sleep (Apple menu › Sleep) for two minutes, wake it; then the same with the PC (Start › Power › Sleep) | The other computer shows it asleep and does not wake it; back within 10 s of waking |
+| R2 | Wi-Fi off and on | Turn the Mac's Wi-Fi off for 30 s, then on; then the PC's network adapter | The other side shows it gone; back within 10 s of the network returning |
+| R3 | Wi-Fi to cable | While connected, plug the PC's network cable in, then pull it out (it falls back to Wi-Fi) | Back within 10 s each time |
+| R4 | New address | On the PC run `ipconfig /release` and then `ipconfig /renew`; on the Mac join another Wi-Fi network and come back | Back within 10 s of the new address |
+| R5 | Monitor unplugged | While the Mac controls the PC with the cursor on the PC's second monitor, unplug that monitor; then plug it back | The cursor moves to a remaining monitor; the arrangement on both computers loses the monitor and gets it back where it was |
+| R6 | Scale changed | While the PC is controlled, change its display scale (Settings › Display); on the Mac change a display's resolution | The cursor keeps working; edges match the new sizes on both computers |
+| R7 | Locked screen | Lock the PC (Win+L) and push the Mac's cursor against its edge; unlock and push again. Then lock the Mac (⌃⌘Q) and push from the PC | Locked: the edge is a wall and the controlling computer says the other one is locked; unlocked: it crosses |
+| R8 | Locked while controlled | While the Mac controls the PC, press Win+L on the PC's own keyboard | The cursor comes back to the Mac; the PC is refused until it is unlocked |
+| R9 | Another user | Switch to another user on the Mac (Fast User Switching) and on the PC (Switch user), then back | While the other user is in front, crossing in is refused; back to the first user, it crosses again |
+| R10 | Osplay displays | With Osplay showing the Mac's virtual displays on the PC, open Osdrop's arrangement on both | The virtual displays are ordinary monitors in the arrangement; the cursor crosses through them as through any monitor |
+| R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
+| R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
