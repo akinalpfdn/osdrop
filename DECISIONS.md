@@ -796,3 +796,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** In the sleep test the Mac's Bye reached the PC, but after waking every dial timed out: `akinalp.local` resolved to the PC's IPv6 link-local address first, the PC dropped it silently, and one 5 s timer covered every address, so IPv4 was never tried. During a dark wake the Mac also dialled (Bonjour reported the PC again); a session opened there is left without a Bye when the Mac sleeps again, the PC redials, and the 47 s wake cycle returns. Withdrawing at sleep lets peers see the computer come back without a timer; members are listed from the group, not from discovery, so the UI does not change.
 **Trade-offs:** A peer that dials in a dark wake is told "sleeping" only after a handshake, which wakes the radio once; a peer that misses the withdrawal still relies on the woken computer's dial.
 **Revisit if:** A woken computer stays disconnected, or a sleeping one keeps waking for Osdrop traffic.
+
+---
+
+## 2026-11-20 — The AWDL switch is a launchd daemon in the app bundle
+**Chosen:** An SMAppService daemon (`OsdropNetworkHelper`, `Contents/Library/LaunchDaemons`) that runs `ifconfig awdl0 down` while the app holds one XPC connection asking for it, turns AWDL off again whenever the routing socket shows it back, and lets it up when the connection ends or, after its own crash, on its next start (a mark in /var/run). It answers only Osdrop's app signed by its own team, read from its own signature. The setting is off by default and named for the user's gain ("Improve the connection over Wi-Fi", user wording).
+**Alternatives:** An `osascript … with administrator privileges` prompt on every launch; a sudoers entry; a privileged helper with SMJobBless (deprecated).
+**Why:** One approval in Login Items, no password per launch, and AWDL comes back whenever Osdrop goes, crash included. The user's manual test (2026-11-12) showed macOS does not bring AWDL back by itself, so restoring is the helper's job.
+**Trade-offs:** AirDrop, AirPlay and Sidecar stop while it is on; ad hoc builds cannot run the helper (the setting then reports a failure).
+**Revisit if:** macOS offers an API to pause AWDL for an app, or AWDL stays a problem with the switch on.
