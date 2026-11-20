@@ -14,6 +14,7 @@ final class AppDependencies {
     let staging: DragStaging
     let settings: AppSettings
     let group: GroupController
+    let awdl: AWDLSwitch
 
     init(
         accessibility: AccessibilityPermission = AccessibilityPermission(),
@@ -37,6 +38,8 @@ final class AppDependencies {
         self.settings = settings
         self.group = GroupController(
             services: groupServices ?? .system(settings: settings), screens: screens, settings: settings)
+        awdl = AWDLSwitch(
+            settings: settings, registration: SystemNetworkHelperRegistration(), helper: XPCNetworkHelper())
     }
 }
 

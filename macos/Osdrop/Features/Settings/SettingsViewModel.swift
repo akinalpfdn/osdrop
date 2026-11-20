@@ -44,6 +44,8 @@ final class SettingsViewModel {
     let settings: AppSettings
     let group: GroupController
     let updates: UpdatesViewModel
+    /// Nil in tests that do not need it.
+    let awdl: AWDLSwitch?
     private(set) var launchesAtLogin: Bool
     private(set) var launchNeedsApproval: Bool
     /// The last problem with a setting, shown under it.
@@ -61,12 +63,13 @@ final class SettingsViewModel {
     init(
         settings: AppSettings, group: GroupController, updates: UpdatesViewModel,
         launchAtLogin: any LaunchAtLoginManaging, logs: any LogExporting,
-        showPermissions: @escaping @MainActor () -> Void,
+        showPermissions: @escaping @MainActor () -> Void, awdl: AWDLSwitch? = nil,
         copy: @escaping @MainActor (String) -> Void = SettingsViewModel.copyToPasteboard
     ) {
         self.settings = settings
         self.group = group
         self.updates = updates
+        self.awdl = awdl
         self.launchAtLogin = launchAtLogin
         self.logs = logs
         self.showPermissions = showPermissions
@@ -79,6 +82,7 @@ final class SettingsViewModel {
         launchesAtLogin = launchAtLogin.isEnabled
         launchNeedsApproval = launchAtLogin.needsApproval
         diagnosticsCopied = false
+        awdl?.refresh()
     }
 
     // MARK: General

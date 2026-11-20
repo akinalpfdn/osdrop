@@ -333,6 +333,9 @@ private struct AdvancedSettings: View {
 
     var body: some View {
         Form {
+            if let awdl = viewModel.awdl {
+                NetworkSettings(awdl: awdl)
+            }
             Section("settings.diagnostics") {
                 LabeledContent("settings.diagnostics.copy.title") {
                     Button("settings.diagnostics.copy") { Task { await viewModel.copyDiagnostics() } }
@@ -348,5 +351,33 @@ private struct AdvancedSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// The AWDL switch (PHASE-024-NET-01): off by default, it names what stops working.
+private struct NetworkSettings: View {
+    let awdl: AWDLSwitch
+
+    var body: some View {
+        Section("settings.network") {
+            Toggle(
+                "settings.awdl.keepOff", isOn: Binding(get: { awdl.isEnabled }, set: { awdl.setEnabled($0) }))
+            Note("settings.awdl.description")
+            switch awdl.state {
+            case .off:
+                EmptyView()
+            case .needsApproval:
+                Note("settings.awdl.approval")
+                LabeledContent("settings.awdl.approval.title") {
+                    Button("settings.awdl.openApproval", action: awdl.openApproval)
+                }
+            case .starting:
+                Note("settings.awdl.starting")
+            case .holding:
+                Note("settings.awdl.holding")
+            case .failed:
+                Problem(text: String(localized: "settings.awdl.failed"))
+            }
+        }
     }
 }
