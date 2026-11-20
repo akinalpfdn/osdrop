@@ -345,6 +345,7 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-20 | dev (50e1bc6), Debug, M3 Air + PC (debug engine and shell) | D1, D2, D4–D8, D10, D11, Mac ↔ PC | Pass. D10 first sent Photos' preview instead of the photo, then the photo with its preview (fixed in 2b72306 and 50e1bc6); D2 showed a link left out without a notice (9cb12e6). D3, D9, Mac ↔ Mac and PC ↔ PC wait for a third computer |
 | 2026-11-09 | Phase 3 branch (779a4dd), PC debug engine and Release shell, M3 Air | W1–W6, W8 | Pass. Hook p99 7 µs over 70 424 events (longest 1918 µs); the service restarted a killed OsdropInput within 3 ms. W7 not run: the PC has no second Windows user |
 | 2026-11-08 | Phase 14 branch (fdb0e04), Debug, M3 Air + PC (Release shell, debug engine) | G4, G8 | Pass. G4 first failed: the member that removed a computer refused it before any code, so it could never pair again; fixed, then blocking was added (G8) |
 | 2026-11-08 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | CL5, CL6, CL9 | Pass. CL6 on the Mac showed no notification until Osdrop's notifications were allowed in System Settings › Notifications: they had been refused at macOS's first prompt |
