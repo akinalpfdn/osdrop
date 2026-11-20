@@ -1,5 +1,5 @@
 # Phase 024 (NET-01) — Keep AWDL off while Osdrop runs (Mac)
-Status: PENDING
+Status: ACTIVE
 
 Not a DEVPLAN phase: user decision 2026-11-12, after Phase 15. See DECISIONS.md, "A Mac that sleeps leaves the mesh until it wakes; AWDL switch gets its own phase".
 

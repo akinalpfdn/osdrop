@@ -1,5 +1,5 @@
 # Phase 015 (MVP-15) — Drag and drop across computers
-Status: ACTIVE — the Windows half on `feature/phase-14-windows-drag` (core + Mac half merged in #17)
+Status: DONE (2026-11-20) — Mac ↔ PC tested; the three-computer rows moved to Phase 020
 
 DEVPLAN reference: Phase 14. Depends on: Phases 2, 4, 11, 13
 
@@ -7,14 +7,14 @@ DEVPLAN reference: Phase 14. Depends on: Phases 2, 4, 11, 13
 A file dragged to an edge crosses with the cursor and lands where it is released, in every direction.
 
 ## Tasks
-- [ ] Drag probe, offer, drop, cancel and result flows wired to the bridges from Phases 2 and 4 and to the transfer engine.
-- [ ] Any member can be the source, including a computer that is itself being controlled remotely; drags across several computers (A → B → C).
-- [ ] Progress and cancel on both sides; transfers continue after the cursor moves on; a drop on a target that accepts nothing cancels cleanly.
+- [x] Drag probe, offer, drop, cancel and result flows wired to the bridges from Phases 2 and 4 and to the transfer engine.
+- [x] Any member can be the source, including a computer that is itself being controlled remotely; drags across several computers (A → B → C).
+- [x] Progress and cancel on both sides; transfers continue after the cursor moves on; a drop on a target that accepts nothing cancels cleanly.
 
 ## Acceptance Criteria
 - [ ] Mac → PC, PC → Mac, Mac → Mac, PC → PC, a three-computer chain and a drag started on a remotely controlled computer all copy the file where it is dropped.
-- [ ] A 10 GB file and a folder tree with Unicode names arrive intact.
-- [ ] Losing the network mid-transfer ends with a clear message on both sides and no partial file.
+- [x] A 10 GB file and a folder tree with Unicode names arrive intact.
+- [x] Losing the network mid-transfer ends with a clear message on both sides and no partial file.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
@@ -81,3 +81,9 @@ User decision: drops on the PC stream; Explorer copies while the files arrive.
   clang-tidy clean on the Mac; the shell builds there, its tests run in CI).
 - Hardware: TESTING D1-D11 in the Mac <-> PC directions; the service must be reinstalled (input
   pipe version 2).
+
+## Closing (2026-11-20)
+User decision: Phase 15 closes with every Mac ↔ PC row of TESTING D1–D11 passed (TESTING.md, Runs).
+Mac → Mac, PC → PC, the three-computer chain (D3) and D9 need a third computer; they are a task
+of Phase 020, before the release. Fixed during the run: 2b72306 and 50e1bc6 (Photos), 9cb12e6
+(links left out are counted on both sides).

@@ -7,6 +7,7 @@ DEVPLAN reference: Phase 19. Depends on: Phase 18
 Anyone can install Osdrop from GitHub Releases, and contributors can build it from the docs alone.
 
 ## Tasks
+- [ ] Before the release, with a third computer: TESTING D1 Mac → Mac and PC → PC, D3 (chain) and D9 (moved from Phase 015).
 - [ ] macOS: Developer ID signing, Hardened Runtime, notarization with the `mac-notary` keychain profile and stapling, by one release script that uploads the DMG to the tag's release.
 - [ ] Windows: Inno Setup installer built by the release workflow (unsigned until signing exists) that installs the shell, engine, input process and service and adds the firewall rule; upgrades stop and restart the service; uninstall removes the service, the input process, the firewall rule and the Run entry and restores system cursors.
 - [ ] Release workflow triggered by a version tag; fixed asset names with SHA-256 files; daily update check in both apps.
