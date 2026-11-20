@@ -252,7 +252,11 @@ public:
     /// own input, captured `age_us` ago, whether it can be controlled, and where something else
     /// moved its cursor.
     void physical_input(const osdrop_input& input, std::uint64_t age_us);
+    /// Whether the input process can inject here: 0 yes, 3 no (as osdrop_mesh_set_unavailable).
     void set_unavailable(std::uint8_t reason);
+    /// The session is locked (also when another user's is in front): other computers are refused
+    /// as by a locked screen, whatever the input process can do.
+    void set_locked(bool locked);
     void cursor_moved(std::int32_t x, std::int32_t y);
     /// As osdrop_mesh_return_home, osdrop_mesh_lock_input and osdrop_mesh_set_caps_lock.
     void return_home(bool input_lost);
@@ -314,6 +318,10 @@ private:
     DeviceIdBytes self_{}; ///< set before port_, which publishes it
 
     mutable std::mutex mutex_;
+    /// Orders availability reports from the input bridge and the shell; core never takes it.
+    std::mutex availability_mutex_;
+    std::uint8_t input_unavailable_ = 0;                   ///< guarded by availability_mutex_
+    bool locked_ = false;                                  ///< guarded by availability_mutex_
     std::uint16_t port_ = 0;                               ///< 0 until started; guarded by mutex_
     std::optional<GroupIdBytes> group_;                    ///< guarded by mutex_
     std::map<std::string, DiscoveredComputer> discovered_; ///< by label; guarded by mutex_

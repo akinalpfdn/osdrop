@@ -177,6 +177,8 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_screens_changed(osdrop_engine* eng
 OSDROP_ENGINE_API osdrop_result osdrop_engine_close_all(osdrop_engine* engine, uint8_t sleeping);
 /* After waking: browses again, so members are found and dialled again. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_resume(osdrop_engine* engine);
+/* The session was locked (1) or unlocked (0): while locked, other computers cannot control it. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_locked(osdrop_engine* engine, uint8_t locked);
 /* Cancels a transfer this PC receives (TRANSFER_RECEIVING's connection); what it wrote goes. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* engine,
                                                               uint64_t transfer_id);

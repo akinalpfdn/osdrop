@@ -88,6 +88,10 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult Resume(nint engine);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_locked")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetLocked(nint engine, byte locked);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_clipboard")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult SetClipboard(nint engine, byte shared, ulong filesLimit);

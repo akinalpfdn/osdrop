@@ -11,6 +11,8 @@ namespace osdrop::win {
 namespace {
 
 constexpr std::uint8_t kTransferStreams = 4;
+/// osdrop_mesh_set_unavailable: its screen is locked.
+constexpr std::uint8_t kScreenLocked = 1;
 /// This PC's drags whose item names are kept for the members that fetch them.
 constexpr std::size_t kRememberedDrags = 32;
 
@@ -651,7 +653,16 @@ void GroupEngine::set_caps_lock(bool on) {
 }
 
 void GroupEngine::set_unavailable(std::uint8_t reason) {
-    static_cast<void>(osdrop_mesh_set_unavailable(mesh_, reason));
+    const std::scoped_lock lock(availability_mutex_);
+    input_unavailable_ = reason;
+    static_cast<void>(osdrop_mesh_set_unavailable(mesh_, locked_ ? kScreenLocked : reason));
+}
+
+void GroupEngine::set_locked(bool locked) {
+    const std::scoped_lock lock(availability_mutex_);
+    locked_ = locked;
+    static_cast<void>(
+        osdrop_mesh_set_unavailable(mesh_, locked ? kScreenLocked : input_unavailable_));
 }
 
 void GroupEngine::cursor_moved(std::int32_t x, std::int32_t y) {

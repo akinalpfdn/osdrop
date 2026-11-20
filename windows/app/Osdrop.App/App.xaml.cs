@@ -79,6 +79,7 @@ public partial class App : Application, IDisposable
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _engine?.Shutdown();
         _engine = null;
@@ -130,6 +131,7 @@ public partial class App : Application, IDisposable
         var transfers = new TransfersViewModel(
             engine, _group.NameOf, (title, message) => _trayIcon?.ShowNotification(title, message));
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         _panelModel.Started(_group, control, _settingsModel, transfers, engine.SetDragLoopbackAsync);
         await SettingsViewModel.ApplyPointerSpeedsAsync(engine, _settings).ConfigureAwait(true);
@@ -232,6 +234,19 @@ public partial class App : Application, IDisposable
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => _ = _engine?.ScreensChangedAsync();
+
+    /// <summary>A locked PC, or one switched to another user (Windows locks the session then), refuses control.</summary>
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionLock)
+        {
+            _ = _engine?.SetLockedAsync(true);
+        }
+        else if (e.Reason == SessionSwitchReason.SessionUnlock)
+        {
+            _ = _engine?.SetLockedAsync(false);
+        }
+    }
 
     /// <summary>Ends sessions first (other computers see this PC leave), then exits.</summary>
     private async Task QuitAsync()

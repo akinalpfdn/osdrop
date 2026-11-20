@@ -689,6 +689,14 @@ osdrop_result osdrop_engine_resume(osdrop_engine* engine) {
     return OSDROP_OK;
 }
 
+osdrop_result osdrop_engine_set_locked(osdrop_engine* engine, uint8_t locked) {
+    if (engine == nullptr || locked > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->set_locked(locked == 1);
+    return OSDROP_OK;
+}
+
 osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* engine, uint64_t transfer_id) {
     if (engine == nullptr) {
         return OSDROP_ERROR_INVALID_ARGUMENT;

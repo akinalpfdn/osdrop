@@ -65,6 +65,8 @@ final class InputController {
     @ObservationIgnored private var heartbeat: Task<Void, Never>?
     @ObservationIgnored private var cursorWatch: Task<Void, Never>?
     @ObservationIgnored private var screenLocked = false
+    /// Another user's session is in front (fast user switching).
+    @ObservationIgnored private var sessionInactive = false
     @ObservationIgnored private var capsLockReported: Bool?
     /// Until this `DispatchTime` uptime, a Caps Lock event from the tap is taken for the echo of
     /// Osdrop setting Caps Lock itself, not for the user's key: on a controlled Mac it would end
@@ -189,6 +191,12 @@ final class InputController {
         updateAvailability()
     }
 
+    /// While another user's session is in front, this Mac is refused as if its screen were locked.
+    func sessionActiveChanged(_ active: Bool) {
+        sessionInactive = !active
+        updateAvailability()
+    }
+
     func dismissNotice() {
         notice = nil
     }
@@ -257,7 +265,7 @@ final class InputController {
     /// Other computers are refused while this Mac's screen is locked or it cannot inject.
     private func updateAvailability() {
         let reason: ControlUnavailability? =
-            if screenLocked {
+            if screenLocked || sessionInactive {
                 .screenLocked
             } else if !isPermitted {
                 .notPermitted
