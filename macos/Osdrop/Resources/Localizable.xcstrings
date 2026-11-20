@@ -3152,13 +3152,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Turns AWDL off while Osdrop runs, so the cursor and files move without pauses over Wi-Fi. Meanwhile AirDrop, AirPlay and Sidecar do not work. AWDL comes back when this is turned off or Osdrop quits."
+            "value" : "The cursor moves smoothly, without pauses. While this is on, AirDrop, AirPlay and Sidecar do not work."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Osdrop açıkken AWDL'yi kapatır; böylece imleç ve dosyalar Wi-Fi üzerinden takılmadan gider. Bu sırada AirDrop, AirPlay ve Sidecar çalışmaz. Bu ayar kapatılınca ya da Osdrop kapanınca AWDL geri gelir."
+            "value" : "İmleç takılmadan, akıcı hareket eder. Bu açıkken AirDrop, AirPlay ve Sidecar çalışmaz."
           }
         }
       }
@@ -3203,13 +3203,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keep Wi-Fi on the network's channel"
+            "value" : "Improve the connection over Wi-Fi"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wi-Fi'ı ağın kanalında tut"
+            "value" : "Wi-Fi bağlantısını iyileştir"
           }
         }
       }
