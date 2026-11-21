@@ -805,3 +805,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** One approval in Login Items, no password per launch, and AWDL comes back whenever Osdrop goes, crash included. The user's manual test (2026-11-12) showed macOS does not bring AWDL back by itself, so restoring is the helper's job.
 **Trade-offs:** AirDrop, AirPlay and Sidecar stop while it is on; ad hoc builds cannot run the helper (the setting then reports a failure).
 **Revisit if:** macOS offers an API to pause AWDL for an app, or AWDL stays a problem with the switch on.
+
+---
+
+## 2026-11-21 — Uninstalling keeps the user's data
+**Chosen:** The Windows uninstaller removes the program, the service, the firewall rule, the "Start with Windows" entry and the service's logs in `%ProgramData%\Osdrop`, and keeps `%APPDATA%\Osdrop` (identity, group state, settings) and `%LOCALAPPDATA%\Osdrop` (the app's logs). Moving the Mac app to the Trash likewise keeps its Keychain items and preferences.
+**Alternatives:** Delete everything; ask in the uninstaller.
+**Why:** Reinstalling, or upgrading by removing and installing again, keeps the pairings: the other computers still trust this identity, whereas a new one would leave a stale member on each of them to remove by hand. Found during the 0.1.0 installer run; it had not been written down.
+**Trade-offs:** A complete removal takes deleting those two folders by hand.
+**Revisit if:** Users ask for a complete removal; then the uninstaller asks whether to delete them.
