@@ -1,14 +1,10 @@
 <p align="right"><a href="README.md">English</a></p>
 
 <p align="center">
-  <img src="docs/media/app-icon.png" width="104" alt="Osdrop uygulama simgesi">
-</p>
-
-<h1 align="center">Osdrop</h1>
-
-<p align="center">
-  <b>Mac'lerin ve Windows PC'lerin için tek klavye ve fare.</b><br>
-  İmleci ekran kenarından geçir · dosyaları diğer bilgisayara sürükle · burada kopyala, orada yapıştır
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.tr.png">
+    <img src="docs/media/banner-light.tr.png" width="100%" alt="Osdrop: Mac’lerin ve PC’lerin için tek klavye ve fare. İmleç bir dosyayı MacBook’tan ekran kenarı üzerinden PC’ye taşıyor.">
+  </picture>
 </p>
 
 <p align="center">
@@ -172,6 +168,20 @@ bilgisayarda kalır.
 
 Mac'ler ile Windows PC'ler arasında aynı işi yapar: tek klavye ve fare, kenardan sürüklenen dosyalar
 ve ortak pano. iPad'leri desteklemez.
+</details>
+
+<details>
+<summary><b>Bir bilgisayarı sunucu olarak seçmem gerekiyor mu?</b></summary>
+
+Hayır. Sunucu ya da istemci yok: hangi bilgisayarın klavyesini ve faresini kullanıyorsan o
+diğerlerini yönetir ve gruptaki her bilgisayar bu görevi üstlenebilir.
+</details>
+
+<details>
+<summary><b>Synergy ya da Deskflow tabanlı mı?</b></summary>
+
+Hayır. Osdrop'un kendi protokolü ve kendi ortak C++ çekirdeği var; Synergy, Deskflow, Barrier ya
+da Input Leap ile birlikte çalışmaz.
 </details>
 
 <details>

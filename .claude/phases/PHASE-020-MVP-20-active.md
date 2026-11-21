@@ -22,3 +22,9 @@ Anyone can install Osdrop from GitHub Releases, and contributors can build it fr
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decisions (2026-11-21): release 0.1.0 now, with the release notes naming what was not
+  tested (three-computer drag rows D1 Mac → Mac / PC → PC, D3, D9; robustness R5, R6, R9–R11; the
+  two-hour run R12). Screenshots for the README come from the user, into docs/media.
+- Done: 5131dc6 Windows installer and release workflow, 21a3a93 Mac app icon (it had none),
+  92567ed Mac release script, 03a207f RELEASING.md, 011ffbb README.md and README.tr.md.
+

@@ -1,14 +1,10 @@
 <p align="right"><a href="README.tr.md">Türkçe</a></p>
 
 <p align="center">
-  <img src="docs/media/app-icon.png" width="104" alt="Osdrop app icon">
-</p>
-
-<h1 align="center">Osdrop</h1>
-
-<p align="center">
-  <b>One keyboard and mouse for your Macs and Windows PCs.</b><br>
-  Push the cursor across the screen edge · drag files to the other computer · copy here, paste there
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.png">
+    <img src="docs/media/banner-light.png" width="100%" alt="Osdrop: one keyboard and mouse for your Macs and PCs. The cursor carries a file from a MacBook across the screen edge onto a PC.">
+  </picture>
 </p>
 
 <p align="center">
@@ -171,6 +167,20 @@ copied on.
 
 It does the same job between Macs and Windows PCs: one keyboard and mouse, files dragged across the
 edge and a shared clipboard. It does not support iPads.
+</details>
+
+<details>
+<summary><b>Do I have to pick one computer as the server?</b></summary>
+
+No. There is no server or client: the computer whose keyboard and mouse you are using drives the
+others, and any computer in the group can be that one.
+</details>
+
+<details>
+<summary><b>Is it based on Synergy or Deskflow?</b></summary>
+
+No. Osdrop has its own protocol and its own shared C++ core, and does not work with Synergy,
+Deskflow, Barrier or Input Leap.
 </details>
 
 <details>
