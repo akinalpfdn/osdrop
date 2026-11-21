@@ -365,6 +365,7 @@ the members are connected again and the cursor crosses, without restarting Osdro
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-21 | dev (61727d5), Debug, M3 Air + PC (debug engine and shell) | R1–R4, R7, R8, Mac ↔ PC | Pass, as reported by the user. R1 from the sleep run of 2026-11-12. Win+L with the cursor on the Mac first left Control held there (every click a right-click); fixed in 5d63a03. Osplay's displays stayed in the arrangement after they were gone; fixed in 61727d5 |
 | 2026-11-20 | dev (50e1bc6), Debug, M3 Air + PC (debug engine and shell) | D1, D2, D4–D8, D10, D11, Mac ↔ PC | Pass. D10 first sent Photos' preview instead of the photo, then the photo with its preview (fixed in 2b72306 and 50e1bc6); D2 showed a link left out without a notice (9cb12e6). D3, D9, Mac ↔ Mac and PC ↔ PC wait for a third computer |
 | 2026-11-09 | Phase 3 branch (779a4dd), PC debug engine and Release shell, M3 Air | W1–W6, W8 | Pass. Hook p99 7 µs over 70 424 events (longest 1918 µs); the service restarted a killed OsdropInput within 3 ms. W7 not run: the PC has no second Windows user |
 | 2026-11-08 | Phase 14 branch (fdb0e04), Debug, M3 Air + PC (Release shell, debug engine) | G4, G8 | Pass. G4 first failed: the member that removed a computer refused it before any code, so it could never pair again; fixed, then blocking was added (G8) |
