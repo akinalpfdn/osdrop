@@ -52,6 +52,10 @@ struct VirtualFiles {
 /// UTF-8 as UTF-16; invalid sequences become U+FFFD.
 [[nodiscard]] std::u16string utf16(std::string_view text);
 
+/// The Uniform Type Identifier a drag item of this PC travels with, from its name: a Mac target
+/// such as Photos takes only the types it knows. "public.data" for names not in the table.
+[[nodiscard]] std::string content_type(std::string_view name, bool folder);
+
 /// The content of one file read front to back: a local file, or a transfer as it arrives. `read`
 /// may wait for bytes; it returns 0 at the end, or when the content cannot be read further.
 class ContentReader {
@@ -81,6 +85,9 @@ public:
     [[nodiscard]] bool seek(std::uint64_t offset);
     [[nodiscard]] std::uint64_t position() const { return position_; }
     [[nodiscard]] std::uint64_t size() const { return size_; }
+    /// The content ended before its size, or could not be read: a reader must not take what was
+    /// read as the whole file.
+    [[nodiscard]] bool broken() const { return broken_; }
 
 private:
     [[nodiscard]] bool reopen();
@@ -89,6 +96,7 @@ private:
     std::size_t entry_;
     std::uint64_t size_;
     std::uint64_t position_ = 0;
+    bool broken_ = false;
     std::unique_ptr<ContentReader> reader_;
 };
 

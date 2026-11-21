@@ -21,3 +21,23 @@ Privilege Isolation), and Osdrop's drop targets at the screen edges run as you. 
 in an elevated app, such as an administrator PowerShell or an installer, cannot be carried to
 another computer; the edge acts as a wall for it. Drag the files from Explorer instead, or run the
 app without administrator rights.
+
+## Mac: the cursor stutters over Wi-Fi
+
+macOS takes the Wi-Fi radio off your network's channel at intervals for AWDL, the link behind
+AirDrop, AirPlay and Sidecar, and the other computer's packets wait meanwhile. Turn on
+**Settings › Advanced › Improve the connection over Wi-Fi**. The first time, macOS asks you to
+allow Osdrop in **System Settings › General › Login Items › Allow in the Background**; a small
+helper inside Osdrop then keeps AWDL off while Osdrop runs. While it is on, AirDrop, AirPlay and
+Sidecar do not work. Turning the setting off or quitting Osdrop brings AWDL back within seconds.
+A wired connection on either computer does not avoid this: the Mac's own radio is the one that
+leaves the channel.
+
+## Osdrop and Osplay together
+
+Osplay's virtual displays are ordinary monitors to Osdrop: they appear in the arrangement in
+Settings › Arrangement and the cursor crosses through them like through any other monitor. When
+Osplay ends them, Osdrop drops them from the arrangement within a second. Osplay shows a Mac's
+virtual display on a PC as a picture of it, so a click on that picture does nothing: move to the
+PC's own monitors to control the PC, or to the virtual display on the Mac to work there.
+

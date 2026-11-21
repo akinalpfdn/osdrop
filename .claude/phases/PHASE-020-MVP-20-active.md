@@ -1,5 +1,5 @@
 # Phase 020 (MVP-20) — Packaging, release and documentation
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 19. Depends on: Phase 18
 
@@ -7,6 +7,7 @@ DEVPLAN reference: Phase 19. Depends on: Phase 18
 Anyone can install Osdrop from GitHub Releases, and contributors can build it from the docs alone.
 
 ## Tasks
+- [ ] Before the release, with a third computer: TESTING D1 Mac → Mac and PC → PC, D3 (chain) and D9 (moved from Phase 015).
 - [ ] macOS: Developer ID signing, Hardened Runtime, notarization with the `mac-notary` keychain profile and stapling, by one release script that uploads the DMG to the tag's release.
 - [ ] Windows: Inno Setup installer built by the release workflow (unsigned until signing exists) that installs the shell, engine, input process and service and adds the firewall rule; upgrades stop and restart the service; uninstall removes the service, the input process, the firewall rule and the Run entry and restores system cursors.
 - [ ] Release workflow triggered by a version tag; fixed asset names with SHA-256 files; daily update check in both apps.
@@ -21,3 +22,9 @@ Anyone can install Osdrop from GitHub Releases, and contributors can build it fr
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decisions (2026-11-21): release 0.1.0 now, with the release notes naming what was not
+  tested (three-computer drag rows D1 Mac → Mac / PC → PC, D3, D9; robustness R5, R6, R9–R11; the
+  two-hour run R12). Screenshots for the README come from the user, into docs/media.
+- Done: 5131dc6 Windows installer and release workflow, 21a3a93 Mac app icon (it had none),
+  92567ed Mac release script, 03a207f RELEASING.md, 011ffbb README.md and README.tr.md.
+

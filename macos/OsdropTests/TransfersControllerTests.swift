@@ -34,6 +34,17 @@ struct TransfersControllerTests {
         #expect(notifier.notifications.count == 1)
     }
 
+    @Test("Links a received folder left out are shown on its row and in its notification")
+    func namesLinksLeftOut() throws {
+        model.receiving(8, name: "Photos", from: peer, bytes: 10)
+        model.handle(.transferFinished(id: 8, .success(ReceivedItem(items: [], skippedLinks: 2))))
+        let row = try #require(model.rows.first)
+        #expect(row.linksLeftOut == 2)
+        let note = TransfersController.linksNote(2)
+        #expect(note.contains("2"))
+        #expect(notifier.notifications.last?.hasSuffix("\n" + note) == true)
+    }
+
     @Test("An end reported before the transfer was registered still ends it")
     func earlyEnd() {
         model.handle(.transferFinished(id: 7, .failure(.connectionClosed)))

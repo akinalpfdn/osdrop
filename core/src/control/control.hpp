@@ -268,6 +268,8 @@ public:
     void on_transfer_finished(const transfer::TransferOutcome& outcome) override;
     void on_content_received(const transfer::ContentOutcome& outcome) override;
     void on_send_progress(const transfer::SendProgress& progress) override;
+    void on_transfer_planned(const transfer::TransferPlan& plan) override;
+    void on_entry_written(const transfer::EntryWritten& written) override;
 
     // --- mesh::MeshObserver ---
     mesh::TrustVerdict on_trust_query(const crypto::Key& peer_key,
@@ -358,6 +360,8 @@ private:
     void come_home(Point cursor, CaptureEnd reason, std::optional<protocol::RefuseReason> refused);
     void refresh();
     void update_lock();
+    /// Every physical key still down is released, here and where the cursor is.
+    void release_physical_keys();
     void receive_refusal(const DeviceId& device, std::uint32_t control_id, CaptureEnd reason,
                          std::optional<protocol::RefuseReason> refused);
     [[nodiscard]] std::uint32_t next_control_id();

@@ -112,6 +112,8 @@ public:
     void on_transfer_finished(const transfer::TransferOutcome& outcome) override;
     void on_content_received(const transfer::ContentOutcome& outcome) override;
     void on_send_progress(const transfer::SendProgress& progress) override;
+    void on_transfer_planned(const transfer::TransferPlan& plan) override;
+    void on_entry_written(const transfer::EntryWritten& written) override;
 
 private:
     void receive_announce(const DeviceId& device, const protocol::ClipboardAnnounce& announce);

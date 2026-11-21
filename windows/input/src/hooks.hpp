@@ -50,6 +50,9 @@ public:
     /// Osdrop moves the cursor itself now: movement measured in the next moments may start from
     /// where the cursor was before, and is not reported.
     void warping();
+    /// Whether this PC's own left button is down, as the hook last saw it, in every state
+    /// (captured too). Any thread.
+    [[nodiscard]] bool left_held() const { return left_held_.load(); }
     [[nodiscard]] win::input::Stats stats() const { return timings_.stats(); }
 
 private:
@@ -75,6 +78,7 @@ private:
     std::atomic<bool> capturing_{false};
     std::atomic<bool> controlled_{false};
     std::atomic<bool> watching_{false};
+    std::atomic<bool> left_held_{false};
     std::atomic<std::int64_t> warped_{0}; // QueryPerformanceCounter when Osdrop last moved it
     std::atomic<std::int64_t> last_local_ms_{0};
     std::atomic<DWORD> thread_id_{0};

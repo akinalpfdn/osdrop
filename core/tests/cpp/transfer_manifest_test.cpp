@@ -243,4 +243,21 @@ TEST(TransferManifest, ABackslashInAMacNameIsPartOfTheNameNotASeparator) {
     }
 }
 
+TEST(TransferManifest, ALinkToItselfIsSkippedHoweverItsBackslashesAreRead) {
+    // Read as a name, `a\..` is the link itself; read with a separator it would be its folder.
+    // Found by the transfer fuzzer.
+    for (const auto target : {transfer::TargetPlatform::MacOS, transfer::TargetPlatform::Windows}) {
+        transfer::ManifestCollector collector(target);
+        ASSERT_TRUE(collector
+                        .add({.request_id = 1,
+                              .is_last = true,
+                              .entries = {folder_entry("Item"), link(R"(Item/a\..)", 2)}})
+                        .has_value());
+        const auto& plan = collector.plan();
+        const std::size_t l = plan.index_of.at(R"(Item/a\..)");
+        EXPECT_EQ(transfer::mapped_link_target(plan, l, R"(a\..)"), std::nullopt);
+        EXPECT_EQ(transfer::mapped_link_target(plan, l, R"(../Item/a\..)"), std::nullopt);
+    }
+}
+
 } // namespace

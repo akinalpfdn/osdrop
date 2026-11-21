@@ -8,9 +8,12 @@
 #include <osdrop/osdrop.h>
 #include <osdrop/win/clipboard_sync.hpp>
 #include <osdrop/win/expected.hpp>
+#include <osdrop/win/network_drag.hpp>
 
 #include <array>
 #include <cstdint>
+#include <deque>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
@@ -54,6 +57,8 @@ public:
     virtual ~Discovery() = default;
     /// Registers this computer, replacing an earlier registration; false when DNS-SD refused.
     virtual bool advertise(const osdrop_advertisement& advertisement, std::uint16_t port) = 0;
+    /// Ends the registration (other computers see this one go); browsing goes on.
+    virtual void withdraw() = 0;
     /// Starts browsing, or starts over; callbacks run one at a time on other threads.
     virtual bool browse(Callbacks callbacks) = 0;
     /// Ends browsing and the registration; no callback runs after it returns.
@@ -103,6 +108,26 @@ struct CaptureEnd {
     bool caps_lock = false;   ///< as the user left it on the other computers
 };
 
+/// A drag that came to this PC with the cursor (osdrop_mesh_callbacks.drag_arrived).
+struct DragArrival {
+    DeviceIdBytes source{}; ///< where its items are fetched from
+    std::uint32_t drag_id = 0;
+    std::int32_t x = 0; ///< where it starts, in 1/16 physical pixel
+    std::int32_t y = 0;
+    std::vector<drag::ArrivingItem> items;
+};
+
+/// A member fetching an item of this PC's drag (osdrop_mesh_callbacks.send_progress).
+struct SendUpdate {
+    DeviceIdBytes device{};
+    std::uint32_t drag_id = 0;
+    std::uint32_t index = 0;
+    std::string name; ///< the item's name, empty when not known
+    std::uint64_t sent = 0;
+    std::uint64_t total = 0;
+    std::uint8_t state = 1; ///< 1 sending, 2 every byte went out, 3 stopped
+};
+
 /// What the shell hears, on core's or DNS-SD's threads. Callbacks must return quickly and must
 /// not call the engine back; queue the work instead.
 class EngineEvents {
@@ -124,9 +149,9 @@ public:
     virtual void stats(const DeviceIdBytes& device, const osdrop_session_stats& stats) = 0;
     virtual void log(osdrop_log_level level, const char* message) = 0;
     /// Another computer's copy is not on the clipboard, or its files are now; `name` is empty
-    /// when not known.
+    /// when not known. `links_left_out`: Ready only, the links in the files that did not arrive.
     virtual void clipboard_notice(ClipboardNotice notice, const DeviceIdBytes& device,
-                                  const std::string& name) = 0;
+                                  const std::string& name, std::uint64_t links_left_out) = 0;
     /// Copied files on their way from another computer; nullopt once they no longer are.
     virtual void clipboard_fetch(const std::optional<ClipboardFetch>& fetch) = 0;
     /// The arrangement or a member's screens changed: read layout() again.
@@ -141,15 +166,34 @@ public:
                                const std::vector<osdrop_input>& release_here) = 0;
     /// The cursor came back: give this PC its input again.
     virtual void capture_ended(const CaptureEnd& end) = 0;
+    /// A drag came with the cursor: start it where it entered, pressing the left button there,
+    /// and report its end with drop_finished() (DEVPLAN Phase 14).
+    virtual void drag_arrived(const DragArrival& arrival) = 0;
+    /// The drag that arrived left with the cursor, or cannot go on: end it without a drop.
+    virtual void drag_withdrawn(std::uint32_t drag_id) = 0;
+    /// This PC's drag waits at the edge where it left: release it there, as a copy when it was
+    /// dropped elsewhere, refused otherwise.
+    virtual void drag_ended(std::uint32_t drag_id, osdrop_drag_outcome outcome) = 0;
+    /// This PC's drag of virtual files is wanted elsewhere: take them at the edge and report
+    /// them with drag_started(), or report no files.
+    virtual void drag_wanted() = 0;
+    /// A transfer this PC receives moved on, or ended (clipboard ones included).
+    virtual void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
+                                   std::uint64_t total) = 0;
+    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold.
+    virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
+                                   std::uint64_t links_left_out) = 0;
+    /// A member fetches an item of this PC's drag.
+    virtual void send_progress(const SendUpdate& update) = 0;
 };
 
-/// What a PC can do so far: be controlled through the input process (DEVPLAN Phase 3), share the
-/// clipboard and receive files. Drags come with the drag bridge (Phase 4); announcing them earlier
-/// would let a Mac carry a drag into a PC that cannot take it.
+/// What a PC can do: be controlled through the input process (DEVPLAN Phase 3), share the
+/// clipboard, receive files, and send and take drags (Phases 4 and 14).
 inline constexpr std::uint32_t kAvailableFeatures =
-    OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES;
+    OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES |
+    OSDROP_FEATURE_DRAG_SOURCE | OSDROP_FEATURE_DRAG_TARGET;
 
-class GroupEngine {
+class GroupEngine final : public drag::DragTransfers {
 public:
     struct Config {
         std::string device_name; ///< 1 to 64 bytes of UTF-8
@@ -170,7 +214,7 @@ public:
     create(Config config, StateStore& store, Discovery& discovery, EngineEvents& events);
 
     /// Stops discovery, then ends every session (Bye: application quit).
-    ~GroupEngine();
+    ~GroupEngine() override;
     GroupEngine(const GroupEngine&) = delete;
     GroupEngine& operator=(const GroupEngine&) = delete;
     GroupEngine(GroupEngine&&) = delete;
@@ -208,16 +252,38 @@ public:
     /// own input, captured `age_us` ago, whether it can be controlled, and where something else
     /// moved its cursor.
     void physical_input(const osdrop_input& input, std::uint64_t age_us);
+    /// Whether the input process can inject here: 0 yes, 3 no (as osdrop_mesh_set_unavailable).
     void set_unavailable(std::uint8_t reason);
+    /// The session is locked (also when another user's is in front): other computers are refused
+    /// as by a locked screen, whatever the input process can do.
+    void set_locked(bool locked);
     void cursor_moved(std::int32_t x, std::int32_t y);
     /// As osdrop_mesh_return_home, osdrop_mesh_lock_input and osdrop_mesh_set_caps_lock.
     void return_home(bool input_lost);
     void lock_input(bool locked);
     void set_caps_lock(bool on);
-    /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting.
+    /// Ends every session before sleep (peers see PEER_SLEEPING) or quitting. A sleeping PC also
+    /// withdraws its advertisement, so members see it come back when it wakes and dial it.
     void close_all(bool sleeping);
-    /// After waking: browses again, so members are found and dialled again.
+    /// After waking: members are dialled again, the PC is advertised again, and the browse starts
+    /// over for members whose address changed meanwhile.
     void resume();
+    /// This PC's drag, as osdrop_mesh_drag_started: its files and folders (absolute paths), each
+    /// with the type its name gives it. The drag's ID, or nullopt when core refused it.
+    [[nodiscard]] std::optional<std::uint32_t>
+    drag_started(std::span<const std::filesystem::path> items);
+    /// As osdrop_mesh_drag_promised, osdrop_mesh_drag_stopped and osdrop_mesh_drop_finished.
+    void drag_promised();
+    void drag_stopped();
+    void drop_finished(std::uint32_t drag_id, osdrop_drag_outcome outcome);
+    /// As osdrop_mesh_withdraw for a drag: members fetching its items stop.
+    void withdraw_drag(std::uint32_t drag_id);
+    // drag::DragTransfers: the items of drags that arrive.
+    [[nodiscard]] std::optional<std::uint64_t>
+    receive(const drag::SourceId& source, std::uint32_t drag_id, std::uint32_t index,
+            const std::filesystem::path& folder,
+            const std::weak_ptr<drag::TransferSink>& sink) override;
+    void cancel(std::uint64_t transfer_id) override;
     /// The shared clipboard; null without a ClipboardHost. Its copied() runs on the clipboard
     /// thread.
     [[nodiscard]] ClipboardSync* clipboard() { return clipboard_.get(); }
@@ -235,8 +301,11 @@ private:
     void found(const DiscoveredComputer& computer);
     void lost(const std::string& label);
     [[nodiscard]] osdrop_mesh_callbacks callbacks();
-    /// Core's callbacks for the cursor and keyboard across computers.
+    /// The links counted in a transfer's plan, forgotten as it ends.
+    [[nodiscard]] std::uint64_t take_planned_links(std::uint64_t transfer_id);
+    /// Core's callbacks for the cursor and keyboard across computers, and for drags.
     static void control_callbacks(osdrop_mesh_callbacks& result);
+    static void drag_callbacks(osdrop_mesh_callbacks& result);
 
     Config config_;
     StateStore& store_;
@@ -245,12 +314,21 @@ private:
     osdrop_mesh* mesh_ = nullptr;
     std::unique_ptr<ClipboardSync> clipboard_;
     std::unique_ptr<CoreClipboardMesh> clipboard_mesh_;
+    drag::TransferRouter transfers_; ///< drag items' transfer events
+    /// The item names of this PC's latest drags, for send_progress; guarded by mutex_.
+    std::deque<std::pair<std::uint32_t, std::vector<std::string>>> drag_names_;
     DeviceIdBytes self_{}; ///< set before port_, which publishes it
 
     mutable std::mutex mutex_;
+    /// Orders availability reports from the input bridge and the shell; core never takes it.
+    std::mutex availability_mutex_;
+    std::uint8_t input_unavailable_ = 0;                   ///< guarded by availability_mutex_
+    bool locked_ = false;                                  ///< guarded by availability_mutex_
     std::uint16_t port_ = 0;                               ///< 0 until started; guarded by mutex_
     std::optional<GroupIdBytes> group_;                    ///< guarded by mutex_
     std::map<std::string, DiscoveredComputer> discovered_; ///< by label; guarded by mutex_
+    /// The links in the items of transfers in progress, by transfer; guarded by mutex_.
+    std::map<std::uint64_t, std::uint64_t> planned_links_;
 };
 
 } // namespace osdrop::win

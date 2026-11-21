@@ -10,6 +10,13 @@ final class SystemEvents {
         let workspace = NSWorkspace.shared.notificationCenter
         observe(workspace, NSWorkspace.willSleepNotification) { [weak group] in group?.closeAll(sleeping: true) }
         observe(workspace, NSWorkspace.didWakeNotification) { [weak group] in group?.resumeAfterSleep() }
+        // Fast user switching: another user's session in front is like a locked screen.
+        observe(workspace, NSWorkspace.sessionDidResignActiveNotification) { [weak group] in
+            group?.input?.sessionActiveChanged(false)
+        }
+        observe(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { [weak group] in
+            group?.input?.sessionActiveChanged(true)
+        }
         observe(.default, NSApplication.willTerminateNotification) { [weak group] in
             group?.closeAll(sleeping: false)
         }

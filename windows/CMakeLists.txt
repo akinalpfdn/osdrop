@@ -6,6 +6,7 @@ project(OsdropWindows
 
 enable_testing()
 
+set(OSDROP_CORE_OPTIMIZE_DEBUG ON)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../core" core)
 add_subdirectory(shared)
 

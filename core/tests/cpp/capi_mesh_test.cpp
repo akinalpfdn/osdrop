@@ -765,6 +765,7 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     EXPECT_EQ(mesh, nullptr);
     EXPECT_EQ(osdrop_mesh_listen_port(nullptr, nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ(osdrop_mesh_leave_group(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_resume(nullptr), OSDROP_ERROR_INVALID_ARGUMENT);
     osdrop_mesh_destroy(nullptr);
 }
 

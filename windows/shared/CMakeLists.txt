@@ -13,6 +13,7 @@ add_library(osdrop_win_shared STATIC
     src/input_protocol.cpp
     src/input_session.cpp
     src/key_codes.cpp
+    src/network_drag.cpp
     src/product_names.cpp
     src/report_queue.cpp
     src/screens.cpp
@@ -39,6 +40,7 @@ if(OSDROP_CORE_BUILD_TESTS)
         tests/input_protocol_test.cpp
         tests/input_session_test.cpp
         tests/key_codes_test.cpp
+        tests/network_drag_test.cpp
         tests/product_names_test.cpp
         tests/screens_test.cpp
         tests/txt_mapping_test.cpp

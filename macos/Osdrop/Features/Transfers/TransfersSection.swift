@@ -48,6 +48,12 @@ private struct TransferRowView: View {
                     Text(Self.stateKey(row.state))
                         .font(Theme.Typography.caption)
                         .foregroundStyle(row.state == .failed ? Theme.Colors.warning : Theme.Colors.secondary)
+                    if row.linksLeftOut > 0 {
+                        Text(TransfersController.linksNote(row.linksLeftOut))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             Spacer(minLength: 0)

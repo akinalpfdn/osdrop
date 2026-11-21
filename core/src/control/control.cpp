@@ -172,6 +172,26 @@ void Control::set_unavailable(std::optional<protocol::RefuseReason> reason) {
              protocol::Refuse{.control_id = controlled_->control_id, .reason = *reason});
         release();
     }
+    if (reason == protocol::RefuseReason::Locked) {
+        release_physical_keys();
+    }
+}
+
+void Control::release_physical_keys() {
+    // A locked screen takes the keyboard away: the releases of the keys that locked it (Win+L,
+    // Control-Command-Q) never come, and the computer the cursor is on would keep them down.
+    const std::vector<HeldKey> keys = physical_.keys();
+    for (const HeldKey& key : std::views::reverse(keys)) {
+        physical_.key(key, protocol::KeyAction::Up);
+        if (away_) {
+            const HeldKey sent = away_->swap_modifiers ? swap_control_and_command(key) : key;
+            send(away_->device, protocol::KeyEvent{.control_id = away_->control_id,
+                                                   .page = sent.page,
+                                                   .usage = sent.usage,
+                                                   .action = protocol::KeyAction::Up});
+        }
+    }
+    update_lock();
 }
 
 void Control::cursor_moved(Point position) {
@@ -706,6 +726,14 @@ void Control::on_content_received(const transfer::ContentOutcome& outcome) {
 
 void Control::on_send_progress(const transfer::SendProgress& progress) {
     transfer_observer_.on_send_progress(progress);
+}
+
+void Control::on_transfer_planned(const transfer::TransferPlan& plan) {
+    transfer_observer_.on_transfer_planned(plan);
+}
+
+void Control::on_entry_written(const transfer::EntryWritten& written) {
+    transfer_observer_.on_entry_written(written);
 }
 
 } // namespace osdrop::control

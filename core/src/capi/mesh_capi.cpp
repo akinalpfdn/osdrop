@@ -429,6 +429,29 @@ public:
         }
     }
 
+    void on_transfer_planned(const transfer::TransferPlan& plan) override {
+        if (callbacks_.transfer_planned == nullptr) {
+            return;
+        }
+        std::vector<osdrop_received_entry> entries;
+        entries.reserve(plan.entries.size());
+        for (const transfer::ReceivedEntry& entry : plan.entries) {
+            entries.push_back({.path = entry.path.c_str(),
+                               .kind = static_cast<std::uint8_t>(entry.kind),
+                               .byte_count = entry.byte_count,
+                               .modified_us = entry.modified_us});
+        }
+        callbacks_.transfer_planned(callbacks_.context, plan.id, entries.data(), entries.size());
+    }
+    void on_entry_written(const transfer::EntryWritten& written) override {
+        if (callbacks_.entry_written != nullptr) {
+            const std::string path = transfer::utf8_of(written.path);
+            callbacks_.entry_written(callbacks_.context, written.id,
+                                     static_cast<std::uint32_t>(written.entry), path.c_str(),
+                                     written.bytes, written.complete ? 1 : 0);
+        }
+    }
+
     // --- clipboard::ClipboardObserver ---
     void on_remote_clip(const clipboard::RemoteClip& clip) override {
         if (callbacks_.clipboard_changed == nullptr) {
@@ -1436,6 +1459,14 @@ osdrop_result osdrop_mesh_close_all(osdrop_mesh* mesh, uint8_t sleeping) {
     }
     mesh->node->close_all(sleeping == 1 ? protocol::ByeReason::Sleeping
                                         : protocol::ByeReason::ApplicationQuit);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_resume(osdrop_mesh* mesh) {
+    if (mesh == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    mesh->node->resume();
     return OSDROP_OK;
 }
 

@@ -12,7 +12,7 @@ On one PC, a file dragged to a screen edge is captured, and Osdrop can start a v
 - [x] Name and path mapping used by the descriptors (long paths, reserved names, invalid characters) as a portable function, later moved into `core` in Phase 13.
 - [ ] UIPI limits measured and recorded (drags from elevated apps).
 - [x] Debug-only loopback as in Phase 2.
-- [ ] Announce `OSDROP_FEATURE_DRAG_SOURCE` and `OSDROP_FEATURE_DRAG_TARGET` in `windows/shared` (`kAvailableFeatures`) once drags work both ways.
+- [x] Announce `OSDROP_FEATURE_DRAG_SOURCE` and `OSDROP_FEATURE_DRAG_TARGET` in `windows/shared` (`kAvailableFeatures`) once drags work both ways. (Phase 14)
 
 ## Acceptance Criteria
 - [ ] Loopback copies one file, many files, a folder tree and a 10 GB file into Explorer and onto the desktop with Explorer's progress dialog, and Explorer never stops responding.

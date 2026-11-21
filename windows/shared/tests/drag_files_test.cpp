@@ -166,4 +166,13 @@ TEST(DragFiles, StripsLineTheEdgesNoOtherMonitorContinues) {
     EXPECT_EQ(strips.size(), 8U) << "four for each monitor, the shared edges cut short";
 }
 
+TEST(DragFiles, ItemsTravelWithTheTypeTheirExtensionHasOnAMac) {
+    EXPECT_EQ(drag::content_type("Tatil.JPG", false), "public.jpeg");
+    EXPECT_EQ(drag::content_type("rapor.pdf", false), "com.adobe.pdf");
+    EXPECT_EQ(drag::content_type("Fotoğraflar", true), "public.folder");
+    EXPECT_EQ(drag::content_type("app.apk", false), "public.data");
+    EXPECT_EQ(drag::content_type(".gitignore", false), "public.data");
+    EXPECT_EQ(drag::content_type("README", false), "public.data");
+}
+
 } // namespace

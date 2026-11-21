@@ -41,6 +41,7 @@ final class FakeInjector: InputInjecting {
         case scroll(ScrollDelta)
         case key(HIDKey, KeyAction)
         case releaseAll
+        case releaseAllButDrag
         case releaseHere([HIDKey])
         case place(CGPoint)
         case releaseDrag(CGPoint)
@@ -66,6 +67,7 @@ final class FakeInjector: InputInjecting {
     func scroll(_ delta: ScrollDelta) { calls.append(.scroll(delta)) }
     func key(_ key: HIDKey, _ action: KeyAction) { calls.append(.key(key, action)) }
     func releaseAll() { calls.append(.releaseAll) }
+    func releaseAllButDrag() { calls.append(.releaseAllButDrag) }
     func releaseHere(_ keys: [HIDKey]) { calls.append(.releaseHere(keys)) }
 
     func placeCursor(at point: CGPoint) {

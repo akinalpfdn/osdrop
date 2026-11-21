@@ -113,13 +113,16 @@ struct Pair {
     Side dialer;
     Side listener;
     TimePoint now{std::chrono::seconds(100)};
+    /// Control bytes wait while true, as behind a lost segment TCP resends; datagrams still go.
+    bool control_stalled = false;
+    std::size_t datagrams_delivered = 0;
 
     /// Delivers queued frames and datagrams both ways until nothing moves.
     void pump() {
         for (bool moved = true; moved;) {
             moved = false;
             for (auto [from, to] : {std::pair(&dialer, &listener), std::pair(&listener, &dialer)}) {
-                while (!from->outbox.empty()) {
+                while (!control_stalled && !from->outbox.empty()) {
                     to->engine.on_control_bytes(from->outbox.front(), now);
                     from->outbox.pop_front();
                     moved = true;
@@ -127,6 +130,7 @@ struct Pair {
                 while (!from->datagrams.empty()) {
                     to->engine.on_datagram(from->datagrams.front(), now);
                     from->datagrams.pop_front();
+                    ++datagrams_delivered;
                     moved = true;
                 }
             }
@@ -297,6 +301,37 @@ TEST(SessionEngine, AnIdleSessionKeepsItsPeerResponsive) {
     EXPECT_TRUE(pair.listener.responsiveness.empty());
     EXPECT_LE(pair.dialer.engine.next_wakeup(), pair.now + milliseconds(250))
         << "a heartbeat is due within the interval";
+}
+
+TEST(SessionEngine, DatagramsKeepThePeerResponsiveWhileTheControlConnectionStalls) {
+    Pair pair;
+    pair.connect();
+    pair.control_stalled = true;
+    pair.advance(std::chrono::seconds(2));
+    EXPECT_TRUE(pair.dialer.responsiveness.empty());
+    EXPECT_TRUE(pair.listener.responsiveness.empty());
+    pair.control_stalled = false;
+    pair.advance(milliseconds(10));
+    EXPECT_EQ(pair.dialer.engine.state(), SessionState::Established);
+}
+
+TEST(SessionEngine, AnIdleSessionCarriesEnoughDatagramsForAMacToStayOnItsWiFiChannel) {
+    Pair pair;
+    pair.connect();
+    pair.advance(milliseconds(100));
+    pair.datagrams_delivered = 0;
+    pair.advance(std::chrono::seconds(1));
+    // macOS counts packets in and out together; below about 50 a second AWDL takes the radio away.
+    EXPECT_GE(pair.datagrams_delivered, 70U);
+}
+
+TEST(SessionEngine, DatagramsAloneDoNotKeepASessionPastItsTimeout) {
+    Pair pair;
+    pair.connect();
+    pair.control_stalled = true;
+    pair.advance(std::chrono::seconds(11));
+    EXPECT_TRUE(pair.dialer.is_closed());
+    EXPECT_EQ(pair.dialer.close_reason, Error::TimedOut);
 }
 
 TEST(SessionEngine, DatagramsFromAnotherSessionAreRejected) {

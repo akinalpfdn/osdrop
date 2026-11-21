@@ -552,7 +552,7 @@ Input header (12 bytes):
 
 | Type | Name | Direction |
 |-----:|------|-----------|
-| 0x01 | InputHello | to the peer's input socket, until it answers |
+| 0x01 | InputHello | to the peer's input socket, every 250 ms, then every 25 ms |
 | 0x02 | PointerMotion | controller → endpoint |
 
 ### 0x01 InputHello
@@ -701,6 +701,9 @@ Chunks of one request arrive in order and without gaps.
   byte by byte) dials as soon as it discovers the other; the higher one dials too only when no
   session exists 3 s after discovery. A computer dials only peers that advertise its own,
   non-empty group.
+- A host name resolves to every address the peer has, and a firewall may drop one of them
+  silently. Each address gets its own attempt, the next one 250 ms after the previous or at once
+  when it fails, with the address families alternating (RFC 8305); the first to connect is kept.
 - When a second connection between the same pair authenticates, both sides keep the same one: if
   the same side dialled both, the newer one; otherwise the one the lower device ID dialled. The
   other is closed with Bye 7, which ends it without an error and without a reconnect.
@@ -731,15 +734,20 @@ codes NOT_TRUSTED, PAIRING_REJECTED, PEER_BUSY, NOT_PERMITTED, GROUP_FULL, IN_AN
 UNSUPPORTED_VERSION are shown as
 such, any other code as a generic peer error. Bye 3 (going to sleep) ends the session with
 PEER_SLEEPING, so the peer is expected back; Bye 6 (revoked) with NOT_TRUSTED; Bye 7 without an
-error; every other reason with CONNECTION_CLOSED.
+error; every other reason with CONNECTION_CLOSED. A computer that received Bye 3 does not dial the
+sleeper again until its advertisement goes away and comes back or its address changes: a sleep
+proxy keeps answering for a sleeping computer and would wake it for every attempt. A computer going
+to sleep withdraws its advertisement after sending Bye 3. Until its user wakes it, it dials nobody,
+and a session a peer opens anyway (in a dark wake) it ends at once with Bye 3. On waking it
+advertises itself again and dials its peers; the peers dial it too once they see it come back.
 
 | Timing | Value |
 |--------|-------|
 | Hello through handshake message 3 | 10 s |
 | The user's answer to a pairing code | 120 s |
 | Heartbeat after sending nothing for | 250 ms |
-| Peer reported unresponsive, and input to and from it stopped, after silence of | 750 ms |
-| Session closed with TIMED_OUT after silence of | 10 s |
+| Peer reported unresponsive, and input to and from it stopped, after neither a control message nor an input datagram for | 750 ms |
+| Session closed with TIMED_OUT after no control message for | 10 s |
 | Ping (round trip and clock offset) | every 1 s |
 | First complete frame on an accepted connection | 10 s |
 
@@ -747,8 +755,13 @@ error; every other reason with CONNECTION_CLOSED.
 
 Once the peer's SessionSetup arrives, a side sends InputHello with the peer's `input_token` to the
 peer's `udp_port` at the address of the control connection: every 250 ms until the peer's
-InputHello arrives, then every 5 s. A valid InputHello tells the receiver where to send input
-datagrams, so it also follows the peer to a new address. PointerMotion is accepted only in an
+InputHello arrives, and every 25 ms after that, for the whole session. A valid InputHello tells the
+receiver where to send input datagrams, so it also follows the peer to a new address. Every
+datagram that opens also counts as a sign of life: on Wi-Fi the control connection can wait about a
+second to resend a lost segment, longer than the 750 ms after which a silent peer is reported
+unresponsive. The 25 ms keeps a session above about 50 packets a second, the rate at which macOS
+treats Wi-Fi traffic as real-time; below it, the Mac leaves the network's channel for AWDL and the
+access point holds traffic to the Mac for over a second. PointerMotion is accepted only in an
 established session and only when its sequence is higher than that of the last one applied.
 
 ### Transfer streams

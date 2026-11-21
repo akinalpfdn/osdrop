@@ -3112,6 +3112,142 @@
         }
       }
     },
+    "settings.awdl.approval" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once: in System Settings › General › Login Items, turn on Osdrop under Allow in the Background."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir kerelik: Sistem Ayarları › Genel › Giriş Öğeleri'nde, Arka Planda Çalışmaya İzin Ver altındaki Osdrop'u aç."
+          }
+        }
+      }
+    },
+    "settings.awdl.approval.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approval needed"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onay gerekiyor"
+          }
+        }
+      }
+    },
+    "settings.awdl.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The cursor moves smoothly, without pauses. While this is on, AirDrop, AirPlay and Sidecar do not work."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İmleç takılmadan, akıcı hareket eder. Bu açıkken AirDrop, AirPlay ve Sidecar çalışmaz."
+          }
+        }
+      }
+    },
+    "settings.awdl.failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AWDL could not be turned off. Turn the setting off and on again; the log (Copy diagnostics) tells why."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AWDL kapatılamadı. Ayarı kapatıp yeniden aç; nedenini günlük (Tanılamayı Kopyala) gösterir."
+          }
+        }
+      }
+    },
+    "settings.awdl.holding" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AWDL is off."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AWDL kapalı."
+          }
+        }
+      }
+    },
+    "settings.awdl.keepOff" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Improve the connection over Wi-Fi"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wi-Fi bağlantısını iyileştir"
+          }
+        }
+      }
+    },
+    "settings.awdl.openApproval" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Login Items"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giriş Öğeleri'ni Aç"
+          }
+        }
+      }
+    },
+    "settings.awdl.starting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turning AWDL off…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AWDL kapatılıyor…"
+          }
+        }
+      }
+    },
     "settings.clipboard" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4115,6 +4251,23 @@
         }
       }
     },
+    "settings.network" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağ"
+          }
+        }
+      }
+    },
     "settings.permissions" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4434,6 +4587,47 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gönderen: %@"
+          }
+        }
+      }
+    },
+    "transfers.linksLeftOut %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "A link inside did not arrive"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld links inside did not arrive"
+                }
+              }
+            }
+          }
+        },
+        "tr" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "İçindeki bir bağlantı aktarılmadı"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "İçindeki %lld bağlantı aktarılmadı"
+                }
+              }
+            }
           }
         }
       }

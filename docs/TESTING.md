@@ -301,7 +301,7 @@ these tests take over input on every computer they cross.
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
 | D1 | Every direction | Drag a file from Finder (Explorer) on A through the edge into a folder on B, in each direction between a Mac and a PC, Mac → Mac and PC → PC | The cursor carries the drag; the file is copied where it is released; the source keeps its file and its drag ends as a copy |
-| D2 | A tree and a large file | Drag a folder with Unicode names and inner links, then a 10 GB file | Everything arrives intact; Finder (Explorer) shows the copy's progress on the receiving side |
+| D2 | A tree and a large file | Drag a folder with Unicode names and inner links, then a 10 GB file | Everything arrives intact; Finder (Explorer) shows the copy's progress on the receiving side. A drop on a PC holds no links: the transfer's row and notification say how many did not arrive |
 | D3 | A chain | Drag from A through B onto C | Nothing is dropped on B; the file lands on C |
 | D4 | A controlled source | With A's mouse on B, drag a file on B onto C, then one on B back onto A | Each lands where it is released |
 | D5 | Back to the source | Drag from A onto B and back onto A without releasing, then release in another folder on A | The drag goes on as if it never left; the file is copied or moved as Finder (Explorer) does |
@@ -310,7 +310,7 @@ these tests take over input on every computer they cross.
 | D8 | Lost network | Unplug the source's network during the 10 GB copy | The copy ends with an error on the receiving side and no partial file; the cursor comes back if it was on the lost computer |
 | D9 | Local input | While a drag waits on B, move A's own mouse when A is controlled by another computer | A's drag slides back; B's drop fetches nothing |
 | D10 | Photos and Mail | Drag a photo from Photos and an attachment from Mail onto B | The cursor waits at the edge while the files come out of the app, then crosses; the files land on B |
-| D11 | Progress and cancel | Drag the 10 GB file onto B; watch both menus; cancel on B, then again and cancel on A | Both menus show the transfer moving; either cancel ends it on both sides with no partial file; a notification on each side tells it did not finish; a finished one notifies too |
+| D11 | Progress and cancel | Drag the 10 GB file onto B; watch both menus (the PC's panel, and Explorer's copy dialog when the PC receives); cancel on B, then again and cancel on A | Both menus show the transfer moving; either cancel ends it on both sides with no partial file; a notification on each side tells it did not finish; a finished one notifies too |
 
 ### Mac interface (Phase 16)
 
@@ -341,10 +341,33 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 
+### Robustness (Phase 18)
+
+Two members connected, a Mac and a PC, once on Wi-Fi and once with the PC wired. "Back" means
+the members are connected again and the cursor crosses, without restarting Osdrop.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| R1 | Sleep | Put the Mac to sleep (Apple menu › Sleep) for two minutes, wake it; then the same with the PC (Start › Power › Sleep) | The other computer shows it asleep and does not wake it; back within 10 s of waking |
+| R2 | Wi-Fi off and on | Turn the Mac's Wi-Fi off for 30 s, then on; then the PC's network adapter | The other side shows it gone; back within 10 s of the network returning |
+| R3 | Wi-Fi to cable | While connected, plug the PC's network cable in, then pull it out (it falls back to Wi-Fi) | Back within 10 s each time |
+| R4 | New address | On the PC run `ipconfig /release` and then `ipconfig /renew`; on the Mac join another Wi-Fi network and come back | Back within 10 s of the new address |
+| R5 | Monitor unplugged | While the Mac controls the PC with the cursor on the PC's second monitor, unplug that monitor; then plug it back | The cursor moves to a remaining monitor; the arrangement on both computers loses the monitor and gets it back where it was |
+| R6 | Scale changed | While the PC is controlled, change its display scale (Settings › Display); on the Mac change a display's resolution | The cursor keeps working; edges match the new sizes on both computers |
+| R7 | Locked screen | Lock the PC (Win+L) and push the Mac's cursor against its edge; unlock and push again. Then lock the Mac (⌃⌘Q) and push from the PC | Locked: the edge is a wall and the controlling computer says the other one is locked; unlocked: it crosses |
+| R8 | Locked while controlled | While the Mac controls the PC, press Win+L on the PC's own keyboard | The cursor comes back to the Mac; the PC is refused until it is unlocked |
+| R9 | Another user | Switch to another user on the Mac (Fast User Switching) and on the PC (Switch user), then back | While the other user is in front, crossing in is refused; back to the first user, it crosses again |
+| R10 | Osplay displays | With Osplay showing the Mac's virtual displays on the PC, open Osdrop's arrangement on both | The virtual displays are ordinary monitors in the arrangement; the cursor crosses through them as through any monitor |
+| R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
+| R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-21 | dev (f5ae0d0) | R5, R6, R9–R11 | Not run: the user chose to assume them (edge cases). Copy diagnostics checked in code instead: names are redacted, log lines carry counts only |
+| 2026-11-21 | dev (61727d5), Debug, M3 Air + PC (debug engine and shell) | R1–R4, R7, R8, Mac ↔ PC | Pass, as reported by the user. R1 from the sleep run of 2026-11-12. Win+L with the cursor on the Mac first left Control held there (every click a right-click); fixed in 5d63a03. Osplay's displays stayed in the arrangement after they were gone; fixed in 61727d5 |
+| 2026-11-20 | dev (50e1bc6), Debug, M3 Air + PC (debug engine and shell) | D1, D2, D4–D8, D10, D11, Mac ↔ PC | Pass. D10 first sent Photos' preview instead of the photo, then the photo with its preview (fixed in 2b72306 and 50e1bc6); D2 showed a link left out without a notice (9cb12e6). D3, D9, Mac ↔ Mac and PC ↔ PC wait for a third computer |
 | 2026-11-09 | Phase 3 branch (779a4dd), PC debug engine and Release shell, M3 Air | W1–W6, W8 | Pass. Hook p99 7 µs over 70 424 events (longest 1918 µs); the service restarted a killed OsdropInput within 3 ms. W7 not run: the PC has no second Windows user |
 | 2026-11-08 | Phase 14 branch (fdb0e04), Debug, M3 Air + PC (Release shell, debug engine) | G4, G8 | Pass. G4 first failed: the member that removed a computer refused it before any code, so it could never pair again; fixed, then blocking was added (G8) |
 | 2026-11-08 | Phase 14 branch, Debug, M3 Air + PC (Release shell, debug engine) | CL5, CL6, CL9 | Pass. CL6 on the Mac showed no notification until Osdrop's notifications were allowed in System Settings › Notifications: they had been refused at macOS's first prompt |

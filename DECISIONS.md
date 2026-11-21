@@ -688,3 +688,120 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The same paired group and the drag gesture Osdrop already has replace sending files through a messenger, which recompresses them. Requiring the app open keeps iOS and Android alike and avoids background services.
 **Trade-offs:** Two more apps to build and ship; a phone receives nothing while its app is closed.
 **Revisit if:** Users want the phone to receive with the app closed (Android foreground service).
+
+---
+
+## 2026-11-10 — Drops on the PC stream into Explorer as the files arrive
+**Chosen:** User decision: a drag from another computer is received at once into a staging folder, and Explorer copies each file from there while it arrives (virtual files whose streams follow the file core is writing). Core reports a received item's entries before any content (`transfer_planned`) and every chunk on disk (`entry_written`); a file's last byte waits for core's check.
+**Alternatives:** Receiving everything first and handing Explorer the finished files (no core change).
+**Why:** A 10 GB drop shows Explorer's own progress and cancel from the first byte instead of waiting for the whole download; the Phase 4 decision chose virtual files for this.
+**Trade-offs:** Each file is written twice (staging, then the destination), at the same time, so the staging volume (`%TEMP%`) needs room for the drag until the drop finished. A failed transfer leaves Explorer a read error, not a short file.
+**Revisit if:** Core gains a receive that writes into a sink the platform supplies, so the bytes go straight to the destination.
+
+---
+
+## 2026-11-10 — A hold window keeps a PC's drag while the cursor is away
+**Chosen:** When the cursor crosses with a drag of the PC, a drop target is placed at the capture's park point before the cursor is parked there; the outcome releases the left button over it (or over the edge strip, when the cursor came back first).
+**Alternatives:** Parking the cursor at the edge (captured movement toward the edge would be clipped there); not parking while a drag is carried.
+**Why:** The OLE drag follows the cursor, so the parked cursor would carry the drag to whatever window sits at the monitor's centre and drop the files there.
+**Trade-offs:** One more invisible window during such a capture.
+**Revisit if:** Captured movement no longer needs the cursor parked away from the edges.
+
+---
+
+## 2026-11-10 — The input pipe keeps a parked drag's button (version 2)
+**Chosen:** The engine sends core's releases before EndControl instead of dropping them; `HoldDrag` keeps an injected left button that core left down past EndControl, and `ReleaseDrag` releases the left button in any state. The pipe's version is 2.
+**Alternatives:** OsdropInput leaving every button down at EndControl and trusting the engine; the engine pressing the button again after the control.
+**Why:** A drag started on the PC under remote control waits at the edge with its button down while the controller carries it on; releasing everything at EndControl dropped it at the edge at once.
+**Trade-offs:** The service must be reinstalled with the shell: a version 1 OsdropInput refuses the new engine.
+**Revisit if:** Another state needs a button kept past the control.
+
+---
+
+## 2026-11-10 — Drags arriving on the PC offer paths only up to 16 MB
+**Chosen:** A drag from another computer is also offered as CF_HDROP to the received files when its items add up to 16 MB or less; an app that asks for the paths waits until everything arrived.
+**Alternatives:** The 64 MB cap of local drags; no CF_HDROP for arriving drags.
+**Why:** Explorer and other targets may read CF_HDROP while the drag only hovers over them, and then wait for the whole download; 16 MB keeps that wait short on Wi-Fi while photos, documents and most installers still reach apps that take only paths.
+**Trade-offs:** Larger drags reach only apps that take virtual files.
+**Revisit if:** Hovering over Explorer with a small arriving drag stalls noticeably, or users miss paths for larger drags.
+
+---
+
+## 2026-11-10 — Work goes to dev without CI; main gets it through a release PR
+**Chosen:** User decision: day-to-day work is committed straight to `dev`, with no feature branches, pull requests or CI runs. When a release is prepared, `dev` goes to `main` through a pull request, and CI runs there and on `main`.
+**Alternatives:** A branch and a PR per phase with CI on every push (each round took 15–17 minutes, 12 of them clang-tidy on Windows); faster CI (clang-tidy in parallel and only on changed files) with the PR flow kept.
+**Why:** Waiting for CI rounds slowed development more than anything else; the PC builds the Windows code itself when it is tested.
+**Trade-offs:** clang-tidy findings, MSVC-only errors and slow-runner test failures surface late, in one batch on the release PR. `dev` has no protection against a bad push.
+**Revisit if:** The release PR keeps collecting many fixes, or a second contributor joins.
+
+---
+
+## 2026-11-11 — A drag that comes home to the PC is pressed by OsdropInput while the hand holds it (input pipe version 3)
+**Chosen:** User decision: when the PC's own mouse carries a drag from another computer back to the PC, the engine sends `PressForDrag` (x, y), and OsdropInput moves the cursor there and presses the left button only while the hook last saw the PC's own left button down; the hand's release then ends the drag. If the button was let go between the check and the press, the press is undone. Rejected with NotHeld otherwise. The pipe's version is 3.
+**Alternatives:** SendInput from Osdrop.exe itself (no protocol change, but injection outside the input process and a left button left down if the hand lets go first); allowing a plain Press outside control and capture.
+**Why:** Such a drag arrives with the PC neither controlled nor capturing (the capture just ended), so the press that starts it was refused twice, by the engine's bridge and by OsdropInput, and the drag ended as "did not start" (hardware test 2026-11-10). Tying the press to the physical button keeps the invariant that nothing Osdrop presses stays down.
+**Trade-offs:** The service must be reinstalled with the shell again. A release already queued but not yet seen by the hook when the press is made can still leave the button down until the next click.
+**Revisit if:** A drag that comes home stays stuck or fails to start in hardware tests.
+
+---
+
+## 2026-11-11 — The window a drag that comes home starts from covers the desktop
+**Chosen:** User decision: for a drag that arrives from another computer, the starter window covers the whole virtual desktop (alpha 1, topmost) instead of 16 px around the arrival point, and `PressForDrag` carries no point: OsdropInput presses where the cursor is. A press refused (NotHeld) or not sent cancels the drag at once, so no later click starts it.
+**Alternatives:** Moving the cursor back to the arrival point in the same SendInput as the press (the previous entry); a small window moved under the cursor before the press.
+**Why:** Measured on hardware: the drag started in 1 of 5 attempts, exactly when the cursor was still on the 16 px window at the press. The hand moves the mouse 28–160 px within the ~15 ms before the press, and the move back in the same SendInput did not bring the press onto the window. A window that covers the desktop takes the press wherever the cursor is, and the cursor does not jump back to the edge.
+**Trade-offs:** For those milliseconds every click on the PC goes to Osdrop's window. Why the move back did not work is not known.
+**Revisit if:** Clicks right after a drag arrives go missing, or a multi-monitor setup with mixed scaling shows the covering window wrong.
+
+---
+
+## 2026-11-12 — Input datagrams are signs of life; the 750 ms peer-loss threshold stays
+**Chosen:** User decision: every input datagram that opens (authentic, not a replay) counts as hearing from the peer, and InputHello goes every 250 ms for the whole session instead of every 5 s once bound. A peer is unresponsive after 750 ms with neither; the session still times out after 10 s without control bytes.
+**Alternatives:** Raising `unresponsive_after` to 2 s (one constant, but DEVPLAN's "mouse back within one second" becomes two); both together.
+**Why:** On the home Wi-Fi a Mac and a PC reported each other unresponsive every 10 s to 2 min for 1.1–1.4 s (172 times in one Mac log from 21:37 to 12:30 the next day), and each one brought a controlled cursor home. The control connection's counters showed 74 ms average round trip and 2 % of bytes resent: on a connection that carries only heartbeats, TCP resends a lost segment only after about a second, while the next datagram gets through.
+**Trade-offs:** Keys and buttons travel on the control connection, so during such a stall they still arrive late; only the cursor no longer goes home. If the Wi-Fi stops entirely for longer than 750 ms, the peer is still reported unresponsive. Four more small datagrams a second per peer.
+**Revisit if:** Hardware logs still show "Peer unresponsive" during normal use on Wi-Fi.
+
+---
+
+## 2026-11-12 — InputHello every 25 ms for the whole session, so a Mac on Wi-Fi stays on channel
+**Chosen:** User decision: once the peer's InputHello has arrived, each side sends one every 25 ms (was 250 ms) for as long as the session lasts.
+**Alternatives:** Waiting 2 s instead of 750 ms before the cursor comes home and held input is released (no battery cost, but DEVPLAN's one-second rule becomes two and the cursor still freezes); both; an opt-in helper that turns AWDL off; leaving it.
+**Why:** After InputHello became a sign of life, the PC never saw the Mac unresponsive, but the Mac still saw the PC unresponsive every 1–5 min for about 1.3 s. A capture on the wired PC showed it never stopped sending (largest gap 0.27 s). The Mac's kernel log showed why: every ~1 s macOS counts the Wi-Fi packets, calls the traffic real-time above about 50 in and out together, and otherwise lets AWDL take the radio off the network's channel; an idle session (30–45 a second) kept flipping between the two, and traffic to the Mac was held for over a second after a flip. At 25 ms a session carries about 100 packets a second.
+**Trade-offs:** About 4 KB/s each way per peer, about 40 wakeups a second per peer, and a Mac's Wi-Fi radio stays awake during a session, which costs battery (not measured yet). The threshold is undocumented macOS behaviour and may change.
+**Revisit if:** A battery measurement shows a large cost, or Mac logs still show the traffic leaving real-time during a session.
+
+---
+
+## 2026-11-12 — The core is optimized in Debug builds of the apps
+**Chosen:** User decision: the Mac app (SwiftPM, `-O2` for the Debug configuration) and the Windows build (`OSDROP_CORE_OPTIMIZE_DEBUG`, `/O2` without `/RTC1`) compile the core optimized in Debug; the apps' own code stays unoptimized. The core's own CMake presets keep plain Debug for its tests and sanitizers.
+**Alternatives:** Running hardware tests on Release builds; optimizing only Monocypher (24 MB/s, not enough).
+**Why:** A 110 MB transfer on loopback ran at 17 MB/s in Debug and 241 MB/s in Release. The user measured 4–5 s for 110 MB between the Mac and the PC, both on Debug builds, and took it for the network.
+**Trade-offs:** Stepping through core code in a debugger is harder in the apps; the core's unit tests are still the place to debug it.
+**Revisit if:** A core bug shows only in the apps and needs a debugger there.
+
+---
+
+## 2026-11-12 — A Mac that sleeps leaves the mesh until it wakes; AWDL switch gets its own phase
+**Chosen:** User decisions: (1) a computer that goes to sleep tells its peers so and closes its sessions, and the peers do not dial it again until it announces that it is awake; on waking it reconnects by itself (both platforms). (2) An opt-in switch that keeps AWDL off while Osdrop runs, as its own phase after Phase 15.
+**Alternatives:** Leaving sleep to Phase 19; reverting the 25 ms InputHello; waiting 2 s before the cursor comes home.
+**Why:** The 47 s "Peer unresponsive" cycle seen after the 25 ms change was the Mac sleeping, not Wi-Fi: the PC's traffic woke it about 2 s after every sleep (`pmset -g log`, "DarkWake … wifibt"), so a Mac with a peer never stays asleep (20–48 wakes an hour overnight against about 4). With the user at the Mac, the 25 ms change brought interruptions from every 1–5 min to one in 26 min. With AWDL turned off by hand the mouse was visibly smoother; transfers were not faster (that was the Debug build, entry above).
+**Trade-offs:** While the AWDL switch is on, AirDrop, AirPlay and Sidecar do not work; it needs administrator approval once.
+**Revisit if:** A sleeping computer still wakes for Osdrop traffic, or AWDL stays a problem with the switch on.
+
+---
+
+## 2026-11-12 — Every address of a peer is dialled; a sleeping computer stays out until its user wakes it
+**Chosen:** User decision, all three of: (1) a dial tries each resolved address with its own attempt, the next one 250 ms later or at once on failure, families alternating (RFC 8305), first to connect wins; (2) from close_all(sleeping) until an explicit resume the mesh dials nobody and ends any session a peer opens with Bye 3; (3) a computer withdraws its advertisement when it goes to sleep and advertises again on waking, so peers dial it too.
+**Alternatives:** Only (1) and (2), leaving the woken computer's own dial as the only way back; withdrawing and re-advertising on waking with a 2 s gap instead of withdrawing at sleep.
+**Why:** In the sleep test the Mac's Bye reached the PC, but after waking every dial timed out: `akinalp.local` resolved to the PC's IPv6 link-local address first, the PC dropped it silently, and one 5 s timer covered every address, so IPv4 was never tried. During a dark wake the Mac also dialled (Bonjour reported the PC again); a session opened there is left without a Bye when the Mac sleeps again, the PC redials, and the 47 s wake cycle returns. Withdrawing at sleep lets peers see the computer come back without a timer; members are listed from the group, not from discovery, so the UI does not change.
+**Trade-offs:** A peer that dials in a dark wake is told "sleeping" only after a handshake, which wakes the radio once; a peer that misses the withdrawal still relies on the woken computer's dial.
+**Revisit if:** A woken computer stays disconnected, or a sleeping one keeps waking for Osdrop traffic.
+
+---
+
+## 2026-11-20 — The AWDL switch is a launchd daemon in the app bundle
+**Chosen:** An SMAppService daemon (`OsdropNetworkHelper`, `Contents/Library/LaunchDaemons`) that runs `ifconfig awdl0 down` while the app holds one XPC connection asking for it, turns AWDL off again whenever the routing socket shows it back, and lets it up when the connection ends or, after its own crash, on its next start (a mark in /var/run). It answers only Osdrop's app signed by its own team, read from its own signature. The setting is off by default and named for the user's gain ("Improve the connection over Wi-Fi", user wording).
+**Alternatives:** An `osascript … with administrator privileges` prompt on every launch; a sudoers entry; a privileged helper with SMJobBless (deprecated).
+**Why:** One approval in Login Items, no password per launch, and AWDL comes back whenever Osdrop goes, crash included. The user's manual test (2026-11-12) showed macOS does not bring AWDL back by itself, so restoring is the helper's job.
+**Trade-offs:** AirDrop, AirPlay and Sidecar stop while it is on; ad hoc builds cannot run the helper (the setting then reports a failure).
+**Revisit if:** macOS offers an API to pause AWDL for an app, or AWDL stays a problem with the switch on.

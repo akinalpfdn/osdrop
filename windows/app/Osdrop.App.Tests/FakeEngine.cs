@@ -129,6 +129,22 @@ internal sealed class FakeEngine : IGroupEngine
 
     public Task<CoreResult> SetDragLoopbackAsync(bool enabled) => Task.FromResult(CoreResult.Ok);
 
+    public List<ulong> CancelledTransfers { get; } = [];
+
+    public List<uint> WithdrawnDrags { get; } = [];
+
+    public Task CancelTransferAsync(ulong transferId)
+    {
+        CancelledTransfers.Add(transferId);
+        return Task.CompletedTask;
+    }
+
+    public Task WithdrawDragAsync(uint dragId)
+    {
+        WithdrawnDrags.Add(dragId);
+        return Task.CompletedTask;
+    }
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);

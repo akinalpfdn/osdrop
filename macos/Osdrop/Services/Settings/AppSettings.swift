@@ -77,6 +77,13 @@ final class AppSettings: InputPreferencesStoring {
         didSet { defaults.set(marksReceivedFiles, forKey: Key.marksReceivedFiles) }
     }
 
+    // MARK: Network
+
+    /// AWDL is kept off while Osdrop runs (off by default: AirDrop, AirPlay and Sidecar stop).
+    var keepsAWDLOff: Bool {
+        didSet { defaults.set(keepsAWDLOff, forKey: Key.keepsAWDLOff) }
+    }
+
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -98,6 +105,7 @@ final class AppSettings: InputPreferencesStoring {
             Tunables.Clipboard.filesLimitChoices.contains(UInt64(max(limit, 0)))
             ? UInt64(limit) : Tunables.Clipboard.filesLimit
         marksReceivedFiles = defaults.bool(forKey: Key.marksReceivedFiles)
+        keepsAWDLOff = defaults.bool(forKey: Key.keepsAWDLOff)
     }
 
     private func save(_ input: InputSettings) {
@@ -162,6 +170,7 @@ final class AppSettings: InputPreferencesStoring {
         static let sharesClipboard = "shareClipboard"
         static let clipboardFilesLimit = "clipboardFilesLimit"
         static let marksReceivedFiles = "markReceivedFiles"
+        static let keepsAWDLOff = "keepAWDLOff"
 
         enum Input {
             /// "shortcuts" (the default) or "positions".

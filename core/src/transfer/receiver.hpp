@@ -108,6 +108,7 @@ private:
         std::uint64_t bytes_done = 0;
         std::uint64_t unwritten = 0;
         std::size_t files_done = 0;
+        std::map<std::size_t, std::uint64_t> entry_bytes; ///< on disk, per file being written
         bool paused = false;
         std::optional<TimePoint> last_progress;
         std::shared_ptr<Disk> disk;
@@ -127,8 +128,10 @@ private:
     void plan(Fetch& fetch);
     void planned(TransferId id, Status<Error> status, TimePoint now);
     void request_more(Fetch& fetch);
-    void written(TransferId id, std::uint64_t bytes, Status<Error> status, TimePoint now);
-    void finished(TransferId id, Status<Error> status, TimePoint now);
+    void written(TransferId id, std::size_t entry, const std::filesystem::path& path,
+                 std::uint64_t bytes, Status<Error> status, TimePoint now);
+    void finished(TransferId id, std::size_t entry,
+                  const Expected<std::filesystem::path, Error>& placed, TimePoint now);
     void maybe_finalize(Fetch& fetch);
     void finalized(TransferId id, std::size_t skipped_links,
                    std::vector<std::filesystem::path> items, TimePoint now);

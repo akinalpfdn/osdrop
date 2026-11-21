@@ -20,6 +20,10 @@ protocol InputInjecting: AnyObject {
     /// Releases every key and button this injector pressed. Called on every way out of control
     /// (DEVPLAN, input safety invariants).
     func releaseAll()
+    /// As `releaseAll()`, but a left button still down stays down: core released everything it
+    /// pressed before the control ended, so a left button it left down holds this Mac's drag,
+    /// which waits at the edge for its outcome (DEVPLAN Phase 14) and is released there.
+    func releaseAllButDrag()
     /// Releases keys that went down on this Mac before its input was captured, whether or not this
     /// injector pressed them: their physical release now goes to another computer.
     func releaseHere(_ keys: [HIDKey])

@@ -95,6 +95,20 @@ struct InputControllerTests {
         controller.stop()
     }
 
+    @Test("Another user's session in front refuses control like a locked screen")
+    func sessionSwitch() async throws {
+        let controller = start()
+        try await waitUntil { mesh.calls.contains(.unavailable(nil)) }
+        controller.sessionActiveChanged(false)
+        #expect(mesh.calls.last == .unavailable(.screenLocked))
+        controller.screenLockChanged(true)
+        controller.sessionActiveChanged(true)
+        #expect(mesh.calls.last == .unavailable(.screenLocked), "the screen is still locked")
+        controller.screenLockChanged(false)
+        #expect(mesh.calls.last == .unavailable(nil))
+        controller.stop()
+    }
+
     @Test("A capture begins and ends as core says, with the cursor back where core puts it")
     func captures() async throws {
         let controller = start()
@@ -168,7 +182,7 @@ struct InputControllerTests {
             ])
         mesh.send(.controlled(by: nil))
         try await waitUntil { controller.controller == nil }
-        #expect(injector.calls.last == .releaseAll)
+        #expect(injector.calls.last == .releaseAllButDrag)
         controller.stop()
     }
 

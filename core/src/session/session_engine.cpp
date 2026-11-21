@@ -566,7 +566,7 @@ Status<Error> SessionEngine::send_motion(const protocol::PointerMotion& motion, 
     return Status<Error>::ok();
 }
 
-void SessionEngine::on_datagram(std::span<std::uint8_t> datagram, TimePoint /*now*/) {
+void SessionEngine::on_datagram(std::span<std::uint8_t> datagram, TimePoint now) {
     if (state_ == SessionState::Closed || !opener_) {
         ++datagrams_rejected_;
         return;
@@ -581,6 +581,9 @@ void SessionEngine::on_datagram(std::span<std::uint8_t> datagram, TimePoint /*no
         ++datagrams_rejected_;
         return;
     }
+    // Authentic and never seen before (the opener drops replays): the peer is alive.
+    last_datagram_ = now;
+    set_responsive(true);
     const std::uint64_t sequence = decoded.value().sequence;
     std::visit(Overloaded{
                    [&](const protocol::InputHello& hello) {
@@ -610,6 +613,10 @@ void SessionEngine::on_datagram(std::span<std::uint8_t> datagram, TimePoint /*no
 
 // --- Time ----------------------------------------------------------------------------------------
 
+TimePoint SessionEngine::last_heard() const {
+    return std::max(last_received_, last_datagram_);
+}
+
 void SessionEngine::on_timer(TimePoint now) {
     if (state_ == SessionState::Closed) {
         return;
@@ -631,7 +638,7 @@ void SessionEngine::on_timer(TimePoint now) {
         fail(Error::TimedOut, false, now);
         return;
     }
-    if (responsive_ && now - last_received_ >= tunables.unresponsive_after) {
+    if (responsive_ && now - last_heard() >= tunables.unresponsive_after) {
         set_responsive(false);
     }
     if (now >= next_ping_) {
@@ -664,7 +671,7 @@ TimePoint SessionEngine::next_wakeup() const {
     TimePoint next = std::min({last_received_ + tunables.session_timeout, next_ping_,
                                last_sent_ + tunables.heartbeat_interval});
     if (responsive_) {
-        next = std::min(next, last_received_ + tunables.unresponsive_after);
+        next = std::min(next, last_heard() + tunables.unresponsive_after);
     }
     if (state_ == SessionState::AwaitingPairing && trust_ == TrustDecision::Unknown) {
         next = std::min(next, keyed_at_ + tunables.pairing_timeout);

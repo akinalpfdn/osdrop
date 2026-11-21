@@ -78,6 +78,9 @@ std::optional<Report> InputSession::carry_out(const Request& request, Clock::tim
                           [&](const Heartbeat&) { return heartbeat(now); },
                           [&](const Watch& m) { return watch(m.on); },
                           [&](const SetChords& m) { return set_chords(m); },
+                          [&](const HoldDrag&) { return hold_drag(); },
+                          [&](const ReleaseDrag&) { return release_drag(); },
+                          [&](const PressForDrag& m) { return press_for_drag(m); },
                           [&](const QueryStats&) { return std::optional<Report>(device_.stats()); },
                           [](const auto&) { return std::optional<Report>(); }, // injection
                       },
@@ -152,6 +155,36 @@ std::optional<Report> InputSession::set_chords(const SetChords& chords) {
     return std::nullopt;
 }
 
+std::optional<Report> InputSession::hold_drag() {
+    if (buttons_down_.erase(Button::Left) == 1) {
+        drag_held_ = true; // EndControl leaves it down
+        log_.info("The left button stays down for a drag");
+    }
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::release_drag() {
+    // Any state: a drag held past its control, or one this PC's own hand started, which waits
+    // at the edge while the input is captured or after the control moved on.
+    buttons_down_.erase(Button::Left);
+    drag_held_ = false;
+    drag_pressed_ = false;
+    device_.press(Button::Left, false);
+    log_.info("Released the left button of a drag");
+    return std::nullopt;
+}
+
+std::optional<Report> InputSession::press_for_drag(const PressForDrag& press) {
+    // The hand that holds the button lets it go: no state of the client's has to release it.
+    if (!device_.press_held_left()) {
+        return refuse(type_of(Request(press)), Refusal::NotHeld,
+                      "a drag's press while this PC's left button is up");
+    }
+    drag_pressed_ = true;
+    log_.info("Pressed the left button for a drag that came home");
+    return std::nullopt;
+}
+
 std::optional<Report> InputSession::watch(bool on) {
     if (watching_ != on) {
         watching_ = on;
@@ -169,6 +202,9 @@ void InputSession::forwarding(const Report& report) {
         }
     } else if (std::holds_alternative<HotkeyPressed>(report) && !capturing()) {
         device_.mask_menu_keys(); // its modifiers reached the apps; the key did not
+    } else if (const auto* press = std::get_if<PhysicalPress>(&report);
+               press != nullptr && press->button == Button::Left && !press->down) {
+        drag_pressed_ = false; // the release reached the apps and ended the drag's press
     }
 }
 
@@ -208,6 +244,11 @@ void InputSession::reset() {
     end_capture_here();
     capture_.reset();
     release_all();
+    const bool held = std::exchange(drag_held_, false);
+    const bool pressed = std::exchange(drag_pressed_, false);
+    if (held || pressed) {
+        device_.press(Button::Left, false);
+    }
     if (controlling_) {
         controlling_ = false;
         device_.set_controlled(false);

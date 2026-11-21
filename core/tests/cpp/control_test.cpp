@@ -191,6 +191,22 @@ TEST_F(InputControl, ScreenLockDuringControlReleasesIt) {
     EXPECT_EQ(node(0).control_observer.ended.back().refused, protocol::RefuseReason::Locked);
 }
 
+TEST_F(InputControl, LockingTheControllingComputerReleasesItsKeysWhereTheCursorIs) {
+    // Win+L with the cursor on another computer: the PC locks before its key-ups are seen.
+    cross_from_0();
+    constexpr std::uint16_t kLeftGui = 0xE3;
+    constexpr std::uint16_t kKeyL = 0x0F;
+    key(0, kLeftGui, KeyAction::Down);
+    key(0, kKeyL, KeyAction::Down);
+    ASSERT_EQ(held_after(node(1).control_observer.injected).keys.size(), 2U);
+    command(0, [](control::Control& c) { c.set_unavailable(protocol::RefuseReason::Locked); });
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).keys.empty());
+    EXPECT_TRUE(node(0).control_observer.ended.empty()) << "the cursor stays where it is";
+    key(0, kKeyA, KeyAction::Down);
+    EXPECT_EQ(held_after(node(1).control_observer.injected).keys.size(), 1U)
+        << "typing goes on, without the stale keys";
+}
+
 TEST_F(InputControl, AComputerThatDeniesControlIsAWall) {
     osdrop::group::Permissions denied;
     denied.control = false;

@@ -99,7 +99,15 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task ResumeAsync() => Native.Run(() => NativeMethods.Resume(_engine));
 
+    public Task SetLockedAsync(bool locked) =>
+        Native.Run(() => NativeMethods.SetLocked(_engine, locked ? (byte)1 : (byte)0));
+
     public Task CancelClipboardFetchAsync() => Native.Run(() => NativeMethods.CancelClipboardFetch(_engine));
+
+    public Task CancelTransferAsync(ulong transferId) =>
+        Native.Run(() => NativeMethods.CancelTransfer(_engine, transferId));
+
+    public Task WithdrawDragAsync(uint dragId) => Native.Run(() => NativeMethods.WithdrawDrag(_engine, dragId));
 
     public Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions)
     {

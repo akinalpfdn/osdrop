@@ -89,23 +89,26 @@ Status<Error> write_entry(Receiver::Disk& disk, std::size_t entry,
     return writer->second.write(data);
 }
 
-Status<Error> finish_entry(Receiver::Disk& disk, std::size_t entry,
-                           const protocol::ManifestEntry& manifest,
-                           const crypto::ContentHasher::Digest& digest, bool is_top_level) {
+/// The file where it was placed.
+Expected<fs::path, Error> finish_entry(Receiver::Disk& disk, std::size_t entry,
+                                       const protocol::ManifestEntry& manifest,
+                                       const crypto::ContentHasher::Digest& digest,
+                                       bool is_top_level) {
+    using Result = Expected<fs::path, Error>;
     if (const auto opened = write_entry(disk, entry, {}); !opened) { // an empty file has no data
-        return opened;
+        return Result::failure(opened.error());
     }
     auto writer = disk.writers.extract(entry);
-    const auto placed = writer.mapped().finish(manifest.byte_count, digest, manifest.modified_us,
-                                               manifest.executable);
+    auto placed = writer.mapped().finish(manifest.byte_count, digest, manifest.modified_us,
+                                         manifest.executable);
     if (!placed) {
-        return Status<Error>::failure(placed.error());
+        return Result::failure(placed.error());
     }
     disk.created.push_back(placed.value());
     if (is_top_level) {
         disk.items.push_back(placed.value());
     }
-    return Status<Error>::ok();
+    return placed;
 }
 
 /// Links that stay inside their item, then the folders' times; the links not recreated.
@@ -435,9 +438,19 @@ void Receiver::planned(TransferId id, Status<Error> status, TimePoint now) {
         fail(it->second, status.error());
         return;
     }
-    it->second.stage = Stage::Fetching;
-    report_progress(it->second, now, true);
-    request_more(it->second);
+    Fetch& fetch = it->second;
+    fetch.stage = Stage::Fetching;
+    TransferPlan planned{.id = fetch.id, .entries = {}};
+    planned.entries.reserve(fetch.plan->entries.size());
+    for (const PlannedEntry& entry : fetch.plan->entries) {
+        planned.entries.push_back({.path = entry.target,
+                                   .kind = entry.entry.kind,
+                                   .byte_count = entry.entry.byte_count,
+                                   .modified_us = entry.entry.modified_us});
+    }
+    observer_.on_transfer_planned(planned);
+    report_progress(fetch, now, true);
+    request_more(fetch);
 }
 
 void Receiver::request_more(Fetch& fetch) {
@@ -482,9 +495,10 @@ void Receiver::received_chunk(Fetch& fetch, const protocol::ContentChunk& chunk)
     executor_.run_file_work(
         [this, id = fetch.id, disk = fetch.disk, index = state.entry, data = chunk.data] {
             const Status<Error> status = write_entry(*disk, index, data);
-            executor_.run_on_mesh([this, id, bytes = data.size(), status](TimePoint now) {
-                written(id, bytes, status, now);
-            });
+            fs::path path = status ? disk->writers.at(index).temporary() : fs::path();
+            executor_.run_on_mesh(
+                [this, id, index, path = std::move(path), bytes = data.size(),
+                 status](TimePoint now) { written(id, index, path, bytes, status, now); });
         });
     if (!fetch.paused && fetch.unwritten >= tunables_.write_high_water) {
         fetch.paused = true;
@@ -518,14 +532,17 @@ void Receiver::received_end(Fetch& fetch, const protocol::ContentEnd& end) {
         executor_.run_file_work([this, id = fetch.id, disk = fetch.disk, index = state.entry,
                                  entry = planned.entry, digest = end.digest,
                                  is_top_level = top_level(planned)] {
-            const Status<Error> status = finish_entry(*disk, index, entry, digest, is_top_level);
-            executor_.run_on_mesh([this, id, status](TimePoint now) { finished(id, status, now); });
+            auto placed = finish_entry(*disk, index, entry, digest, is_top_level);
+            executor_.run_on_mesh([this, id, index, placed = std::move(placed)](TimePoint now) {
+                finished(id, index, placed, now);
+            });
         });
     }
     request_more(fetch);
 }
 
-void Receiver::written(TransferId id, std::uint64_t bytes, Status<Error> status, TimePoint now) {
+void Receiver::written(TransferId id, std::size_t entry, const std::filesystem::path& path,
+                       std::uint64_t bytes, Status<Error> status, TimePoint now) {
     const auto it = fetches_.find(id);
     if (it == fetches_.end() || it->second.stage == Stage::Failing) {
         return;
@@ -537,6 +554,10 @@ void Receiver::written(TransferId id, std::uint64_t bytes, Status<Error> status,
     }
     fetch.unwritten -= bytes;
     fetch.bytes_done += bytes;
+    std::uint64_t& on_disk = fetch.entry_bytes[entry];
+    on_disk += bytes;
+    observer_.on_entry_written(
+        {.id = id, .entry = entry, .path = path, .bytes = on_disk, .complete = false});
     if (fetch.paused && fetch.unwritten < tunables_.write_low_water) {
         fetch.paused = false;
         streams_.pause(key_of(fetch), false);
@@ -544,17 +565,24 @@ void Receiver::written(TransferId id, std::uint64_t bytes, Status<Error> status,
     report_progress(fetch, now, false);
 }
 
-void Receiver::finished(TransferId id, Status<Error> status, TimePoint now) {
+void Receiver::finished(TransferId id, std::size_t entry,
+                        const Expected<std::filesystem::path, Error>& placed, TimePoint now) {
     const auto it = fetches_.find(id);
     if (it == fetches_.end() || it->second.stage == Stage::Failing) {
         return;
     }
     Fetch& fetch = it->second;
     --fetch.finishing;
-    if (!status) {
-        fail(fetch, status.error());
+    if (!placed) {
+        fail(fetch, placed.error());
         return;
     }
+    fetch.entry_bytes.erase(entry);
+    observer_.on_entry_written({.id = id,
+                                .entry = entry,
+                                .path = placed.value(),
+                                .bytes = fetch.plan->entries[entry].entry.byte_count,
+                                .complete = true});
     ++fetch.files_done;
     report_progress(fetch, now, false);
     maybe_finalize(fetch);

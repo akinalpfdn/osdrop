@@ -69,6 +69,8 @@ protocol MeshDriving: ControlDriving, TransferDriving {
     func withdraw(_ kind: TransferItem.Kind, objectID: UInt64) async throws(CoreError)
     /// Returns at once: core queues the Byes, also while the app is quitting.
     func closeAll(sleeping: Bool)
+    /// Returns at once, like closeAll.
+    func resume()
     func clipboardCopied(_ contents: [ClipboardContent], files: [URL]) async throws(CoreError) -> UInt64
     func fetchContent(
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
@@ -137,6 +139,8 @@ actor CoreMesh: MeshDriving {
     func cancelTransfer(_ id: UInt64) { mesh.cancelTransfer(id) }
 
     nonisolated func closeAll(sleeping: Bool) { mesh.closeAll(sleeping: sleeping) }
+
+    nonisolated func resume() { mesh.resume() }
 
     // The input commands only queue work for core's I/O thread; their only failure is an argument
     // the app built wrong.

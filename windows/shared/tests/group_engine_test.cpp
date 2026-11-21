@@ -72,6 +72,10 @@ public:
         port_ = port;
         return true;
     }
+    void withdraw() override {
+        const std::scoped_lock lock(mutex_);
+        ++withdrawals_;
+    }
     bool browse(Callbacks callbacks) override {
         const std::scoped_lock lock(mutex_);
         callbacks_ = std::move(callbacks);
@@ -107,6 +111,10 @@ public:
         const std::scoped_lock lock(mutex_);
         return advertisements_.size();
     }
+    std::size_t withdrawals() {
+        const std::scoped_lock lock(mutex_);
+        return withdrawals_;
+    }
     std::optional<osdrop_advertisement> last() {
         const std::scoped_lock lock(mutex_);
         return advertisements_.empty() ? std::nullopt : std::optional(advertisements_.back());
@@ -115,6 +123,7 @@ public:
 private:
     std::mutex mutex_;
     std::vector<osdrop_advertisement> advertisements_;
+    std::size_t withdrawals_ = 0;
     std::uint16_t port_ = 0;
     Callbacks callbacks_;
 };
@@ -146,7 +155,7 @@ public:
     void stats(const DeviceIdBytes& /*device*/, const osdrop_session_stats& /*stats*/) override {}
     void log(osdrop_log_level /*level*/, const char* /*message*/) override {}
     void clipboard_notice(osdrop::win::ClipboardNotice /*notice*/, const DeviceIdBytes& /*device*/,
-                          const std::string& /*name*/) override {}
+                          const std::string& /*name*/, std::uint64_t /*links_left_out*/) override {}
     void clipboard_fetch(const std::optional<osdrop::win::ClipboardFetch>& /*fetch*/) override {}
     void layout_changed() override {
         change([&] { ++layout_changes_; });
@@ -156,6 +165,15 @@ public:
     void capture_began(const DeviceIdBytes& /*device*/,
                        const std::vector<osdrop_input>& /*release_here*/) override {}
     void capture_ended(const osdrop::win::CaptureEnd& /*end*/) override {}
+    void drag_arrived(const osdrop::win::DragArrival& /*arrival*/) override {}
+    void drag_withdrawn(std::uint32_t /*drag_id*/) override {}
+    void drag_ended(std::uint32_t /*drag_id*/, osdrop_drag_outcome /*outcome*/) override {}
+    void drag_wanted() override {}
+    void transfer_progress(std::uint64_t /*transfer_id*/, std::uint64_t /*done*/,
+                           std::uint64_t /*total*/) override {}
+    void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/,
+                           std::uint64_t /*links_left_out*/) override {}
+    void send_progress(const osdrop::win::SendUpdate& /*update*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);
@@ -323,6 +341,20 @@ TEST(GroupEngine, StartsWithANewIdentityAndAdvertisesIt) {
     EXPECT_EQ(pc.store.get(StoredItem::ListenPort)->size(), 2U);
 }
 
+TEST(GroupEngine, ASleepingPcWithdrawsItsAdvertisementAndAdvertisesAgainOnWaking) {
+    Computer pc(1, "PC");
+    ASSERT_NE(pc.engine, nullptr);
+    const std::size_t advertised = pc.discovery.advertisement_count();
+
+    pc.engine->close_all(false);
+    EXPECT_EQ(pc.discovery.withdrawals(), 0U) << "quitting withdraws nothing itself";
+    pc.engine->close_all(true);
+    EXPECT_EQ(pc.discovery.withdrawals(), 1U);
+
+    pc.engine->resume();
+    EXPECT_EQ(pc.discovery.advertisement_count(), advertised + 1);
+}
+
 TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     auto pc = std::make_unique<Computer>(2, "PC");
     Computer laptop(3, "Laptop");
@@ -340,9 +372,9 @@ TEST(GroupEngine, TwoComputersFindEachOtherPairAndKeepTheGroup) {
     EXPECT_EQ(pc->engine->confirm_pairing(connection.value(), true), OSDROP_OK);
     EXPECT_EQ(laptop.engine->confirm_pairing(laptop.events.code()->first, true), OSDROP_OK);
     ASSERT_TRUE(pc->events.wait_for([&] { return pc->events.connected_unlocked() == 1; }));
-    EXPECT_EQ(pc->events.features(),
-              OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD | OSDROP_FEATURE_FILES)
-        << "no drags before the drag bridge exists";
+    EXPECT_EQ(pc->events.features(), OSDROP_FEATURE_TAKES_CONTROL | OSDROP_FEATURE_CLIPBOARD |
+                                         OSDROP_FEATURE_FILES | OSDROP_FEATURE_DRAG_SOURCE |
+                                         OSDROP_FEATURE_DRAG_TARGET);
     ASSERT_TRUE(wait_until([&] {
         return pc->engine->info().has_group && laptop.engine->info().has_group &&
                pc->engine->members().value().size() == 2;

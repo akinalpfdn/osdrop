@@ -92,16 +92,18 @@ final class EdgeDropTarget {
         Log.drag.info(
             "Drop on the edge accepted: \(files.count, privacy: .public) files, \(promises.count, privacy: .public) promises"
         )
+        // A drag with promises takes only them: Photos also puts a preview's URL on the pasteboard
+        // for the same photo, which would arrive as a second file.
         if promises.isEmpty {
             onCapture?(Result { try Self.capture(files: files, promised: [], stagingFolder: nil) })
         } else {
-            receive(promises, along: files)
+            receive(promises)
         }
         return true
     }
 
     /// Promised files are written by the source app after the drop, into a staging folder.
-    private func receive(_ promises: [NSFilePromiseReceiver], along files: [URL]) {
+    private func receive(_ promises: [NSFilePromiseReceiver]) {
         let folder: URL
         do {
             folder = try staging.makeFolder()
@@ -121,7 +123,7 @@ final class EdgeDropTarget {
                     onCapture?(.failure(failure))
                 } else {
                     Log.drag.info("Received \(urls.count, privacy: .public) promised files")
-                    onCapture?(Result { try Self.capture(files: files, promised: urls, stagingFolder: folder) })
+                    onCapture?(Result { try Self.capture(files: [], promised: urls, stagingFolder: folder) })
                 }
             }
         }

@@ -41,6 +41,11 @@ public:
         std::function<void(bool reachable)> reachable; ///< whether OsdropInput answers
         std::function<void(bool locked)> locked;       ///< "lock input here"
         std::function<void(const char* message)> log;  ///< a line for the shell's log
+        /// Before the cursor is parked at `park` for a capture; returns once ready for it.
+        std::function<void(POINT park)> parking;
+        /// A drag that came home could not be pressed here: the hand let go first, or
+        /// OsdropInput cannot be reached.
+        std::function<void()> drag_unpressed;
     };
 
     InputBridge(win::GroupEngine& group, Listener listener);
@@ -51,6 +56,8 @@ public:
     InputBridge& operator=(InputBridge&&) = delete;
 
     // From core's thread; they only queue.
+    /// When control ends, core's releases go out first; a left button core left down (a drag
+    /// of this PC parked at the edge) stays down until release_drag().
     void controlled(bool controlled);
     void inject(const osdrop_input& input);
     void capture_began(const std::vector<osdrop_input>& release_here);
@@ -69,6 +76,15 @@ public:
     /// thread.
     void set_chords(const win::input::Chord& return_home, const win::input::Chord& lock_input);
 
+    /// Releases the left button where the cursor is, in any state: this PC's drag that waits at
+    /// the edge for its outcome ends there (DEVPLAN Phase 14). Any thread.
+    void release_drag();
+    /// The press that starts a drag arriving here (DEVPLAN Phase 14). While another computer
+    /// controls this PC it is injected like the controller's input; otherwise the drag came home
+    /// with this PC's own hand, and OsdropInput presses it only while that hand holds the button.
+    /// Any thread.
+    void press_for_drag(const osdrop_input& press);
+
     /// Ends the bridge's thread; what arrives later is dropped. Before the group engine goes.
     void stop();
 
@@ -86,6 +102,8 @@ private:
         std::vector<CaptureChange> captures;
         bool watching = false;
         Chords chords;
+        bool release_drag = false;
+        bool drag_press = false; ///< also among `inputs`
         bool stopping = false;
     };
 
@@ -121,6 +139,8 @@ private:
     bool watching_changed_ = false;
     Chords chords_wanted_;
     bool chords_changed_ = false;
+    bool release_drag_ = false;
+    bool drag_press_ = false;
     bool stopping_ = false;
 
     // The forwarder turns reports into core's input on the reader thread; captures move it.
@@ -140,6 +160,7 @@ private:
     bool watching_ = false;             // as last told to OsdropInput
     std::optional<Chords> chords_sent_; // as last told to OsdropInput
     win::Injection injection_;
+    bool left_down_ = false;          // injected and not released yet
     POINT expected_{};                // where the last injected move put the cursor
     std::optional<POINT> moved_here_; // a different position seen once, waiting for a second look
     Clock::time_point last_heartbeat_;

@@ -36,6 +36,13 @@ struct FakeDevice final : input::InputDevice {
     void key(ScanCode scan, bool down) override {
         calls.push_back("key " + std::to_string(scan.code) + (down ? " down" : " up"));
     }
+    bool press_held_left() override {
+        if (left_held) {
+            calls.push_back("drag press");
+        }
+        return left_held;
+    }
+    bool left_held = false; ///< this PC's own left button
     void start_capture(std::int32_t x, std::int32_t y) override {
         calls.push_back("capture " + std::to_string(x) + "," + std::to_string(y));
     }
@@ -111,6 +118,68 @@ TEST_F(InputSessionTest, EndingControlReleasesWhatIsStillDown) {
     EXPECT_FALSE(session.controlling());
     EXPECT_FALSE(device.controlled);
     ASSERT_TRUE(send(input::Key{.scan = kA, .down = true}).has_value()) << "refused again";
+}
+
+TEST_F(InputSessionTest, AHeldDragKeepsTheLeftButtonDownPastTheControl) {
+    send(input::BeginControl{});
+    send(input::Key{.scan = kShift, .down = true});
+    send(input::Press{.button = input::Button::Left, .down = true});
+    EXPECT_FALSE(send(input::HoldDrag{}).has_value());
+    device.calls.clear();
+    send(input::EndControl{});
+    EXPECT_EQ(device.calls, std::vector<std::string>{"key 42 up"}) << "the drag waits";
+    // Injection is refused now, but the drag's own release is not.
+    EXPECT_FALSE(send(input::ReleaseDrag{}).has_value());
+    EXPECT_EQ(device.calls, (std::vector<std::string>{"key 42 up", "press 0 up"}));
+    EXPECT_TRUE(log.warnings.empty());
+}
+
+TEST_F(InputSessionTest, ADragIsReleasedWhileCapturingToo) {
+    send(input::StartCapture{.park_x = 100, .park_y = 200, .home_x = 0, .home_y = 300});
+    device.calls.clear();
+    EXPECT_FALSE(send(input::ReleaseDrag{}).has_value());
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
+}
+
+TEST_F(InputSessionTest, AClientThatGoesReleasesAHeldDrag) {
+    send(input::BeginControl{});
+    send(input::Press{.button = input::Button::Left, .down = true});
+    send(input::HoldDrag{});
+    send(input::EndControl{});
+    device.calls.clear();
+    session.reset();
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
+}
+
+TEST_F(InputSessionTest, ADragThatCameHomeIsPressedOnlyWhileThisPcsLeftButtonIsHeld) {
+    const auto refused = send(input::PressForDrag{});
+    ASSERT_TRUE(refused.has_value()) << "the hand let go: nothing would release it";
+    EXPECT_EQ(std::get<input::Rejected>(*refused).reason, input::Refusal::NotHeld);
+    EXPECT_TRUE(device.calls.empty());
+    EXPECT_EQ(log.warnings.size(), 1U);
+
+    device.left_held = true;
+    EXPECT_FALSE(send(input::PressForDrag{}).has_value())
+        << "neither control nor capture is needed";
+    EXPECT_EQ(device.calls, std::vector<std::string>{"drag press"});
+}
+
+TEST_F(InputSessionTest, TheHandsReleaseEndsADragThatCameHome) {
+    device.left_held = true;
+    send(input::PressForDrag{});
+    session.forwarding(input::PhysicalPress{.button = input::Button::Left, .down = false});
+    device.calls.clear();
+    session.reset();
+    EXPECT_TRUE(device.calls.empty()) << "already released by the hand";
+}
+
+TEST_F(InputSessionTest, AClientThatGoesReleasesADragThatCameHome) {
+    device.left_held = true;
+    send(input::PressForDrag{});
+    session.forwarding(input::PhysicalPress{.button = input::Button::Right, .down = false});
+    device.calls.clear();
+    session.reset();
+    EXPECT_EQ(device.calls, std::vector<std::string>{"press 0 up"});
 }
 
 TEST_F(InputSessionTest, AClientThatGoesLeavesNothingPressedOrCaptured) {

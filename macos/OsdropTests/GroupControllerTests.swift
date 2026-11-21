@@ -26,6 +26,24 @@ struct GroupControllerTests {
         #expect(controller.isRunning)
     }
 
+    @Test("Displays are reported once a burst of changes settles, the last list last")
+    func reportsDisplaysAfterTheyChange() async throws {
+        let controller = fixture.start()
+        try await waitUntil { fixture.mesh.calls.contains(.setScreens(1)) }
+        let before = fixture.mesh.calls.count
+        // Osplay's four virtual displays go away in several steps.
+        fixture.screens.extra = 4
+        fixture.screens.onChange?()
+        fixture.screens.extra = 2
+        fixture.screens.onChange?()
+        fixture.screens.extra = 0
+        fixture.screens.onChange?()
+        try await waitUntil { fixture.mesh.calls.count > before }
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(Array(fixture.mesh.calls.dropFirst(before)) == [.setScreens(1)])
+        #expect(controller.isRunning)
+    }
+
     @Test("Discovered computers reach the mesh; members and this computer are not offered")
     func discoveryFeedsTheMesh() async throws {
         let controller = fixture.start()
@@ -135,6 +153,23 @@ struct GroupControllerTests {
 
         fixture.mesh.send(.leftGroup(reason: .notTrusted))
         try await waitUntil { controller.wasRemoved }
+    }
+
+    @Test("A Mac going to sleep withdraws its advertisement; waking dials members and advertises again")
+    func sleepAndWake() async throws {
+        let controller = fixture.start()
+        try await waitUntil { !fixture.discovery.advertisements.isEmpty }
+        let advertised = fixture.discovery.advertisements.count
+
+        controller.closeAll(sleeping: false)
+        #expect(fixture.discovery.withdrawals == 0, "quitting withdraws nothing itself")
+        controller.closeAll(sleeping: true)
+        #expect(fixture.mesh.calls.contains(.closeAll(sleeping: true)))
+        #expect(fixture.discovery.withdrawals == 1)
+
+        controller.resumeAfterSleep()
+        #expect(fixture.mesh.calls.contains(.resume))
+        #expect(fixture.discovery.advertisements.count == advertised + 1)
     }
 
     @Test("A group stored by a newer Osdrop stops the start and is kept")
@@ -268,6 +303,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
         case leave
         case permissions(MemberPermissions, DeviceID)
         case setLayout([Placement])
+        case closeAll(sleeping: Bool)
+        case resume
     }
 
     static let port: UInt16 = 50_000
@@ -335,7 +372,8 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {
         lock.withLock { recorded.append(.setScreens(monitors.count)) }
     }
-    func closeAll(sleeping: Bool) {}
+    func closeAll(sleeping: Bool) { lock.withLock { recorded.append(.closeAll(sleeping: sleeping)) } }
+    func resume() { lock.withLock { recorded.append(.resume) } }
     func setPermissions(_ permissions: MemberPermissions, for device: DeviceID) async throws(CoreError) {
         lock.withLock { recorded.append(.permissions(permissions, device)) }
     }
@@ -361,19 +399,22 @@ final class FakeMesh: MeshDriving, @unchecked Sendable {
 
 final class FakeDiscovery: PeerDiscovering, @unchecked Sendable {
     private struct Registration: Advertising {
-        func cancel() {}
+        let withdraw: @Sendable () -> Void
+        func cancel() { withdraw() }
     }
 
     private let lock = NSLock()
     private var registered: [(Advertisement, UInt16)] = []
+    private var withdrawn = 0
     private var continuation: AsyncStream<DiscoveryEvent>.Continuation?
 
     var advertisements: [Advertisement] { lock.withLock { registered.map(\.0) } }
     var ports: [UInt16] { lock.withLock { registered.map(\.1) } }
+    var withdrawals: Int { lock.withLock { withdrawn } }
 
     func advertise(_ advertisement: Advertisement, port: UInt16) throws(DiscoveryError) -> any Advertising {
         lock.withLock { registered.append((advertisement, port)) }
-        return Registration()
+        return Registration { [self] in lock.withLock { withdrawn += 1 } }
     }
 
     func browse() -> AsyncStream<DiscoveryEvent> {
@@ -428,6 +469,8 @@ struct FakeLocalNetwork: LocalNetworkChecking {
 @MainActor
 final class FakeScreens: ScreenDescribing {
     var onChange: (() -> Void)?
+    /// The built-in display, then this many more beside it.
+    var extra = 0
 
     func screens() -> [ScreenDescription] {
         [
@@ -436,5 +479,11 @@ final class FakeScreens: ScreenDescribing {
                 frame: CGRect(x: 0, y: 0, width: 1470, height: 956), pixelWidth: 2940, pixelHeight: 1912,
                 isMain: true)
         ]
+            + (0..<extra).map { index in
+                ScreenDescription(
+                    id: "VIRTUAL-\(index)", displayID: CGDirectDisplayID(10 + index),
+                    frame: CGRect(x: 1470 + index * 1920, y: 0, width: 1920, height: 1080), pixelWidth: 1920,
+                    pixelHeight: 1080, isMain: false)
+            }
     }
 }

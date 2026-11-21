@@ -1,5 +1,5 @@
 # Phase 015 (MVP-15) — Drag and drop across computers
-Status: BACKLOG
+Status: DONE (2026-11-20) — Mac ↔ PC tested; the three-computer rows moved to Phase 020
 
 DEVPLAN reference: Phase 14. Depends on: Phases 2, 4, 11, 13
 
@@ -7,14 +7,14 @@ DEVPLAN reference: Phase 14. Depends on: Phases 2, 4, 11, 13
 A file dragged to an edge crosses with the cursor and lands where it is released, in every direction.
 
 ## Tasks
-- [ ] Drag probe, offer, drop, cancel and result flows wired to the bridges from Phases 2 and 4 and to the transfer engine.
-- [ ] Any member can be the source, including a computer that is itself being controlled remotely; drags across several computers (A → B → C).
-- [ ] Progress and cancel on both sides; transfers continue after the cursor moves on; a drop on a target that accepts nothing cancels cleanly.
+- [x] Drag probe, offer, drop, cancel and result flows wired to the bridges from Phases 2 and 4 and to the transfer engine.
+- [x] Any member can be the source, including a computer that is itself being controlled remotely; drags across several computers (A → B → C).
+- [x] Progress and cancel on both sides; transfers continue after the cursor moves on; a drop on a target that accepts nothing cancels cleanly.
 
 ## Acceptance Criteria
 - [ ] Mac → PC, PC → Mac, Mac → Mac, PC → PC, a three-computer chain and a drag started on a remotely controlled computer all copy the file where it is dropped.
-- [ ] A 10 GB file and a folder tree with Unicode names arrive intact.
-- [ ] Losing the network mid-transfer ends with a clear message on both sides and no partial file.
+- [x] A 10 GB file and a folder tree with Unicode names arrive intact.
+- [x] Losing the network mid-transfer ends with a clear message on both sides and no partial file.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
@@ -53,3 +53,37 @@ A file dragged to an edge crosses with the cursor and lands where it is released
 - Hardware: TESTING D1–D11, all need a second computer.
 7. Tests over the simulated network (probe, offer, cross, result, chain, remote source, cancel,
    lost peer) and Mac fakes; docs.
+
+## Plan (Windows half, 2026-11-10)
+User decision: drops on the PC stream; Explorer copies while the files arrive.
+1. Core: `transfer_planned` (an item's entries, mapped, before any content) and `entry_written`
+   (a file's bytes on disk so far, where they are, and when it is complete) callbacks; the
+   receiver flushes every chunk. Tests.
+2. Input pipe: `ReleaseLeft` (a tagged left-button release in any state) and `EndControl` that
+   keeps what core left held (a parked drag); the bridge sends core's releases before ending the
+   control instead of dropping them. Tests.
+3. `windows/shared`: GroupEngine drag commands and events, transfer events routed to drags too;
+   the network content of a drag that arrives (entries once planned, each file read as it is
+   written, the last bytes only once verified). Tests with a fake mesh.
+4. Engine, PC as source: edge strips report the drag that reaches them (CF_HDROP paths, or
+   promised for virtual files); a hold window at the capture's park point keeps the drag while
+   the cursor is away; the outcome releases the left button there (copy, refuse, or take the
+   virtual files and report them). Drags started under remote control park the same way.
+5. Engine, PC as target: drags from other computers start under the cursor from a pressed left
+   button (lazy virtual files, CF_HDROP to the received files up to a cap), withdrawn by cancel,
+   outcome reported as soon as the drag ends; staging cleaned up.
+6. Shell: transfers in the panel (progress, cancel) and notifications, as on the Mac.
+7. Announce DRAG_SOURCE and DRAG_TARGET; docs (ARCHITECTURE, DECISIONS, TESTING D rows for
+   Mac <-> PC); CI.
+
+## Status (Windows half, 2026-11-10)
+- Steps 1-7 done in code on `feature/phase-14-windows-drag`, PR #25 (zig mingw build and Windows
+  clang-tidy clean on the Mac; the shell builds there, its tests run in CI).
+- Hardware: TESTING D1-D11 in the Mac <-> PC directions; the service must be reinstalled (input
+  pipe version 2).
+
+## Closing (2026-11-20)
+User decision: Phase 15 closes with every Mac ↔ PC row of TESTING D1–D11 passed (TESTING.md, Runs).
+Mac → Mac, PC → PC, the three-computer chain (D3) and D9 need a third computer; they are a task
+of Phase 020, before the release. Fixed during the run: 2b72306 and 50e1bc6 (Photos), 9cb12e6
+(links left out are counted on both sides).

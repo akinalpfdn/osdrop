@@ -40,6 +40,8 @@ final class TransfersController: DragTransfersTracking {
         var bytesDone: UInt64
         var bytesTotal: UInt64
         var state: State
+        /// The links in a received item that did not arrive, known once it arrived.
+        var linksLeftOut: UInt64 = 0
 
         var isSending: Bool {
             if case .send = id { true } else { false }
@@ -137,6 +139,9 @@ final class TransfersController: DragTransfersTracking {
             case .failure(.cancelled) where cancelled.contains(.receive(id)): .cancelled
             case .failure: .failed
             }
+        if case .success(let item) = result {
+            update(.receive(id)) { $0.linksLeftOut = item.skippedLinks }
+        }
         end(.receive(id), as: state)
     }
 
@@ -170,6 +175,11 @@ final class TransfersController: DragTransfersTracking {
         return names[Int(item.index)]
     }
 
+    /// "2 links inside did not arrive".
+    static func linksNote(_ count: UInt64) -> String {
+        String(localized: "transfers.linksLeftOut \(Int(clamping: count))")
+    }
+
     private func update(_ key: Row.Key, _ change: (inout Row) -> Void) {
         guard let index = rows.firstIndex(where: { $0.id == key }), rows[index].state == .running else { return }
         change(&rows[index])
@@ -196,9 +206,11 @@ final class TransfersController: DragTransfersTracking {
         let peer = nameOf(row.peer)
         switch (row.isSending, row.state) {
         case (false, .done):
-            notifier.notify(
-                title: String(localized: "transfers.notify.received"),
-                body: String(localized: "transfers.from \(row.name) \(peer)"))
+            var body = String(localized: "transfers.from \(row.name) \(peer)")
+            if row.linksLeftOut > 0 {
+                body += "\n" + Self.linksNote(row.linksLeftOut)
+            }
+            notifier.notify(title: String(localized: "transfers.notify.received"), body: body)
         case (false, .failed):
             notifier.notify(
                 title: String(localized: "transfers.notify.notReceived"),

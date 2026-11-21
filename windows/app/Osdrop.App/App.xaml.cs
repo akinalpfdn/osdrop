@@ -9,6 +9,7 @@ using Osdrop.App.Group;
 using Osdrop.App.Interop;
 using Osdrop.App.Services;
 using Osdrop.App.Settings;
+using Osdrop.App.Transfers;
 using Osdrop.App.Tray;
 using Osdrop.App.TrayPanel;
 using Wpf.Ui.Appearance;
@@ -45,6 +46,7 @@ public partial class App : Application, IDisposable
             Shutdown(); // the running Osdrop opens its panel instead
             return;
         }
+        StartupRegistration.FollowThisCopy();
         ApplySystemTheme();
 
         _settings = AppSettings.Load();
@@ -77,6 +79,7 @@ public partial class App : Application, IDisposable
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _engine?.Shutdown();
         _engine = null;
@@ -125,9 +128,12 @@ public partial class App : Application, IDisposable
         _pairingWindow = new PairingWindowPresenter(_group);
         _clipboardFetchWindow = new ClipboardFetchWindowPresenter(_group);
         _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
+        var transfers = new TransfersViewModel(
+            engine, _group.NameOf, (title, message) => _trayIcon?.ShowNotification(title, message));
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        _panelModel.Started(_group, control, _settingsModel, engine.SetDragLoopbackAsync);
+        _panelModel.Started(_group, control, _settingsModel, transfers, engine.SetDragLoopbackAsync);
         await SettingsViewModel.ApplyPointerSpeedsAsync(engine, _settings).ConfigureAwait(true);
         await _group.RefreshAsync().ConfigureAwait(true);
         await control.RefreshAsync().ConfigureAwait(true);
@@ -228,6 +234,19 @@ public partial class App : Application, IDisposable
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => _ = _engine?.ScreensChangedAsync();
+
+    /// <summary>A locked PC, or one switched to another user (Windows locks the session then), refuses control.</summary>
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionLock)
+        {
+            _ = _engine?.SetLockedAsync(true);
+        }
+        else if (e.Reason == SessionSwitchReason.SessionUnlock)
+        {
+            _ = _engine?.SetLockedAsync(false);
+        }
+    }
 
     /// <summary>Ends sessions first (other computers see this PC leave), then exits.</summary>
     private async Task QuitAsync()

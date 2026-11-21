@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -152,6 +153,65 @@ TEST_F(TransferService, AFolderTreeArrivesWithContentsTimesFlagsAndInnerLinks) {
     EXPECT_EQ(last.bytes_done, last.bytes_total);
     EXPECT_EQ(last.files_done, 6U);
     EXPECT_EQ(last.files_total, 6U);
+}
+
+TEST_F(TransferService, AReceiverHearsTheEntriesFirstThenEachFileAsItIsWritten) {
+    form();
+    write_file(source / "Project/big.bin", pattern(3'000'000, 5));
+    write_file(source / "Project/sub/note.txt", "hello");
+    write_file(source / "Project/empty.txt", "");
+    offer({source / "Project"});
+    const auto id = receive();
+    ASSERT_TRUE(id.has_value());
+    const auto& observed = receiver().transfer_observer;
+    const auto end = network.now + milliseconds(60'000);
+    while (observed.plans.empty() && network.now < end) {
+        network.step();
+    }
+    ASSERT_EQ(observed.plans.size(), 1U);
+    EXPECT_TRUE(observed.written.empty()) << "no content before the plan";
+    run_until_finished();
+    ASSERT_FALSE(outcome().error.has_value());
+
+    const transfer::TransferPlan& plan = observed.plans.front();
+    EXPECT_EQ(plan.id, id.value());
+    std::map<std::string, transfer::ReceivedEntry> entries;
+    for (const transfer::ReceivedEntry& entry : plan.entries) {
+        entries[entry.path] = entry;
+    }
+    ASSERT_EQ(entries.size(), 5U);
+    EXPECT_EQ(entries["Project"].kind, protocol::EntryKind::Folder);
+    EXPECT_EQ(entries["Project/sub"].kind, protocol::EntryKind::Folder);
+    EXPECT_EQ(entries["Project/big.bin"].byte_count, 3'000'000U);
+    EXPECT_EQ(entries["Project/sub/note.txt"].byte_count, 5U);
+    EXPECT_EQ(entries["Project/empty.txt"].kind, protocol::EntryKind::File);
+
+    // Per file: growing byte counts in a temporary, then one complete report at the file.
+    std::map<std::size_t, std::vector<transfer::EntryWritten>> by_entry;
+    for (const transfer::EntryWritten& written : observed.written) {
+        EXPECT_EQ(written.id, id.value());
+        by_entry[written.entry].push_back(written);
+    }
+    ASSERT_EQ(by_entry.size(), 3U) << "every file, no folder";
+    for (const auto& [index, reports] : by_entry) {
+        const transfer::ReceivedEntry& entry = plan.entries.at(index);
+        ASSERT_EQ(entry.kind, protocol::EntryKind::File) << entry.path;
+        const transfer::EntryWritten& last = reports.back();
+        EXPECT_TRUE(last.complete) << entry.path;
+        EXPECT_EQ(last.bytes, entry.byte_count) << entry.path;
+        EXPECT_EQ(last.path, destination.path() / fs::path(entry.path)) << entry.path;
+        std::uint64_t before = 0;
+        for (std::size_t i = 0; i + 1 < reports.size(); ++i) {
+            EXPECT_FALSE(reports[i].complete);
+            EXPECT_GT(reports[i].bytes, before);
+            EXPECT_TRUE(reports[i].path.filename().string().starts_with(".osdrop-"));
+            before = reports[i].bytes;
+        }
+    }
+    const auto big = std::ranges::find(plan.entries, std::string("Project/big.bin"),
+                                       &transfer::ReceivedEntry::path);
+    const auto big_index = static_cast<std::size_t>(big - plan.entries.begin());
+    EXPECT_GT(by_entry[big_index].size(), 2U) << "a large file is reported chunk by chunk";
 }
 
 TEST_F(TransferService, NamesTakenInTheDestinationAreNumbered) {

@@ -1,5 +1,5 @@
 # Phase 019 (MVP-19) — Robustness and diagnostics
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 18. Depends on: Phases 16, 17
 
@@ -19,3 +19,14 @@ Osdrop behaves predictably through everyday disruptions.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- User decision (2026-11-20): a locked PC refuses control like a locked Mac; no typing a PC's
+  password from the Mac. Another user's session in front counts as locked on both.
+- Audit (2026-11-20): sleep/wake, display changes and Copy diagnostics existed on both; Windows did
+  not report a locked session and neither side handled fast user switching (fixed). Network
+  changes rely on the session's liveness timeout and rediscovery: R2–R4 decide whether more is
+  needed.
+- 2026-11-21: fixes from the run: a41a456 (locked PC refused), 5d63a03 (keys released on lock),
+  61727d5 (displays reported once settled, in order); docs 32a79ac. Matrix: R1–R4, R7, R8 pass
+  (user report); R5, R6, R9–R11 not run (user: edge cases, assumed). Open: R12, the two-hour run,
+  deferred by the user (2026-11-21) to a day the PC stays on for two hours.
+

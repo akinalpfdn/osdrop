@@ -83,6 +83,10 @@ internal enum EngineEventKind
     ClipboardReady = 15,
     LayoutChanged = 16,
     InputChanged = 17,
+    TransferReceiving = 18,
+    TransferProgress = 19,
+    TransferFinished = 20,
+    SendProgress = 21,
 }
 
 internal static class NativeSizes

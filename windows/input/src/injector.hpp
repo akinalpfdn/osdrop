@@ -24,6 +24,7 @@ public:
     void press(win::input::Button button, bool down) override;
     void scroll(std::int32_t vertical, std::int32_t horizontal) override;
     void key(win::ScanCode scan, bool down) override;
+    [[nodiscard]] bool press_held_left() override;
     void start_capture(std::int32_t park_x, std::int32_t park_y) override;
     void stop_capture(std::int32_t x, std::int32_t y) override;
     void set_controlled(bool controlled) override;

@@ -106,6 +106,20 @@ void Injector::key(win::ScanCode scan, bool down) {
     send_key(scan, down);
 }
 
+bool Injector::press_held_left() {
+    if (!hooks_.left_held()) {
+        return false;
+    }
+    press(protocol::Button::Left, true);
+    // The hook sees a release before Windows acts on it: one seen by now may have come before the
+    // press, which would then stay down.
+    if (!hooks_.left_held()) {
+        press(protocol::Button::Left, false);
+        return false;
+    }
+    return true;
+}
+
 void Injector::start_capture(std::int32_t park_x, std::int32_t park_y) {
     hooks_.capture();
     hooks_.warping();

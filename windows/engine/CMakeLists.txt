@@ -3,6 +3,7 @@ add_library(osdrop_engine SHARED
     src/clipboard/wic_images.cpp
     src/clipboard/win_clipboard.cpp
     src/discovery/dns_sd_discovery.cpp
+    src/drag/drag_bridge.cpp
     src/drag/drag_starter.cpp
     src/drag/edge_targets.cpp
     src/drag/loopback.cpp

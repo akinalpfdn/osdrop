@@ -1,5 +1,6 @@
 #include "clipboard/win_clipboard.hpp"
 #include "discovery/dns_sd_discovery.hpp"
+#include "drag/drag_bridge.hpp"
 #include "drag/loopback.hpp"
 #include "input/input_bridge.hpp"
 #include "screens/monitors.hpp"
@@ -18,8 +19,11 @@
 #include <array>
 #include <atomic>
 #include <climits>
+#include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -28,12 +32,14 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 namespace {
 
 namespace win = osdrop::win;
+using osdrop::engine::drag::DragBridge;
 
 /// osdrop_random_source.fill backed by the system's preferred CSPRNG.
 osdrop_result system_random(void* /*context*/, std::uint8_t* buffer, std::size_t length) {
@@ -73,6 +79,12 @@ void copy_name(std::string_view name, std::span<char, OSDROP_TXT_VALUE_SIZE> out
     const std::size_t length = std::min(name.size(), out.size() - 1);
     std::copy_n(name.begin(), length, out.begin());
     out[length] = '\0';
+}
+
+/// A count in the event's 32-bit code.
+std::uint32_t clamped_count(std::uint64_t count) {
+    return static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(count, std::numeric_limits<std::uint32_t>::max()));
 }
 
 osdrop_engine_event blank_event(osdrop_engine_event_kind kind) {
@@ -159,10 +171,11 @@ public:
         send(event);
     }
     void clipboard_notice(win::ClipboardNotice notice, const win::DeviceIdBytes& device,
-                          const std::string& name) override {
+                          const std::string& name, std::uint64_t links_left_out) override {
         osdrop_engine_event event = blank_event(kind_of(notice));
         std::ranges::copy(device, std::begin(event.device_id));
         copy_name(name, event.name);
+        event.code = clamped_count(links_left_out);
         send(event);
     }
     void layout_changed() override { send(blank_event(OSDROP_ENGINE_LAYOUT_CHANGED)); }
@@ -196,6 +209,9 @@ public:
         if (osdrop::engine::InputBridge* bridge = input_.load()) {
             bridge->capture_ended(end);
         }
+        if (DragBridge* drag = drag_.load()) {
+            drag->capture_ended();
+        }
         change_input([&](osdrop_engine_input_state& state) {
             state.capturing = 0;
             std::ranges::fill(state.target_id, std::uint8_t{0});
@@ -207,6 +223,74 @@ public:
                 clear_notice(state);
             }
         });
+    }
+    void drag_arrived(const win::DragArrival& arrival) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->arrived(arrival);
+        }
+    }
+    void drag_withdrawn(std::uint32_t drag_id) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->withdrawn(drag_id);
+        }
+    }
+    void drag_ended(std::uint32_t drag_id, osdrop_drag_outcome outcome) override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->ended(drag_id, outcome);
+        }
+    }
+    void drag_wanted() override {
+        if (DragBridge* drag = drag_.load()) {
+            drag->wanted();
+        }
+    }
+    void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
+                           std::uint64_t total) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_PROGRESS);
+        event.connection = transfer_id;
+        event.bytes_done = done;
+        event.bytes_total = total;
+        send(event);
+    }
+    void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
+                           std::uint64_t links_left_out) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_FINISHED);
+        event.connection = transfer_id;
+        event.reason = result;
+        event.code = clamped_count(links_left_out);
+        send(event);
+    }
+    void send_progress(const win::SendUpdate& update) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_PROGRESS);
+        event.connection = (std::uint64_t{update.drag_id} << 32U) | update.index;
+        std::ranges::copy(update.device, std::begin(event.device_id));
+        copy_name(update.name, event.name);
+        event.bytes_done = update.sent;
+        event.bytes_total = update.total;
+        event.code = update.state;
+        send(event);
+    }
+    /// From the drag bridge's thread: a transfer receiving an item of a drag started.
+    void receiving(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                   const std::string& name, std::uint64_t size) {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_RECEIVING);
+        event.connection = transfer_id;
+        std::ranges::copy(source, std::begin(event.device_id));
+        copy_name(name, event.name);
+        event.bytes_total = size;
+        send(event);
+    }
+    /// From the input bridge's thread, before it parks the cursor for a capture.
+    void parking(POINT park) {
+        if (DragBridge* drag = drag_.load()) {
+            drag->parking(park);
+        }
+    }
+    /// From the input bridge's threads: a drag that came home could not be pressed here.
+    void drag_unpressed() {
+        if (DragBridge* drag = drag_.load()) {
+            drag->unpressed();
+        }
     }
     /// From the input bridge's threads.
     void input_reachable(bool reachable) {
@@ -227,6 +311,12 @@ public:
     void set_input(osdrop::engine::InputBridge* bridge) {
         const std::scoped_lock lock(input_mutex_);
         input_ = bridge;
+        watch();
+    }
+    /// Where drag events go once the drag bridge exists.
+    void set_drag(DragBridge* bridge) {
+        const std::scoped_lock lock(input_mutex_);
+        drag_ = bridge;
         watch();
     }
 
@@ -271,10 +361,14 @@ private:
         return id;
     }
 
-    /// This PC's input is watched while a member is connected; under input_mutex_.
+    /// This PC's input is watched, and its edges take drags, while a member is connected; under
+    /// input_mutex_.
     void watch() const {
         if (osdrop::engine::InputBridge* bridge = input_.load()) {
             bridge->set_watching(!connected_.empty());
+        }
+        if (DragBridge* drag = drag_.load()) {
+            drag->set_active(!connected_.empty());
         }
     }
 
@@ -293,6 +387,7 @@ private:
     osdrop_engine_callback callback_;
     void* context_;
     std::atomic<osdrop::engine::InputBridge*> input_{nullptr};
+    std::atomic<DragBridge*> drag_{nullptr};
     std::mutex input_mutex_;
     std::set<win::DeviceIdBytes> connected_; ///< members with a session; under input_mutex_
     mutable std::mutex state_mutex_;
@@ -330,6 +425,9 @@ struct osdrop_engine {
     osdrop_engine(osdrop_engine_callback callback, void* context) : events(callback, context) {}
     ~osdrop_engine() {
         try {
+            if (drag) {
+                drag->stop(); // its thread calls the group engine and the input bridge
+            }
             if (input) {
                 input->stop(); // its thread calls the group engine: it stops before it goes
             }
@@ -349,6 +447,7 @@ struct osdrop_engine {
     CallbackEvents events;
     std::unique_ptr<osdrop::engine::InputBridge> input;
     std::unique_ptr<osdrop::engine::drag::Loopback> loopback;
+    std::unique_ptr<DragBridge> drag;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
@@ -356,6 +455,7 @@ struct osdrop_engine {
         const auto monitors = osdrop::engine::physical_monitors();
         input->set_monitors(monitors);
         loopback->set_monitors(monitors);
+        drag->set_monitors(monitors);
         const auto report = win::screen_report(monitors);
         if (!report) {
             return report.error();
@@ -408,7 +508,9 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
         osdrop::engine::InputBridge::Listener{
             .reachable = [events](bool reachable) { events->input_reachable(reachable); },
             .locked = [events](bool locked) { events->input_locked(locked); },
-            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); }});
+            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
+            .parking = [events](POINT park) { events->parking(park); },
+            .drag_unpressed = [events] { events->drag_unpressed(); }});
     engine->input->set_respects_clip(config->respects_cursor_clip == 1);
     if (const auto chords = chords_of(config->return_hotkey, config->lock_hotkey)) {
         engine->input->set_chords(chords->first, chords->second);
@@ -417,6 +519,18 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
                            "The stored chords were refused; the defaults apply");
     }
     engine->events.set_input(engine->input.get());
+    std::error_code no_temp;
+    engine->drag = std::make_unique<DragBridge>(
+        *engine->group, *engine->input,
+        std::filesystem::temp_directory_path(no_temp) / L"Osdrop" / L"arriving",
+        DragBridge::Listener{
+            .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
+            .receiving =
+                [events](std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                         const std::string& name, std::uint64_t size) {
+                    events->receiving(transfer_id, source, name, size);
+                }});
+    engine->events.set_drag(engine->drag.get());
     engine->clipboard.listen(
         [sync = engine->group->clipboard()](win::ClipData data) { sync->copied(std::move(data)); });
     if (engine->report_screens() != OSDROP_OK) {
@@ -575,6 +689,30 @@ osdrop_result osdrop_engine_resume(osdrop_engine* engine) {
     return OSDROP_OK;
 }
 
+osdrop_result osdrop_engine_set_locked(osdrop_engine* engine, uint8_t locked) {
+    if (engine == nullptr || locked > 1) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->set_locked(locked == 1);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* engine, uint64_t transfer_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->cancel(transfer_id);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine, uint32_t drag_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->withdraw_drag(drag_id);
+    return OSDROP_OK;
+}
+
 osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine) {
     if (engine == nullptr) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
@@ -669,6 +807,7 @@ osdrop_result osdrop_engine_set_drag_loopback(osdrop_engine* engine, uint8_t ena
     if (engine == nullptr || enabled > 1) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
+    engine->drag->set_paused(enabled == 1); // the loopback has the edges meanwhile
     engine->loopback->set_enabled(enabled == 1);
     return OSDROP_OK;
 }

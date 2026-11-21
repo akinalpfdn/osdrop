@@ -159,10 +159,11 @@ struct ClipboardControllerTests {
         #expect(fixture.notifier.notifications.isEmpty)
         let file = receive.folder.appending(path: "report.pdf")
         fixture.controller.handle(
-            .transferFinished(id: receive.id, .success(ReceivedItem(items: [file], skippedLinks: 0))))
+            .transferFinished(id: receive.id, .success(ReceivedItem(items: [file], skippedLinks: 1))))
         try await waitUntil { fixture.pasteboard.written.count == 1 }
         #expect(fixture.controller.fetching == nil)
         #expect(fixture.notifier.notifications.count == 1)
+        #expect(fixture.notifier.notifications[0].hasSuffix("\n" + TransfersController.linksNote(1)))
     }
 
     @Test("The window of copied files on their way sits inside the screen's top right corner")
@@ -374,4 +375,5 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
     func blocked() async throws(CoreError) -> [BlockedDevice] { [] }
     func setScreens(_ monitors: [ScreenMonitor]) async throws(CoreError) {}
     func closeAll(sleeping: Bool) {}
+    func resume() {}
 }

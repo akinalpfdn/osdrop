@@ -27,6 +27,7 @@ add_executable(osdrop_core_tests
     control_test.cpp
     drag_test.cpp
     crypto_primitives_test.cpp
+    dial_test.cpp
     group_test.cpp
     input_crypto_test.cpp
     layout_crossing_test.cpp

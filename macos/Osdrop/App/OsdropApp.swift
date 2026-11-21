@@ -21,6 +21,7 @@ struct OsdropApp: App {
         // No drag can be running yet, so anything staged belongs to an earlier run.
         dependencies.staging.removeAll()
         dependencies.group.start()
+        dependencies.awdl.start()
         self.dependencies = dependencies
         pairingWindow = PairingWindowPresenter(controller: dependencies.group)
         clipboardWindow = ClipboardFetchPresenter(group: dependencies.group)
@@ -35,7 +36,8 @@ struct OsdropApp: App {
         _settings = State(
             initialValue: SettingsViewModel(
                 settings: dependencies.settings, group: dependencies.group, updates: updates,
-                launchAtLogin: SystemLaunchAtLogin(), logs: UnifiedLogExporter(), showPermissions: onboarding.show))
+                launchAtLogin: SystemLaunchAtLogin(), logs: UnifiedLogExporter(), showPermissions: onboarding.show,
+                awdl: dependencies.awdl))
         AppDelegate.onLaunch = {
             if onboardingModel.needsAttention { onboarding.show() }
             Task { await updates.checkIfDue() }

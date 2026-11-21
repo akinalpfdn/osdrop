@@ -1,9 +1,12 @@
 name: CI
 
+# Day-to-day work goes to dev without CI (user decision, DECISIONS.md 2026-11-10); CI runs on
+# pull requests into main and on main itself.
 on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
