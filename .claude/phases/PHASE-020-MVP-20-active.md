@@ -1,5 +1,5 @@
 # Phase 020 (MVP-20) — Packaging, release and documentation
-Status: PENDING
+Status: ACTIVE
 
 DEVPLAN reference: Phase 19. Depends on: Phase 18
 
