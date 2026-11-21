@@ -11,8 +11,7 @@ another.
 It works between macOS and Windows in every direction: Mac and PC, two Macs, two PCs, and up to
 eight computers in one arrangement.
 
-> **Status:** early development; nothing is usable yet. Progress follows the phases in
-> [`DEVPLAN.md`](DEVPLAN.md).
+Türkçe: [README.tr.md](README.tr.md)
 
 ## What it is and is not
 
@@ -37,23 +36,49 @@ Coming with the first release.
 
 ## Requirements
 
-- **macOS:** macOS 14 Sonoma or later.
-- **Windows:** Windows 10 22H2 or Windows 11.
-- All computers on the same local network; wired or Wi-Fi.
+| | |
+|---|---|
+| **Mac** | macOS 14 Sonoma or later |
+| **Windows** | Windows 10 22H2 or Windows 11, x64 |
+| **Network** | All computers on the same local network, wired or Wi-Fi |
 
 ## Installation
 
 ### macOS
 
-Coming with the first release (notarized DMG from GitHub Releases).
+1. Download [`Osdrop.dmg`](https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.dmg),
+   open it and drag Osdrop to Applications.
+2. Start Osdrop; it lives in the menu bar.
 
 ### Windows
 
-Coming with the first release (installer from GitHub Releases).
+1. Download [`Osdrop-Setup.exe`](https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop-Setup.exe)
+   and run it.
+2. The installer is not code-signed, so SmartScreen may say "Windows protected your PC": choose
+   **More info › Run anyway**. Each release lists the installer's SHA-256.
+3. The installer adds the app, the Osdrop Input service (which moves the cursor and types for the
+   other computers) and a firewall rule. Osdrop lives in the notification area.
 
 ## First run
 
-Coming with the first release.
+1. **Mac:** allow **Accessibility** (to read and drive the keyboard and mouse) and **Local
+   Network** (to find the other computers) when Osdrop asks.
+2. On one computer, open Osdrop's menu (Mac) or panel (Windows) and choose **Pair** next to the
+   other computer. Both screens show the same six-digit code; confirm it on both.
+3. In **Settings › Arrangement**, drag the computers' screens to where they stand on your desk.
+4. Push the cursor through the edge toward the other computer.
+
+More computers join the same way, up to eight. Each computer decides in **Settings › Devices**
+what every other one may do: control it, send it files, share its clipboard.
+
+### Keyboard shortcuts
+
+| Action | Mac | Windows |
+|--------|-----|---------|
+| Bring the cursor back to this computer | ⌃⌥⌘⎋ | Ctrl+Alt+Win+Esc |
+| Keep the cursor on the computer it is on (press again to release) | ⌃⌥⌘L | Ctrl+Alt+Win+K |
+
+Both can be changed in **Settings › Input**.
 
 ## Security
 
