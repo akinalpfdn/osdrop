@@ -25,3 +25,8 @@ Osdrop behaves predictably through everyday disruptions.
   not report a locked session and neither side handled fast user switching (fixed). Network
   changes rely on the session's liveness timeout and rediscovery: R2–R4 decide whether more is
   needed.
+- 2026-11-21: fixes from the run: a41a456 (locked PC refused), 5d63a03 (keys released on lock),
+  61727d5 (displays reported once settled, in order); docs 32a79ac. Matrix: R1–R4, R7, R8 pass
+  (user report); R5, R6, R9–R11 not run (user: edge cases, assumed). Open: R12, the two-hour run,
+  deferred by the user (2026-11-21) to a day the PC stays on for two hours.
+
