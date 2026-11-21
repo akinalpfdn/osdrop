@@ -181,10 +181,10 @@ void Control::release_physical_keys() {
     // A locked screen takes the keyboard away: the releases of the keys that locked it (Win+L,
     // Control-Command-Q) never come, and the computer the cursor is on would keep them down.
     const std::vector<HeldKey> keys = physical_.keys();
-    for (auto key = keys.rbegin(); key != keys.rend(); ++key) {
-        physical_.key(*key, protocol::KeyAction::Up);
+    for (const HeldKey& key : std::views::reverse(keys)) {
+        physical_.key(key, protocol::KeyAction::Up);
         if (away_) {
-            const HeldKey sent = away_->swap_modifiers ? swap_control_and_command(*key) : *key;
+            const HeldKey sent = away_->swap_modifiers ? swap_control_and_command(key) : key;
             send(away_->device, protocol::KeyEvent{.control_id = away_->control_id,
                                                    .page = sent.page,
                                                    .usage = sent.usage,

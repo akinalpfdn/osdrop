@@ -301,6 +301,8 @@ private:
     void found(const DiscoveredComputer& computer);
     void lost(const std::string& label);
     [[nodiscard]] osdrop_mesh_callbacks callbacks();
+    /// The links counted in a transfer's plan, forgotten as it ends.
+    [[nodiscard]] std::uint64_t take_planned_links(std::uint64_t transfer_id);
     /// Core's callbacks for the cursor and keyboard across computers, and for drags.
     static void control_callbacks(osdrop_mesh_callbacks& result);
     static void drag_callbacks(osdrop_mesh_callbacks& result);

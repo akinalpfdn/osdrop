@@ -315,18 +315,9 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
         for (const char* item : std::span(items, count)) {
             created.push_back(path_of(item));
         }
-        std::uint64_t planned_links = 0;
-        {
-            const std::scoped_lock lock(engine->mutex_);
-            if (const auto it = engine->planned_links_.find(id);
-                it != engine->planned_links_.end()) {
-                planned_links = it->second;
-                engine->planned_links_.erase(it);
-            }
-        }
         engine->transfers_.finished(id, outcome, created); // a drag's, or nobody's
         // Only a drag's transfers are listed, and a drop on this PC leaves every link out.
-        engine->events_.transfer_finished(id, outcome, planned_links);
+        engine->events_.transfer_finished(id, outcome, engine->take_planned_links(id));
         if (engine->clipboard_) {
             std::vector<std::string> paths;
             for (const char* item : std::span(items, count)) {
@@ -349,6 +340,17 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
                                           progress->bytes_total);
     };
     return result;
+}
+
+std::uint64_t GroupEngine::take_planned_links(std::uint64_t transfer_id) {
+    const std::scoped_lock lock(mutex_);
+    const auto it = planned_links_.find(transfer_id);
+    if (it == planned_links_.end()) {
+        return 0;
+    }
+    const std::uint64_t links = it->second;
+    planned_links_.erase(it);
+    return links;
 }
 
 void GroupEngine::control_callbacks(osdrop_mesh_callbacks& result) {
