@@ -284,7 +284,8 @@ Status<Error> ManifestCollector::add(const protocol::Manifest& part) {
 
 namespace {
 
-/// The entry `target` leads to from `link`, inside the link's own item; nullopt for none.
+/// The entry `target` leads to from `link`, inside the link's own item (the link itself included);
+/// nullopt for none.
 std::optional<std::size_t> resolved_entry(const ReceivePlan& plan, std::size_t link,
                                           std::string_view target) {
     const PlannedEntry& entry = plan.entries.at(link);
@@ -308,7 +309,7 @@ std::optional<std::size_t> resolved_entry(const ReceivePlan& plan, std::size_t l
         return std::nullopt;
     }
     const auto found = plan.index_of.find(join(resolved));
-    if (found == plan.index_of.end() || found->second == link) {
+    if (found == plan.index_of.end()) {
         return std::nullopt;
     }
     return found->second;
@@ -326,14 +327,14 @@ std::optional<std::string> mapped_link_target(const ReceivePlan& plan, std::size
     }
     // A backslash is part of a name on a Mac and a separator on Windows, where no name has one:
     // the target is read as it is first, and with backslashes as separators only when that
-    // leads nowhere.
+    // leads nowhere. A link that leads to itself loops, however it is read.
     std::optional<std::size_t> found = resolved_entry(plan, link, target);
     if (!found && target.find('\\') != std::string_view::npos) {
         std::string separated(target);
         std::ranges::replace(separated, '\\', '/');
         found = resolved_entry(plan, link, separated);
     }
-    if (!found) {
+    if (!found || *found == link) {
         return std::nullopt;
     }
     std::vector<std::string> from = split(plan.entries.at(link).target);
