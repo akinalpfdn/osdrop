@@ -32,3 +32,12 @@ helper inside Osdrop then keeps AWDL off while Osdrop runs. While it is on, AirD
 Sidecar do not work. Turning the setting off or quitting Osdrop brings AWDL back within seconds.
 A wired connection on either computer does not avoid this: the Mac's own radio is the one that
 leaves the channel.
+
+## Osdrop and Osplay together
+
+Osplay's virtual displays are ordinary monitors to Osdrop: they appear in the arrangement in
+Settings › Arrangement and the cursor crosses through them like through any other monitor. When
+Osplay ends them, Osdrop drops them from the arrangement within a second. Osplay shows a Mac's
+virtual display on a PC as a picture of it, so a click on that picture does nothing: move to the
+PC's own monitors to control the PC, or to the virtual display on the Mac to work there.
+
