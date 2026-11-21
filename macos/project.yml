@@ -56,6 +56,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop
         PRODUCT_NAME: Osdrop
         INFOPLIST_FILE: Osdrop/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
         COMBINE_HIDPI_IMAGES: YES
   # Ends Osdrop if it hangs while capturing input, so the cursor always comes back (DEVPLAN,
