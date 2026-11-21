@@ -120,6 +120,11 @@ enum Tunables {
         static let itemLabel = "Osdrop"
     }
 
+    enum Screens {
+        /// After the last display change macOS reports, before the displays are read.
+        static let settle: Duration = .milliseconds(300)
+    }
+
     enum Network {
         /// How often the switch looks whether the user approved the helper in System Settings.
         static let approvalPoll: Duration = .seconds(2)

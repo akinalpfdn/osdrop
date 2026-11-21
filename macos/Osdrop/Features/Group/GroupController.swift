@@ -119,6 +119,8 @@ final class GroupController {
     /// A group event arrived; the group read at start is older and must not overwrite it.
     private var groupFromEvent = false
     private var tasks: [Task<Void, Never>] = []
+    /// The latest report of this Mac's displays; each one waits for the one before.
+    private var screenReport: Task<Void, Never>?
     private var browsing: Task<Void, Never>?
 
     let settings: AppSettings
@@ -165,7 +167,7 @@ final class GroupController {
                 }
             })
         browse()
-        screens.onChange = { [weak self] in self?.reportScreens() }
+        screens.onChange = { [weak self] in self?.screensChanged() }
         reportScreens()
         tasks.append(
             Task { [weak self] in
@@ -210,6 +212,8 @@ final class GroupController {
         advertisement?.cancel()
         advertisement = nil
         screens.onChange = nil
+        screenReport?.cancel()
+        screenReport = nil
     }
 
     // MARK: - Commands
@@ -628,11 +632,26 @@ final class GroupController {
         updateNearby()
     }
 
-    private func reportScreens() {
-        guard let mesh else { return }
+    /// macOS reports one change in several steps, the display list catching up between them: the
+    /// displays are read once the steps settle, and reports reach core in order, so an older list
+    /// never lands last (Osplay's virtual displays stayed in the arrangement after they were gone).
+    private func screensChanged() {
+        let previous = screenReport
+        previous?.cancel()
+        screenReport = Task { [weak self] in
+            await previous?.value
+            try? await Task.sleep(for: Tunables.Screens.settle)
+            guard !Task.isCancelled else { return }
+            await self?.reportScreens()?.value
+        }
+    }
+
+    @discardableResult
+    private func reportScreens() -> Task<Void, Never>? {
+        guard let mesh else { return nil }
         let monitors = screens.screens().map(\.monitor)
-        guard !monitors.isEmpty else { return }
-        Task { [mesh, monitors] in
+        guard !monitors.isEmpty else { return nil }
+        return Task { [mesh, monitors] in
             do throws(CoreError) {
                 try await mesh.setScreens(monitors)
             } catch {

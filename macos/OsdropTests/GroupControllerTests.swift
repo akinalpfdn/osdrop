@@ -26,6 +26,24 @@ struct GroupControllerTests {
         #expect(controller.isRunning)
     }
 
+    @Test("Displays are reported once a burst of changes settles, the last list last")
+    func reportsDisplaysAfterTheyChange() async throws {
+        let controller = fixture.start()
+        try await waitUntil { fixture.mesh.calls.contains(.setScreens(1)) }
+        let before = fixture.mesh.calls.count
+        // Osplay's four virtual displays go away in several steps.
+        fixture.screens.extra = 4
+        fixture.screens.onChange?()
+        fixture.screens.extra = 2
+        fixture.screens.onChange?()
+        fixture.screens.extra = 0
+        fixture.screens.onChange?()
+        try await waitUntil { fixture.mesh.calls.count > before }
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(Array(fixture.mesh.calls.dropFirst(before)) == [.setScreens(1)])
+        #expect(controller.isRunning)
+    }
+
     @Test("Discovered computers reach the mesh; members and this computer are not offered")
     func discoveryFeedsTheMesh() async throws {
         let controller = fixture.start()
@@ -451,6 +469,8 @@ struct FakeLocalNetwork: LocalNetworkChecking {
 @MainActor
 final class FakeScreens: ScreenDescribing {
     var onChange: (() -> Void)?
+    /// The built-in display, then this many more beside it.
+    var extra = 0
 
     func screens() -> [ScreenDescription] {
         [
@@ -459,5 +479,11 @@ final class FakeScreens: ScreenDescribing {
                 frame: CGRect(x: 0, y: 0, width: 1470, height: 956), pixelWidth: 2940, pixelHeight: 1912,
                 isMain: true)
         ]
+            + (0..<extra).map { index in
+                ScreenDescription(
+                    id: "VIRTUAL-\(index)", displayID: CGDirectDisplayID(10 + index),
+                    frame: CGRect(x: 1470 + index * 1920, y: 0, width: 1920, height: 1080), pixelWidth: 1920,
+                    pixelHeight: 1080, isMain: false)
+            }
     }
 }
