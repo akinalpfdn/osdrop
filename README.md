@@ -45,21 +45,28 @@
 
 ✅ yes · 🟡 partly or with extra setup · ❌ no
 
-| | **Osdrop** | Universal Control | Mouse Without Borders | Deskflow / Input Leap | Synergy |
+| | **Osdrop** | Universal Control | Mouse Without Borders | Deskflow | Synergy |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Price | **Free, open source** | Free, built into macOS | Free (PowerToys) | Free, open source | Paid licence |
+| Price | **Free, open source** | Free, built into macOS | Free (PowerToys) | Free, open source | Paid, from $49 |
 | Mac and Windows together | ✅ | ❌ Apple only | ❌ Windows only | ✅ | ✅ |
-| Drag files across the edge, dropped where you release | ✅ | ✅ | 🟡 to a fixed folder | ❌ | 🟡 |
-| Shared clipboard with files | ✅ | ✅ | ✅ | ❌ text and images | 🟡 |
-| Pairing with a code, encrypted | ✅ | ✅ | 🟡 a shared key | 🟡 TLS, fingerprints | ✅ |
-| No account, no cloud | ✅ | Apple ID | ✅ | ✅ | Account and licence |
+| Drag files across the edge, dropped where you release | ✅ files and folders | ✅ | 🟡 one file, up to 100 MB | ❌ | ❌ |
+| Shared clipboard with files | ✅ | ✅ | 🟡 one file, up to 100 MB | ❌ text and images | ❌ text and images |
+| Pairing and encryption | ✅ 6-digit code, end-to-end | 🟡 same Apple Account | 🟡 a shared security key | 🟡 TLS | 🟡 TLS in Plus and Max |
+| No account, no cloud | ✅ | ❌ Apple Account | ✅ | ✅ | 🟡 licence activated online |
 | Linux | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 Osdrop is made for people who sit in front of a Mac and a Windows PC every day and want them to
 feel like one computer, for free. Another tool fits better if you need Linux (Deskflow, Input Leap,
 Synergy) or an iPad (Universal Control).
 
-<sub>Compared in November 2026; other products' features and prices change, and corrections are welcome.</sub>
+<sub>Compared in November 2026 from each product's own pages:
+[Universal Control](https://support.apple.com/en-us/102459),
+[Universal Clipboard](https://support.apple.com/102430),
+[Mouse Without Borders](https://learn.microsoft.com/en-us/windows/powertoys/mouse-without-borders),
+[Deskflow](https://github.com/deskflow/deskflow) and its
+[protocol notes](https://deskflow.github.io/deskflow/group__protocol__files.html),
+[Synergy features](https://symless.com/synergy/features) and [pricing](https://symless.com/pricing).
+Features and prices change; corrections are welcome.</sub>
 
 ## How it works
 

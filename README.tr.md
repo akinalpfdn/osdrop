@@ -45,21 +45,28 @@
 
 ✅ evet · 🟡 kısmen ya da ek kurulumla · ❌ hayır
 
-| | **Osdrop** | Universal Control | Mouse Without Borders | Deskflow / Input Leap | Synergy |
+| | **Osdrop** | Universal Control | Mouse Without Borders | Deskflow | Synergy |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Fiyat | **Ücretsiz, açık kaynak** | Ücretsiz, macOS'ta yerleşik | Ücretsiz (PowerToys) | Ücretsiz, açık kaynak | Ücretli lisans |
+| Fiyat | **Ücretsiz, açık kaynak** | Ücretsiz, macOS'ta yerleşik | Ücretsiz (PowerToys) | Ücretsiz, açık kaynak | Ücretli, 49 $'dan başlıyor |
 | Mac ve Windows birlikte | ✅ | ❌ yalnız Apple | ❌ yalnız Windows | ✅ | ✅ |
-| Dosyayı kenardan sürükleyip bırakılan yere koyma | ✅ | ✅ | 🟡 sabit bir klasöre | ❌ | 🟡 |
-| Dosyaları da taşıyan ortak pano | ✅ | ✅ | ✅ | ❌ metin ve görüntü | 🟡 |
-| Kodla eşleşme, şifreli bağlantı | ✅ | ✅ | 🟡 ortak anahtar | 🟡 TLS, parmak izi | ✅ |
-| Hesap yok, bulut yok | ✅ | Apple kimliği | ✅ | ✅ | Hesap ve lisans |
+| Dosyayı kenardan sürükleyip bırakılan yere koyma | ✅ dosya ve klasör | ✅ | 🟡 tek dosya, en çok 100 MB | ❌ | ❌ |
+| Dosyaları da taşıyan ortak pano | ✅ | ✅ | 🟡 tek dosya, en çok 100 MB | ❌ metin ve görüntü | ❌ metin ve görüntü |
+| Eşleşme ve şifreleme | ✅ 6 haneli kod, uçtan uca | 🟡 aynı Apple Hesabı | 🟡 ortak güvenlik anahtarı | 🟡 TLS | 🟡 TLS, yalnız Plus ve Max'te |
+| Hesap yok, bulut yok | ✅ | ❌ Apple Hesabı | ✅ | ✅ | 🟡 lisans çevrimiçi etkinleştirilir |
 | Linux | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 Osdrop, her gün bir Mac ve bir Windows PC başında oturan ve ikisini tek bilgisayar gibi kullanmak
 isteyenler için, ücretsiz olarak yapıldı. Linux gerekiyorsa (Deskflow, Input Leap, Synergy) ya da
 iPad kullanacaksan (Universal Control) başka bir araç daha uygun olur.
 
-<sub>Kasım 2026'da karşılaştırıldı; diğer ürünlerin özellikleri ve fiyatları değişebilir, düzeltmeler memnuniyetle karşılanır.</sub>
+<sub>Kasım 2026'da her ürünün kendi sayfalarından karşılaştırıldı:
+[Universal Control](https://support.apple.com/tr-tr/102459),
+[Evrensel Pano](https://support.apple.com/tr-tr/102430),
+[Mouse Without Borders](https://learn.microsoft.com/en-us/windows/powertoys/mouse-without-borders),
+[Deskflow](https://github.com/deskflow/deskflow) ve
+[protokol notları](https://deskflow.github.io/deskflow/group__protocol__files.html),
+[Synergy özellikleri](https://symless.com/synergy/features) ve [fiyatları](https://symless.com/pricing).
+Özellikler ve fiyatlar değişebilir; düzeltmeler memnuniyetle karşılanır.</sub>
 
 ## Nasıl çalışır
 
