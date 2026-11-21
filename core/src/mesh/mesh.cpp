@@ -311,7 +311,7 @@ void Mesh::session_established(Connection& connection, const protocol::Capabilit
         // stops it dialling, and nothing above the mesh sees the session.
         log(LogLevel::Info, "Asleep; ending the session " + short_id(device) + " opened");
         defer([id = connection.id](Mesh& mesh, TimePoint now) {
-            if (Connection* opened = mesh.find(id); opened != nullptr && !opened->closed) {
+            if (const Connection* opened = mesh.find(id); opened != nullptr && !opened->closed) {
                 opened->engine->close(protocol::ByeReason::Sleeping, now);
             }
         });

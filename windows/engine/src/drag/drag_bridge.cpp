@@ -398,12 +398,13 @@ void DragBridge::arrive(const win::DragArrival& arrival) {
         remove_folder(staging);
         return;
     }
-    auto entry =
-        std::make_shared<Arrival>(Arrival{.drag_id = arrival.drag_id,
-                                          .network = network,
-                                          .paths_given = std::make_shared<std::atomic<bool>>(false),
-                                          .handle = nullptr,
-                                          .staging = staging});
+    // Filled in place: clang's analyzer loses count of a shared_ptr copied out of a temporary
+    // Arrival and reports a leak on the early return below.
+    const auto entry = std::make_shared<Arrival>();
+    entry->drag_id = arrival.drag_id;
+    entry->network = network;
+    entry->paths_given = std::make_shared<std::atomic<bool>>(false);
+    entry->staging = staging;
     const std::uint32_t drag_id = arrival.drag_id;
     entry->handle = start_drag(
         DragRequest{.at = POINT{.x = win::Injection::pixel(arrival.x),

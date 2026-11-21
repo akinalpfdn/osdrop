@@ -8,9 +8,13 @@ import Testing
 @MainActor
 @Suite("The AWDL switch")
 struct AWDLSwitchTests {
-    private let defaults = UserDefaults(suiteName: "osdrop-awdl-tests-\(UUID().uuidString)")!
+    private let defaults: UserDefaults
     private let registration = FakeHelperRegistration()
     private let helper = FakeHelper()
+
+    init() throws {
+        defaults = try #require(UserDefaults(suiteName: "osdrop-awdl-tests-\(UUID().uuidString)"))
+    }
 
     private func make() -> (AWDLSwitch, AppSettings) {
         let settings = AppSettings(defaults: defaults)
