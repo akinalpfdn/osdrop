@@ -166,6 +166,23 @@ TEST_F(InputControl, ALostControllerLeavesNothingPressed) {
     EXPECT_EQ(node(1).control_observer.controlled.back(), std::nullopt);
 }
 
+TEST_F(InputControl, ASilenceOnlyTheControlledComputerNoticedStillBringsTheCursorHome) {
+    // A Wi-Fi hiccup that only computer 1 noticed: it ends the control, and computer 0 must not
+    // keep capturing the user's input for a control that is over.
+    cross_from_0();
+    key(0, kKeyA, KeyAction::Down);
+    command(1, [this](control::Control& c) { c.on_peer_responsive(id(0), false); });
+    EXPECT_EQ(node(1).control_observer.controlled.back(), std::nullopt);
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).keys.empty())
+        << "nothing stays pressed";
+    command(1, [this](control::Control& c) { c.on_peer_responsive(id(0), true); });
+    ASSERT_EQ(node(0).control_observer.ended.size(), 1U);
+    EXPECT_EQ(node(0).control_observer.ended.back().reason, CaptureEnd::Takeover);
+    EXPECT_EQ(node(0).control_observer.ended.back().cursor, at(kWidth - 1, 400))
+        << "the cursor reappears where it left";
+    EXPECT_FALSE(node(0).control->capturing());
+}
+
 TEST_F(InputControl, TheLogSaysWhereTheCursorCanCrossAndWhatItDid) {
     const std::string zero = osdrop::mesh::short_id(id(0));
     const std::string one = osdrop::mesh::short_id(id(1));

@@ -823,3 +823,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** A tester with the Mac above the PC saw the Mac's cursor move along with the PC's. `CGAssociateMouseAndMouseCursorPosition` holds only "while an application is in the foreground" (SDK header), and Osdrop is a background menu bar app. What brought another app forward in the tester's case is not known; the likely triggers sit at the edge the cursor was left on: the Dock at the bottom, and Quick Note, macOS's default bottom-right hot corner. Parking removes those; refreezing covers the rest.
 **Trade-offs:** One more warp per crossing. Whether macOS also shows the hidden cursor again cannot be read reliably (`CGCursorIsVisible` is no longer supported), so a re-shown cursor stays visible, though frozen, until the cursor comes home.
 **Revisit if:** The log shows "The cursor followed the mouse during a capture" often, or a cursor visible during a capture is reported.
+
+---
+
+## 2026-11-22 — An endpoint that stops hearing its controller tells it with LocalTakeover
+**Chosen:** When a controlled computer finds its controller unresponsive, it releases what it holds and ends the control as before, and now also sends LocalTakeover with the control's ID, which the session delivers once messages flow again.
+**Alternatives:** A new message or Refuse reason for "stopped hearing you"; keeping the control through short silences.
+**Why:** A tester's PC saw the Mac go quiet for 140 ms (2026-11-22) and ended the control; the Mac had not noticed, kept the cursor on the PC and captured the user's keyboard and mouse for 35 minutes until it was restarted. LocalTakeover already ends a capture without a notice on both apps, and 0.1.0 peers understand it; a new message would not reach them.
+**Trade-offs:** The controller's log and notice cannot tell this from the endpoint's own user taking over; core's log on the endpoint says which it was. Short Wi-Fi silences still end the control: the cursor comes home.
+**Revisit if:** Users find the cursor coming home after Wi-Fi hiccups disruptive; then the endpoint could keep a control through a silence shorter than a second.

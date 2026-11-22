@@ -847,6 +847,9 @@ void Control::on_peer_responsive(const DeviceId& device, bool responsive) {
         refresh();
     }
     if (!responsive && controlled_ && controlled_->controller == device) {
+        // It may not have noticed the silence: told, for when it answers again, so that it brings
+        // its cursor home instead of sending input that goes nowhere.
+        send(device, protocol::LocalTakeover{.control_id = controlled_->control_id});
         release("it stopped answering");
     }
     next_.on_peer_responsive(device, responsive);

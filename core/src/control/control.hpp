@@ -9,7 +9,9 @@
 //   Whatever was injected and is still held is released when control ends, however it ends.
 // Local input always wins: physical input on a controlled computer ends the control at once. A
 // controller that loses the computer with the cursor (it stops answering, leaves, or stops
-// accepting control) brings the cursor home to where it left.
+// accepting control) brings the cursor home to where it left. A controlled computer that stops
+// hearing its controller ends the control too, and tells it so for when it hears again: the
+// controller may not have noticed the silence, and its input would go nowhere.
 //
 // Drags of files travel with the cursor (docs/PROTOCOL.md, "Drag messages"): the computer a drag
 // started on offers its items to the transfers, the controller carries the drag across edges, and
