@@ -198,6 +198,12 @@ TEST_F(InputControl, TheLogSaysWhereTheCursorCanCrossAndWhatItDid) {
         const std::vector<std::string>& logs = node(on).observer.logs;
         return std::find(logs.begin(), logs.end(), line) != logs.end();
     };
+    const auto mentions = [this](std::size_t on, const std::string& part) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        return std::any_of(logs.begin(), logs.end(), [&](const std::string& line) {
+            return line.find(part) != std::string::npos;
+        });
+    };
     EXPECT_EQ(last_crossings(0), "Crossings: right edge of the monitor at 0,0 1000x800 to " + one);
     EXPECT_EQ(last_crossings(1), "Crossings: left edge of the monitor at 0,0 1000x800 to " + zero +
                                      "; right edge of the monitor at 0,0 1000x800 to " + two);
@@ -207,12 +213,20 @@ TEST_F(InputControl, TheLogSaysWhereTheCursorCanCrossAndWhatItDid) {
     EXPECT_TRUE(logged(0, "A push toward " + one + " was held back: a mouse button is down"));
     button(0, 0, ButtonAction::Up);
 
+    // Crossings and the user's own ways home are not logged: Copy diagnostics takes the newest
+    // lines, and frequent crossings would push everything else out of them.
     cross_from_0();
-    EXPECT_TRUE(logged(0, "The cursor crossed to " + one));
-    EXPECT_TRUE(logged(1, zero + " controls this computer"));
     command(0, [](control::Control& c) { c.return_home(protocol::LeaveReason::ReleasedByHotkey); });
-    EXPECT_TRUE(logged(0, "The cursor came back from " + one + ", the return shortcut"));
-    EXPECT_TRUE(logged(1, "Control by " + zero + " ended: it left"));
+    cross_from_0();
+    move(0, kWidth - 1, 400, -10, 0); // pushed back
+    EXPECT_FALSE(mentions(0, "The cursor"));
+    EXPECT_FALSE(mentions(1, "Control by"));
+
+    cross_from_0();
+    move(1, 500, 500, 1, 0); // someone moves computer 1's own mouse
+    EXPECT_TRUE(logged(0, "The cursor came back from " + one + ", its control ended there"));
+    EXPECT_TRUE(logged(1, "Control by " + zero +
+                              " ended: this computer's own mouse or keyboard took over"));
 
     command(0, [this](control::Control& c) { c.on_peer_responsive(id(1), false); });
     EXPECT_EQ(last_crossings(0), "Crossings: no edge of this computer leads to another one (" +

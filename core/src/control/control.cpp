@@ -402,7 +402,6 @@ void Control::cross(const DeviceId& device, Point position) {
                          .modifiers = swap ? swap_control_and_command(modifiers) : modifiers,
                          .locks = caps_lock_ ? protocol::kCapsLock : std::uint8_t{0},
                          .drag_id = carried_ ? carried_->offer.drag_id : 0});
-    log(mesh::LogLevel::Info, "The cursor crossed to " + mesh::short_id(device));
 }
 
 void Control::come_home(Point cursor, CaptureEnd reason,
@@ -413,11 +412,16 @@ void Control::come_home(Point cursor, CaptureEnd reason,
     const DeviceId device = away_->device;
     away_.reset();
     probe_.reset();
-    std::string why(came_back_because(reason));
-    if (refused) {
-        why += ": " + std::string(refused_because(*refused));
+    // The user's own ways home are not logged: frequent crossings would push everything else out
+    // of the lines Copy diagnostics takes.
+    if (reason != CaptureEnd::Returned && reason != CaptureEnd::Hotkey) {
+        std::string why(came_back_because(reason));
+        if (refused) {
+            why += ": " + std::string(refused_because(*refused));
+        }
+        log(mesh::LogLevel::Info,
+            "The cursor came back from " + mesh::short_id(device) + ", " + why);
     }
-    log(mesh::LogLevel::Info, "The cursor came back from " + mesh::short_id(device) + ", " + why);
     observer_.on_capture_ended({.device = device,
                                 .cursor = cursor,
                                 .reason = reason,
@@ -553,7 +557,6 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
                                        .held = {},
                                        .position = point(enter.x, enter.y),
                                        .caps_lock = (enter.locks & protocol::kCapsLock) != 0});
-    log(mesh::LogLevel::Info, mesh::short_id(device) + " controls this computer");
     observer_.on_controlled(device);
     observer_.on_inject(MoveCursor{.position = controlled.position});
     observer_.on_inject(SetCapsLock{.on = controlled.caps_lock});
@@ -634,8 +637,10 @@ void Control::release(std::string_view why, bool left) {
         return;
     }
     Controlled& controlled = *controlled_;
-    log(mesh::LogLevel::Info,
-        "Control by " + mesh::short_id(controlled.controller) + " ended: " + std::string(why));
+    if (!left) { // the controller's Leave is the routine end, not logged
+        log(mesh::LogLevel::Info,
+            "Control by " + mesh::short_id(controlled.controller) + " ended: " + std::string(why));
+    }
     if (incoming_ && incoming_->controller == controlled.controller) {
         end_incoming(!left);
     }

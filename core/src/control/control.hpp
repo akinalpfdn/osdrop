@@ -414,7 +414,7 @@ private:
     void take_back();
     /// Releases what is held and ends the control, logging `why`; the controller is told nothing
     /// here. Its own ending: a drag shown here is cancelled. `left`: the controller's Leave, which
-    /// carries the drag on; a drag this computer offered it parks.
+    /// carries the drag on, a drag this computer offered it parks, and nothing is logged.
     void release(std::string_view why, bool left = false);
     void release_held(Controlled& controlled);
     void report_latency(const DeviceId& device);
