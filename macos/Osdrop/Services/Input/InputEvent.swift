@@ -95,6 +95,10 @@ enum InputEvent: Sendable, Equatable {
     case button(MouseButton, isDown: Bool)
     case scroll(ScrollDelta)
     case key(HIDKey, KeyAction)
+
+    var isPointerMotion: Bool {
+        if case .pointerMoved = self { true } else { false }
+    }
 }
 
 struct CapturedInput: Sendable, Equatable {

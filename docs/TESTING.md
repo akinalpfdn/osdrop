@@ -268,6 +268,7 @@ second Mac. Before each run, say which computer's mouse and keyboard will be use
 | I8 | Being controlled | While controlled, look at the controlled Mac's menu bar and menu | Another icon, and the menu names the controller |
 | I9 | Latency | Developer… › Mesh on the controlled computer while moving the cursor on it for 10 s: wired gigabit, then 5 GHz Wi-Fi | Wired: median under 8 ms, p99 under 20 ms; Wi-Fi: median under 15 ms |
 | I10 | Mac above the PC | Place the Mac above the PC in Settings › Arrangement. With the Mac's mouse, cross down near the bottom-right corner, work on the PC for two minutes, then cross back. Repeat with a file dragged from Finder | The PC's cursor moves at once after the crossing; the Mac's cursor stays hidden and still, even if Quick Note or the Dock opens; it comes back where it crossed; the drag works as before |
+| I11 | Back and forth | With the Mac's mouse, cross to the PC and back several times quickly, at different heights; do the same with the PC's mouse | Coming back, the cursor moves on at once from where it entered, without stopping at the edge or bouncing back to the other computer, the same with either mouse |
 
 ### Input fidelity (Phase 12)
 

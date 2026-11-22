@@ -96,4 +96,14 @@ enum CursorFreeze {
         abs(location.x - frozen.x) > Tunables.Input.looseCursorDistance
             || abs(location.y - frozen.y) > Tunables.Input.looseCursorDistance
     }
+
+    /// `inputs` with the delta of the first pointer movement dropped: macOS adds a warp's distance
+    /// to the next movement, and the cursor was just warped to where it came home. `dropped` says
+    /// whether there was a movement to drop it from.
+    static func droppingWarp(from inputs: [InputEvent]) -> (inputs: [InputEvent], dropped: Bool) {
+        guard let index = inputs.firstIndex(where: \.isPointerMotion) else { return (inputs, false) }
+        var inputs = inputs
+        inputs[index] = .pointerMoved(dx: 0, dy: 0)
+        return (inputs, true)
+    }
 }

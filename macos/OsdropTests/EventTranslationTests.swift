@@ -163,6 +163,16 @@ struct CursorFreezeTests {
         #expect(CursorFreeze.isLoose(location: CGPoint(x: 760, y: 491), frozen: frozen))
         #expect(CursorFreeze.isLoose(location: CGPoint(x: 756, y: 480), frozen: frozen))
     }
+
+    @Test("Coming home drops the warp from the next movement, and from nothing else")
+    func dropsTheWarp() {
+        let moved = CursorFreeze.droppingWarp(from: [.button(.left, isDown: true), .pointerMoved(dx: 850, dy: 3)])
+        #expect(moved.inputs == [.button(.left, isDown: true), .pointerMoved(dx: 0, dy: 0)])
+        #expect(moved.dropped)
+        let clicked = CursorFreeze.droppingWarp(from: [.button(.left, isDown: false)])
+        #expect(clicked.inputs == [.button(.left, isDown: false)])
+        #expect(!clicked.dropped, "the next movement still carries the warp")
+    }
 }
 
 @Suite("Tap policy")
