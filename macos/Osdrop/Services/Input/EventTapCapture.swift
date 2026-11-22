@@ -4,8 +4,9 @@ import Foundation
 /// Captures input with an active event tap at the HID level, on a thread of its own whose callback
 /// only translates and enqueues (DEVPLAN, macOS constraints). Mode changes, the release chord and
 /// the watchdog all go through one serial queue, so the cursor is hidden and shown exactly once per
-/// capture. It waits in the middle of its display (CursorFreeze), and is frozen there again whenever
-/// the tap sees it follow the mouse.
+/// capture. It is frozen where it crossed, and frozen again where it is whenever the tap sees it
+/// follow the mouse (CursorFreeze). It is never warped while captured: macOS adds a warp's
+/// distance to the next event's delta, which would throw the cursor on the other computer back.
 final class EventTapCapture: InputCapturing {
     let events: AsyncStream<CaptureEvent>
     private let continuation: AsyncStream<CaptureEvent>.Continuation
@@ -146,7 +147,7 @@ final class EventTapCapture: InputCapturing {
                 state.tapDisabledChecks = 0
                 state.looseCount = 0
             }
-            freeze(at: Self.parkPoint())
+            freeze()
             cursor.hide()
         case .observe:
             let looseCount = context.state.withLock { state -> Int in
@@ -166,16 +167,11 @@ final class EventTapCapture: InputCapturing {
         Log.input.info("Capture mode \(String(describing: mode), privacy: .public)")
     }
 
-    /// Runs on `transitions` only. Puts the cursor at `point` when there is one, disconnects it from
-    /// the mouse and notes where it waits, which the tap compares every captured movement with.
-    private func freeze(at point: CGPoint?) {
-        var waits = point
-        if let point, CGWarpMouseCursorPosition(point) != .success {
-            Log.input.error("Moving the cursor to where it waits failed")
-            waits = nil
-        }
+    /// Runs on `transitions` only. Disconnects the cursor from the mouse where it is and notes that
+    /// place, which the tap compares every captured movement with.
+    private func freeze() {
         CGAssociateMouseAndMouseCursorPosition(0)
-        let location = waits ?? CGEvent(source: nil)?.location
+        let location = CGEvent(source: nil)?.location
         context.state.withLock { state in
             state.frozen = location.map { FrozenCursor(point: $0, since: .now) }
             state.refreezing = false
@@ -183,38 +179,22 @@ final class EventTapCapture: InputCapturing {
     }
 
     /// Runs on `transitions` only, after the tap saw the captured cursor follow the mouse: macOS
-    /// connected them again, as it does when another app comes to the front.
+    /// connected them again, as it does when another app comes to the front. The cursor is frozen
+    /// where it went, not warped back.
     private func refreeze() {
-        let loose = context.state.withLock { state -> (point: CGPoint, count: Int)? in
-            guard state.mode == .capture, let frozen = state.frozen else {
+        let count = context.state.withLock { state -> Int? in
+            guard state.mode == .capture, state.frozen != nil else {
                 state.refreezing = false
                 return nil
             }
             state.looseCount += 1
-            return (frozen.point, state.looseCount)
+            return state.looseCount
         }
-        guard let loose else { return }
-        if loose.count == 1 {
+        guard let count else { return }
+        if count == 1 {
             Log.input.error("The cursor followed the mouse during a capture; frozen again")
         }
-        freeze(at: loose.point)
-    }
-
-    /// Where the cursor waits during a capture (CursorFreeze); nil leaves it where it is.
-    private static func parkPoint() -> CGPoint? {
-        guard let cursor = CGEvent(source: nil)?.location else { return nil }
-        let buttonHeld = [CGMouseButton.left, .right, .center].contains {
-            CGEventSource.buttonState(.combinedSessionState, button: $0)
-        }
-        return CursorFreeze.parkPoint(for: cursor, displays: displayFrames(), buttonHeld: buttonHeld)
-    }
-
-    private static func displayFrames() -> [CGRect] {
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetActiveDisplayList(count, &displays, &count) == .success else { return [] }
-        return displays.prefix(Int(count)).map { CGDisplayBounds($0) }
+        freeze()
     }
 
     private func makeWatchdog() -> DispatchSourceTimer {

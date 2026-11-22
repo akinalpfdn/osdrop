@@ -832,3 +832,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** A tester's PC saw the Mac go quiet for 140 ms (2026-11-22) and ended the control; the Mac had not noticed, kept the cursor on the PC and captured the user's keyboard and mouse for 35 minutes until it was restarted. LocalTakeover already ends a capture without a notice on both apps, and 0.1.0 peers understand it; a new message would not reach them.
 **Trade-offs:** The controller's log and notice cannot tell this from the endpoint's own user taking over; core's log on the endpoint says which it was. Short Wi-Fi silences still end the control: the cursor comes home.
 **Revisit if:** Users find the cursor coming home after Wi-Fi hiccups disruptive; then the endpoint could keep a control through a silence shorter than a second.
+
+---
+
+## 2026-11-23 — The Mac freezes its captured cursor in place, without warping
+**Chosen:** The captured cursor stays where it crossed, and the tap freezes it again where it is when it follows the mouse; it is never warped while captured. This replaces the parking of 2026-11-22.
+**Alternatives:** Keep parking and subtract the warp from the next delta, as SDL does.
+**Why:** macOS adds a warp's distance to the next mouse event's delta. Parking warped the cursor from the edge to the middle, which threw the cursor on the PC back to the Mac; the warp home threw it over again, about a hundred times a second (797 captures in 40 minutes, 2026-11-23). Keys reached the PC, the mouse never stayed. Subtracting the warp would be needed at both ends of every capture and is easy to get wrong.
+**Trade-offs:** The Dock and hot corners can still react to a cursor left at an edge; when that brings another app forward, the tap freezes the cursor again.
+**Revisit if:** The log shows "The cursor followed the mouse during a capture" often.
