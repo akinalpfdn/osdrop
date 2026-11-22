@@ -359,7 +359,13 @@ private:
     void cross(const DeviceId& device, Point position);
     void come_home(Point cursor, CaptureEnd reason, std::optional<protocol::RefuseReason> refused);
     void refresh();
+    /// Logs which edges of this computer lead to another one and which members cannot be
+    /// reached, when that changes: the log says why a push crossed nowhere. Drags are left out,
+    /// so that every drag does not log twice.
+    void describe_crossings();
     void update_lock();
+    /// Why crossings are held back now, if they are.
+    [[nodiscard]] std::optional<std::string_view> held_back() const;
     /// Every physical key still down is released, here and where the cursor is.
     void release_physical_keys();
     void receive_refusal(const DeviceId& device, std::uint32_t control_id, CaptureEnd reason,
@@ -404,16 +410,17 @@ private:
     void inject_button(Controlled& controlled, const protocol::ButtonEvent& event);
     void receive_motion(Controlled& controlled, const protocol::PointerMotion& motion);
     void take_back();
-    /// Releases what is held and ends the control; the controller is told nothing here. Its own
-    /// ending: a drag shown here is cancelled. `left`: the controller's Leave, which carries the
-    /// drag on; a drag this computer offered it parks.
-    void release(bool left = false);
+    /// Releases what is held and ends the control, logging `why`; the controller is told nothing
+    /// here. Its own ending: a drag shown here is cancelled. `left`: the controller's Leave, which
+    /// carries the drag on; a drag this computer offered it parks.
+    void release(std::string_view why, bool left = false);
     void release_held(Controlled& controlled);
     void report_latency(const DeviceId& device);
 
     /// True for the input messages this layer handles.
     bool handle(const DeviceId& device, const protocol::ControlMessage& message);
     void send(const DeviceId& device, protocol::ControlMessage message);
+    void log(mesh::LogLevel level, std::string_view message);
 
     DeviceId self_;
     ControlTunables tunables_;
@@ -433,6 +440,10 @@ private:
     std::optional<Away> away_;
     std::uint32_t last_control_id_ = 0;
     bool locked_ = false;
+    /// A push held back was logged; logged again once crossings were free in between.
+    bool held_back_told_ = false;
+    /// The last description of the crossings logged.
+    std::string crossings_told_;
     protocol::Platform platform_;
     InputSettings settings_;
     bool caps_lock_ = false;

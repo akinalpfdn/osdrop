@@ -6,11 +6,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <random>
 #include <set>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -162,6 +164,42 @@ TEST_F(InputControl, ALostControllerLeavesNothingPressed) {
     EXPECT_TRUE(left.keys.empty());
     EXPECT_TRUE(left.buttons.empty());
     EXPECT_EQ(node(1).control_observer.controlled.back(), std::nullopt);
+}
+
+TEST_F(InputControl, TheLogSaysWhereTheCursorCanCrossAndWhatItDid) {
+    const std::string zero = osdrop::mesh::short_id(id(0));
+    const std::string one = osdrop::mesh::short_id(id(1));
+    const std::string two = osdrop::mesh::short_id(id(2));
+    const auto last_crossings = [this](std::size_t on) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        const auto found = std::find_if(logs.rbegin(), logs.rend(), [](const std::string& line) {
+            return line.starts_with("Crossings: ");
+        });
+        return found == logs.rend() ? std::string() : *found;
+    };
+    const auto logged = [this](std::size_t on, const std::string& line) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        return std::find(logs.begin(), logs.end(), line) != logs.end();
+    };
+    EXPECT_EQ(last_crossings(0), "Crossings: right edge of the monitor at 0,0 1000x800 to " + one);
+    EXPECT_EQ(last_crossings(1), "Crossings: left edge of the monitor at 0,0 1000x800 to " + zero +
+                                     "; right edge of the monitor at 0,0 1000x800 to " + two);
+
+    button(0, 0, ButtonAction::Down);
+    cross_from_0();
+    EXPECT_TRUE(logged(0, "A push toward " + one + " was held back: a mouse button is down"));
+    button(0, 0, ButtonAction::Up);
+
+    cross_from_0();
+    EXPECT_TRUE(logged(0, "The cursor crossed to " + one));
+    EXPECT_TRUE(logged(1, zero + " controls this computer"));
+    command(0, [](control::Control& c) { c.return_home(protocol::LeaveReason::ReleasedByHotkey); });
+    EXPECT_TRUE(logged(0, "The cursor came back from " + one + ", the return shortcut"));
+    EXPECT_TRUE(logged(1, "Control by " + zero + " ended: it left"));
+
+    command(0, [this](control::Control& c) { c.on_peer_responsive(id(1), false); });
+    EXPECT_EQ(last_crossings(0), "Crossings: no edge of this computer leads to another one (" +
+                                     one + " is not answering)");
 }
 
 TEST_F(InputControl, RefusalsSendTheCursorHome) {

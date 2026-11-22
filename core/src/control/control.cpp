@@ -31,6 +31,129 @@ Point point(std::int32_t x, std::int32_t y) {
 constexpr std::size_t kPercent = 100;
 constexpr std::size_t kMedianPercent = 50;
 constexpr std::size_t kP99Percent = 99;
+/// Points along an edge that the crossings log probes for another computer, in eighths.
+constexpr std::int64_t kEdgeProbes = 8;
+
+std::string_view came_back_because(CaptureEnd reason) {
+    switch (reason) {
+    case CaptureEnd::Returned:
+        return "pushed back";
+    case CaptureEnd::Hotkey:
+        return "the return shortcut";
+    case CaptureEnd::InputLost:
+        return "this computer's input capture ended";
+    case CaptureEnd::Refused:
+        return "refused";
+    case CaptureEnd::Takeover:
+        return "its control ended there";
+    case CaptureEnd::PeerLost:
+        return "it stopped answering or stopped taking control";
+    }
+    return "unknown";
+}
+
+/// A refusal, as the controller hears it.
+std::string_view refused_because(protocol::RefuseReason reason) {
+    switch (reason) {
+    case protocol::RefuseReason::Locked:
+        return "its screen is locked";
+    case protocol::RefuseReason::Asleep:
+        return "it is going to sleep";
+    case protocol::RefuseReason::NotPermitted:
+        return "it does not permit control from here";
+    case protocol::RefuseReason::Busy:
+        return "it is busy";
+    }
+    return "unknown";
+}
+
+/// A refusal, as the computer that refuses says it.
+std::string_view refusing_because(protocol::RefuseReason reason) {
+    switch (reason) {
+    case protocol::RefuseReason::Locked:
+        return "this computer's screen is locked";
+    case protocol::RefuseReason::Asleep:
+        return "this computer is going to sleep";
+    case protocol::RefuseReason::NotPermitted:
+        return "control from it is not permitted";
+    case protocol::RefuseReason::Busy:
+        return "this computer is busy";
+    }
+    return "unknown";
+}
+
+std::string_view edge_name(layout::Edge edge) {
+    switch (edge) {
+    case layout::Edge::Left:
+        return "left";
+    case layout::Edge::Right:
+        return "right";
+    case layout::Edge::Top:
+        return "top";
+    case layout::Edge::Bottom:
+        return "bottom";
+    }
+    return "unknown";
+}
+
+/// A native rectangle as "x,y WxH", in pixels on Windows and points on a Mac.
+std::string native_rect(const layout::Rect& rect) {
+    return std::to_string(rect.x / layout::kUnit) + "," + std::to_string(rect.y / layout::kUnit) +
+           " " + std::to_string(rect.width / layout::kUnit) + "x" +
+           std::to_string(rect.height / layout::kUnit);
+}
+
+/// A point on `edge` of `rect`, `eighths` of the way along it.
+Point on_edge(const layout::Rect& rect, layout::Edge edge, std::int64_t eighths) {
+    const std::int64_t along_x = rect.x + (rect.width * eighths / kEdgeProbes);
+    const std::int64_t along_y = rect.y + (rect.height * eighths / kEdgeProbes);
+    switch (edge) {
+    case layout::Edge::Left:
+        return {.x = rect.x, .y = along_y};
+    case layout::Edge::Right:
+        return {.x = rect.x + rect.width - 1, .y = along_y};
+    case layout::Edge::Top:
+        return {.x = along_x, .y = rect.y};
+    case layout::Edge::Bottom:
+        return {.x = along_x, .y = rect.y + rect.height - 1};
+    }
+    return {.x = rect.x, .y = rect.y};
+}
+
+/// The computers behind `edge` of monitor `index` of `self`, which must be in the arrangement.
+std::set<DeviceId> behind_edge(const layout::Arrangement& arrangement, const DeviceId& self,
+                               std::size_t index, layout::Edge edge) {
+    std::set<DeviceId> found;
+    const layout::Screens& own = *arrangement.screens(self);
+    const layout::Rect& native = own.monitors().at(index).native;
+    for (std::int64_t eighths = 1; eighths < kEdgeProbes; ++eighths) {
+        const Point exit = on_edge(native, edge, eighths);
+        if (!own.at_outer_edge(index, edge, exit)) {
+            continue;
+        }
+        if (const auto entry = arrangement.neighbour(self, index, edge, exit)) {
+            found.insert(entry->device);
+        }
+    }
+    return found;
+}
+
+/// Every edge of `self` that leads to another computer, as the crossings log names them.
+std::string edges_to_others(const layout::Arrangement& arrangement, const DeviceId& self) {
+    std::string edges;
+    const std::vector<layout::Monitor>& monitors = arrangement.screens(self)->monitors();
+    for (std::size_t index = 0; index < monitors.size(); ++index) {
+        for (const layout::Edge edge :
+             {layout::Edge::Left, layout::Edge::Right, layout::Edge::Top, layout::Edge::Bottom}) {
+            for (const DeviceId& device : behind_edge(arrangement, self, index, edge)) {
+                edges += (edges.empty() ? "" : "; ") + std::string(edge_name(edge)) +
+                         " edge of the monitor at " + native_rect(monitors.at(index).native) +
+                         " to " + mesh::short_id(device);
+            }
+        }
+    }
+    return edges;
+}
 
 } // namespace
 
@@ -61,7 +184,7 @@ void Control::set_controllers(std::set<DeviceId> controllers) {
         send(controlled_->controller,
              protocol::Refuse{.control_id = controlled_->control_id,
                               .reason = protocol::RefuseReason::NotPermitted});
-        release();
+        release(refusing_because(protocol::RefuseReason::NotPermitted));
     }
 }
 
@@ -170,7 +293,7 @@ void Control::set_unavailable(std::optional<protocol::RefuseReason> reason) {
     if (reason && controlled_) {
         send(controlled_->controller,
              protocol::Refuse{.control_id = controlled_->control_id, .reason = *reason});
-        release();
+        release(refusing_because(*reason));
     }
     if (reason == protocol::RefuseReason::Locked) {
         release_physical_keys();
@@ -214,6 +337,12 @@ void Control::cursor_moved(Point position) {
 void Control::moved(const PointerMoved& moved, TimePoint captured) {
     const layout::CursorUpdate update = engine_.motion(captured, moved.position, moved.delta);
     if (update.walled) {
+        if (!held_back_told_) {
+            held_back_told_ = true;
+            log(mesh::LogLevel::Info,
+                "A push toward " + mesh::short_id(*update.walled) +
+                    " was held back: " + std::string(held_back().value_or("unknown")));
+        }
         probe(*update.walled, update.position, captured);
     }
     if (update.device == self_) {
@@ -273,6 +402,7 @@ void Control::cross(const DeviceId& device, Point position) {
                          .modifiers = swap ? swap_control_and_command(modifiers) : modifiers,
                          .locks = caps_lock_ ? protocol::kCapsLock : std::uint8_t{0},
                          .drag_id = carried_ ? carried_->offer.drag_id : 0});
+    log(mesh::LogLevel::Info, "The cursor crossed to " + mesh::short_id(device));
 }
 
 void Control::come_home(Point cursor, CaptureEnd reason,
@@ -283,6 +413,11 @@ void Control::come_home(Point cursor, CaptureEnd reason,
     const DeviceId device = away_->device;
     away_.reset();
     probe_.reset();
+    std::string why(came_back_because(reason));
+    if (refused) {
+        why += ": " + std::string(refused_because(*refused));
+    }
+    log(mesh::LogLevel::Info, "The cursor came back from " + mesh::short_id(device) + ", " + why);
     observer_.on_capture_ended({.device = device,
                                 .cursor = cursor,
                                 .reason = reason,
@@ -312,13 +447,57 @@ void Control::refresh() {
                                             .reason = protocol::LeaveReason::Returned});
         come_home(update->position, CaptureEnd::PeerLost, std::nullopt);
     }
+    describe_crossings();
+}
+
+void Control::describe_crossings() {
+    std::set<DeviceId> reachable{self_};
+    std::string missing;
+    for (const auto& [device, peer] : peers_) {
+        if (peer.responsive && peer.accepts_control) {
+            reachable.insert(device);
+            continue;
+        }
+        missing += (missing.empty() ? "" : ", ") + mesh::short_id(device) +
+                   (peer.responsive ? " does not take control" : " is not answering");
+    }
+    const layout::Arrangement arrangement = layout_->arrangement(reachable);
+    std::string text = "Crossings: ";
+    if (arrangement.screens(self_) == nullptr) {
+        text += "this computer is not placed in the arrangement";
+    } else {
+        const std::string edges = edges_to_others(arrangement, self_);
+        text += edges.empty() ? "no edge of this computer leads to another one" : edges;
+    }
+    if (!missing.empty()) {
+        text += " (" + missing + ")";
+    }
+    if (text != crossings_told_) {
+        crossings_told_ = text;
+        log(mesh::LogLevel::Info, text);
+    }
 }
 
 void Control::update_lock() {
+    const bool held = held_back().has_value();
+    engine_.set_locked(held);
+    if (!held) {
+        held_back_told_ = false;
+    }
+}
+
+std::optional<std::string_view> Control::held_back() const {
+    if (locked_) {
+        return "the cursor is locked to the computer it is on";
+    }
+    if (!physical_.buttons().empty() && !carried_) {
+        return "a mouse button is down";
+    }
     const std::uint8_t required = settings_.crossing_modifiers;
-    const bool missing_modifier = required != 0 && (physical_.modifiers() & required) == 0;
-    const bool held = !physical_.buttons().empty() && !carried_;
-    engine_.set_locked(locked_ || held || missing_modifier);
+    if (required != 0 && (physical_.modifiers() & required) == 0) {
+        return "the key chosen for crossing is not held";
+    }
+    return std::nullopt;
 }
 
 void Control::receive_refusal(const DeviceId& device, std::uint32_t control_id, CaptureEnd reason,
@@ -338,6 +517,8 @@ std::uint32_t Control::next_control_id() {
 void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter) {
     const auto refuse = [&](protocol::RefuseReason reason) {
         send(device, protocol::Refuse{.control_id = enter.control_id, .reason = reason});
+        log(mesh::LogLevel::Info, "Refused the cursor of " + mesh::short_id(device) + ": " +
+                                      std::string(refusing_because(reason)));
     };
     if (unavailable_) {
         refuse(*unavailable_);
@@ -364,7 +545,7 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
         forwarded_.reset();
     }
     if (controlled_) {
-        release(true); // the controller's previous entry ended with this one
+        release("a new entry replaced it", true); // the controller's previous entry ended here
     }
     Controlled& controlled =
         controlled_.emplace(Controlled{.controller = device,
@@ -372,6 +553,7 @@ void Control::receive_enter(const DeviceId& device, const protocol::Enter& enter
                                        .held = {},
                                        .position = point(enter.x, enter.y),
                                        .caps_lock = (enter.locks & protocol::kCapsLock) != 0});
+    log(mesh::LogLevel::Info, mesh::short_id(device) + " controls this computer");
     observer_.on_controlled(device);
     observer_.on_inject(MoveCursor{.position = controlled.position});
     observer_.on_inject(SetCapsLock{.on = controlled.caps_lock});
@@ -444,14 +626,16 @@ void Control::take_back() {
         return;
     }
     send(controlled_->controller, protocol::LocalTakeover{.control_id = controlled_->control_id});
-    release();
+    release("this computer's own mouse or keyboard took over");
 }
 
-void Control::release(bool left) {
+void Control::release(std::string_view why, bool left) {
     if (!controlled_) {
         return;
     }
     Controlled& controlled = *controlled_;
+    log(mesh::LogLevel::Info,
+        "Control by " + mesh::short_id(controlled.controller) + " ended: " + std::string(why));
     if (incoming_ && incoming_->controller == controlled.controller) {
         end_incoming(!left);
     }
@@ -512,7 +696,7 @@ bool Control::handle(const DeviceId& device, const protocol::ControlMessage& mes
             },
             [&](const protocol::Leave& m) {
                 if (controlled_by(device, m.control_id) != nullptr) {
-                    release(true);
+                    release("it left", true);
                 }
                 return true;
             },
@@ -583,6 +767,10 @@ void Control::send(const DeviceId& device, protocol::ControlMessage message) {
     });
 }
 
+void Control::log(mesh::LogLevel level, std::string_view message) {
+    next_.on_log(level, message);
+}
+
 // --- Observers ---------------------------------------------------------------------------------
 
 void Control::on_layout_changed(const layout::LayoutState& state) {
@@ -630,7 +818,7 @@ void Control::on_peer_disconnected(const DeviceId& device, std::optional<Error> 
     }
     refresh();
     if (controlled_ && controlled_->controller == device) {
-        release();
+        release("it disconnected");
     }
     if (incoming_ && incoming_->source == device) {
         end_incoming(false);
@@ -659,7 +847,7 @@ void Control::on_peer_responsive(const DeviceId& device, bool responsive) {
         refresh();
     }
     if (!responsive && controlled_ && controlled_->controller == device) {
-        release();
+        release("it stopped answering");
     }
     next_.on_peer_responsive(device, responsive);
 }
