@@ -20,6 +20,11 @@ enum Tunables {
         /// Watchdog checks in a row that may find the event tap disabled before capture ends;
         /// the tap callback normally turns it back on within one.
         static let tapLostChecks = 3
+        /// While captured, a cursor further than this (points) from where it waits follows the
+        /// mouse again: macOS reconnects them when another app comes to the front.
+        static let looseCursorDistance = 2.0
+        /// After the cursor is put where it waits, events this soon may still carry where it was.
+        static let freezeSettleTime: Duration = .milliseconds(100)
         /// Captured events buffered for a slow consumer before the oldest are dropped.
         static let eventBufferLimit = 4096
         /// How long `stop` waits for the event tap thread to finish.

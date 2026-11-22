@@ -152,6 +152,50 @@ struct EventFactoryTests {
     }
 }
 
+@Suite("Cursor freeze")
+struct CursorFreezeTests {
+    /// A laptop display and a larger one to its right, higher up.
+    private let laptop = CGRect(x: 0, y: 0, width: 1512, height: 982)
+    private let external = CGRect(x: 1512, y: -200, width: 2560, height: 1440)
+
+    @Test("A captured cursor waits in the middle of the display it is on")
+    func parksInTheMiddle() {
+        let park = CursorFreeze.parkPoint(
+            for: CGPoint(x: 2000, y: 1239), displays: [laptop, external], buttonHeld: false)
+        #expect(park == CGPoint(x: external.midX, y: external.midY))
+    }
+
+    @Test("A cursor on the far edge of a display waits in the middle of the nearest one")
+    func parksOnTheNearestDisplay() {
+        // The bottom edge of the laptop, where the Dock is: outside the frame by CGRect's rules.
+        let park = CursorFreeze.parkPoint(
+            for: CGPoint(x: 756, y: 982), displays: [laptop, external], buttonHeld: false)
+        #expect(park == CGPoint(x: laptop.midX, y: laptop.midY))
+    }
+
+    @Test("A cursor with a button held stays at its edge, where a drag waits")
+    func dragStaysAtTheEdge() {
+        let park = CursorFreeze.parkPoint(
+            for: CGPoint(x: 1511, y: 400), displays: [laptop, external], buttonHeld: true)
+        #expect(park == nil)
+    }
+
+    @Test("Without displays the cursor stays where it is")
+    func noDisplays() {
+        #expect(CursorFreeze.parkPoint(for: .zero, displays: [], buttonHeld: false) == nil)
+    }
+
+    @Test("Only a cursor more than a couple of points from where it waits follows the mouse")
+    func loose() {
+        let frozen = CGPoint(x: 756, y: 491)
+        #expect(!CursorFreeze.isLoose(location: frozen, frozen: frozen))
+        // A drag let go at the edge moves it one point and back.
+        #expect(!CursorFreeze.isLoose(location: CGPoint(x: 757, y: 491), frozen: frozen))
+        #expect(CursorFreeze.isLoose(location: CGPoint(x: 760, y: 491), frozen: frozen))
+        #expect(CursorFreeze.isLoose(location: CGPoint(x: 756, y: 480), frozen: frozen))
+    }
+}
+
 @Suite("Tap policy")
 struct TapPolicyTests {
     @Test("Captured input is swallowed; observed and injected input passes")

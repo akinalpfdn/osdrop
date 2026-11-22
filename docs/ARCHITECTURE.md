@@ -372,6 +372,10 @@ Built in Phase 1 (`macos/Osdrop/Services/Input`):
   source user data and always pass.
 - **Freezing and hiding the cursor** — `CGAssociateMouseAndMouseCursorPosition` and
   `BackgroundCursorHider` (the private `SetsCursorInBackground` property, looked up at run time).
+  As on the PC, the cursor waits in the middle of its display, away from the Dock, the menu bar
+  and hot corners; with a mouse button held it stays at the edge, where a drag waits. macOS
+  reconnects the mouse and the cursor when another app comes to the front, so the tap compares
+  every captured movement with where the cursor waits and freezes it there again (`CursorFreeze`).
 - **Ways out of a capture** — the release chord ⌃⌥⌘⎋ (handled in the tap callback); the in-app
   watchdog, which ends a capture whose owner stopped confirming it for 1 s or whose tap stayed
   disabled; and `OsdropCaptureGuard`, a separate process that ends Osdrop after 2 s without a

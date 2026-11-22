@@ -814,3 +814,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** Reinstalling, or upgrading by removing and installing again, keeps the pairings: the other computers still trust this identity, whereas a new one would leave a stale member on each of them to remove by hand. Found during the 0.1.0 installer run; it had not been written down.
 **Trade-offs:** A complete removal takes deleting those two folders by hand.
 **Revisit if:** Users ask for a complete removal; then the uninstaller asks whether to delete them.
+
+---
+
+## 2026-11-22 — The Mac parks its captured cursor and freezes it again
+**Chosen:** While its input is used elsewhere, the Mac moves its hidden cursor to the middle of the display it is on, as the PC does (not with a mouse button held: a drag waits at the edge), and the event tap freezes it there again whenever a captured movement shows it moved.
+**Alternatives:** Leave the cursor frozen at the edge it crossed (before); take the foreground with the invisible key window on every crossing.
+**Why:** A tester with the Mac above the PC saw the Mac's cursor move along with the PC's. `CGAssociateMouseAndMouseCursorPosition` holds only "while an application is in the foreground" (SDK header), and Osdrop is a background menu bar app. What brought another app forward in the tester's case is not known; the likely triggers sit at the edge the cursor was left on: the Dock at the bottom, and Quick Note, macOS's default bottom-right hot corner. Parking removes those; refreezing covers the rest.
+**Trade-offs:** One more warp per crossing. Whether macOS also shows the hidden cursor again cannot be read reliably (`CGCursorIsVisible` is no longer supported), so a re-shown cursor stays visible, though frozen, until the cursor comes home.
+**Revisit if:** The log shows "The cursor followed the mouse during a capture" often, or a cursor visible during a capture is reported.
