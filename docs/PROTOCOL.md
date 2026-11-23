@@ -8,7 +8,8 @@ The protocol is not frozen before the first release. A phase that changes a mess
 document, the fixture generator and the codec in the same pull request. From the first release on,
 changes are additive and raise the minor version.
 
-Minor versions: 0 is the first release (0.1.x); 1 adds platform 3, Android (0.2.0).
+Minor versions: 0 is the first release (0.1.x); 1 adds platform 3, Android, and sending files
+(SendOffer, SendResult, object kind 3) (0.2.0).
 
 ## Conventions
 
@@ -120,6 +121,8 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
 | 0x32 | DragResult | drop target → source and controller; controller → source when no target ends it |
 | 0x40 | ClipboardAnnounce | the sender's clipboard changed |
+| 0x50 | SendOffer | sender → one member: files sent to it (minor 1) |
+| 0x51 | SendResult | that member → sender: how the sent files ended (minor 1) |
 
 ### 0x01 Hello
 
@@ -540,6 +543,34 @@ manifest (a receiver asks for one byte more than it accepts, so it can tell a co
 large). Format 5 is fetched like a dragged folder: manifest, then contents. Receivers fetch only
 from members whose clipboard permission is on, and files only when the files permission is on too.
 
+### Sending files (minor 1)
+
+A member sends files to one other member without a drag: a phone sends what was shared to it, a
+computer what was dropped on a phone's corner. Both sides need protocol minor 1; a sender never
+sends a SendOffer to a member whose Hello says minor 0.
+
+#### 0x50 SendOffer
+
+| Field | Type | Values |
+|-------|------|--------|
+| send_id | u64 | not 0; unique per sender |
+| item_count | u16 | 1–1024; the message must still fit in 65536 bytes |
+| reserved | u16 | 0 |
+| items | item × item_count | as in DragOffer |
+
+The receiver fetches each item as object kind 3 (`object_id` = send_id, `item_index` = the item's
+place in the offer), manifest then contents, as a dragged item. It fetches only from a member whose
+files permission is on; otherwise, and when its user declines, it answers with SendResult at once.
+
+#### 0x51 SendResult
+
+| Field | Type | Values |
+|-------|------|--------|
+| send_id | u64 | not 0 |
+| outcome | u8 | 1 received (every item arrived), 2 declined, 3 failed |
+
+The sender serves the items until the SendResult arrives or the session ends, then withdraws
+them.
 
 ## Input datagrams (UDP)
 
@@ -604,7 +635,8 @@ first frame.
 
 Objects: `object_kind` 1 is a drag (`object_id` = drag_id, `item_index` = the item in the
 DragOffer, 0–1023), 2 is a clipboard announcement (`object_id` = clip_id, `item_index` = the
-format code, 1–5). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
+format code, 1–5), 3 is a sent item (minor 1: `object_id` = send_id, `item_index` = the item in
+the SendOffer, 0–1023). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
 a dragged item.
 
 ### 0x81 TransferHello
@@ -619,7 +651,7 @@ a dragged item.
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | not 0 |
-| object_kind | u8 | 1 drag, 2 clipboard |
+| object_kind | u8 | 1 drag, 2 clipboard, 3 sent (minor 1) |
 | reserved | bytes[3] | 0 |
 | object_id | u64 | not 0 |
 | item_index | u32 | |
@@ -657,7 +689,7 @@ file's; receivers recreate a link only when its target names another entry of th
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | not 0 |
-| object_kind | u8 | 1 drag, 2 clipboard |
+| object_kind | u8 | 1 drag, 2 clipboard, 3 sent (minor 1) |
 | reserved | bytes[3] | 0 |
 | object_id | u64 | not 0 |
 | item_index | u32 | |

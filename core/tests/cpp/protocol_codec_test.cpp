@@ -148,6 +148,8 @@ std::vector<ControlMessage> boundary_messages() {
                         {.format = protocol::ClipboardFormat::Html, .byte_count = 2},
                         {.format = protocol::ClipboardFormat::RichText, .byte_count = 3},
                         {.format = protocol::ClipboardFormat::PlainText, .byte_count = 4}}},
+        protocol::SendOffer{.send_id = std::numeric_limits<std::uint64_t>::max(), .items = items},
+        protocol::SendResult{.send_id = 1, .outcome = protocol::SendOutcome::Failed},
     };
 }
 

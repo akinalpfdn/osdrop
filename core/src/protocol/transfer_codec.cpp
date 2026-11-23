@@ -38,6 +38,7 @@ bool is_valid(const ObjectRef& object) {
     }
     switch (object.kind) {
     case ObjectKind::Drag:
+    case ObjectKind::Sent: // the item in the DragOffer or the SendOffer
         return object.item_index < kMaxDragItems;
     case ObjectKind::Clipboard:
         return in_range(object.item_index, 1, kMaxClipboardFormats);

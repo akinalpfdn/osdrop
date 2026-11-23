@@ -228,6 +228,11 @@ def max_size_drag_offer() -> bytes:
     return drag_offer(1, 2, items)
 
 
+def send_offer(send_id: int, items: list[bytes], count: int | None = None, reserved: int = 0) -> bytes:
+    return control(0x50, u64(send_id) + u16(len(items) if count is None else count) + u16(reserved)
+                   + b"".join(items))
+
+
 def clipboard(formats: list[bytes], clip_id: int = 0x0102_0304_0506, count: int | None = None) -> bytes:
     return control(0x40, u64(clip_id) + u8(len(formats) if count is None else count) + b"".join(formats))
 
@@ -343,6 +348,14 @@ def control_fixtures() -> list[Fixture]:
                 max_size_drag_offer()),
         Fixture("control/drag_result_dropped.bin", "control", v, 0x32, "DragResult dropped",
                 control(0x32, u32(9) + u8(1))),
+        Fixture("control/send_offer_two.bin", "control", v, 0x50, "a file and a folder sent to one member",
+                send_offer(0x0102_0304_0506_0708, [PDF, FOLDER])),
+        Fixture("control/send_offer_apk.bin", "control", v, 0x50, "an APK sent to a phone",
+                send_offer(1, [offered_item(1, 48_559_139, "com.android.package-archive", "Osdrop.apk")])),
+        Fixture("control/send_result_received.bin", "control", v, 0x51, "SendResult received",
+                control(0x51, u64(0x0102_0304_0506_0708) + u8(1))),
+        Fixture("control/send_result_declined.bin", "control", v, 0x51, "SendResult declined",
+                control(0x51, u64(1) + u8(2))),
         Fixture("control/clipboard_text_image.bin", "control", v, 0x40, "text, HTML and an image",
                 clipboard([clip_format(1, 1_204), clip_format(3, 5_310), clip_format(4, 2_400_000)])),
         Fixture("control/clipboard_all_formats.bin", "control", v, 0x40, "every format",
@@ -614,6 +627,18 @@ def control_fixtures() -> list[Fixture]:
                 control(0x32, u32(0) + u8(1))),
         Fixture("malformed/drag_result_outcome_4.bin", "control", e, VALUE_OUT_OF_RANGE, "outcome 4",
                 control(0x32, u32(9) + u8(4))),
+        Fixture("malformed/send_offer_id_0.bin", "control", e, VALUE_OUT_OF_RANGE, "send_id 0",
+                send_offer(0, [PDF])),
+        Fixture("malformed/send_offer_no_items.bin", "control", e, VALUE_OUT_OF_RANGE, "item_count 0",
+                send_offer(3, [])),
+        Fixture("malformed/send_offer_reserved.bin", "control", e, VALUE_OUT_OF_RANGE, "reserved is 1",
+                send_offer(3, [PDF], reserved=1)),
+        Fixture("malformed/send_offer_item_kind_3.bin", "control", e, VALUE_OUT_OF_RANGE, "item kind 3",
+                send_offer(3, [offered_item(3, 1, "public.data", "a")])),
+        Fixture("malformed/send_result_id_0.bin", "control", e, VALUE_OUT_OF_RANGE, "send_id 0",
+                control(0x51, u64(0) + u8(1))),
+        Fixture("malformed/send_result_outcome_4.bin", "control", e, VALUE_OUT_OF_RANGE, "outcome 4",
+                control(0x51, u64(3) + u8(4))),
 
         # ClipboardAnnounce.
         Fixture("malformed/clipboard_id_0.bin", "control", e, VALUE_OUT_OF_RANGE, "clip_id 0",
@@ -738,6 +763,8 @@ def transfer_fixtures() -> list[Fixture]:
                 manifest_request(obj=object_ref(item_index=1))),
         Fixture("transfer/manifest_request_last_item.bin", "transfer", v, 0x82, "dragged item 1023",
                 manifest_request(obj=object_ref(item_index=1023))),
+        Fixture("transfer/manifest_request_sent.bin", "transfer", v, 0x82, "manifest of sent item 2",
+                manifest_request(obj=object_ref(kind=3, item_index=2))),
         Fixture("transfer/manifest_request_clipboard_files.bin", "transfer", v, 0x82,
                 "manifest of the clipboard's files", manifest_request(obj=clipboard_files)),
         Fixture("transfer/manifest_single_file.bin", "transfer", v, 0x83, "a file item's single entry",
@@ -780,8 +807,10 @@ def transfer_fixtures() -> list[Fixture]:
                 transfer_hello()[:-2]),
         Fixture("malformed/manifest_request_id_0.bin", "transfer", e, VALUE_OUT_OF_RANGE, "request_id 0",
                 manifest_request(request_id=0)),
-        Fixture("malformed/manifest_request_kind_3.bin", "transfer", e, VALUE_OUT_OF_RANGE, "object_kind 3",
-                manifest_request(obj=object_ref(kind=3))),
+        Fixture("malformed/manifest_request_kind_4.bin", "transfer", e, VALUE_OUT_OF_RANGE, "object_kind 4",
+                manifest_request(obj=object_ref(kind=4))),
+        Fixture("malformed/manifest_request_sent_item_1024.bin", "transfer", e, VALUE_OUT_OF_RANGE,
+                "sent item 1024", manifest_request(obj=object_ref(kind=3, item_index=1024))),
         Fixture("malformed/manifest_request_object_0.bin", "transfer", e, VALUE_OUT_OF_RANGE, "object_id 0",
                 manifest_request(obj=object_ref(object_id=0))),
         Fixture("malformed/manifest_request_item_1024.bin", "transfer", e, VALUE_OUT_OF_RANGE,

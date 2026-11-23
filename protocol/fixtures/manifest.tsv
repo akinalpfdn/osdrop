@@ -49,6 +49,10 @@ control/drag_offer_forwarded.bin	control	valid	49	forwarded to the target, emoji
 control/drag_offer_nfd_name.bin	control	valid	49	decomposed (NFD) name: decoders do not check the form
 control/drag_offer_max_size.bin	control	valid	49	DragOffer of exactly 65536 bytes
 control/drag_result_dropped.bin	control	valid	50	DragResult dropped
+control/send_offer_two.bin	control	valid	80	a file and a folder sent to one member
+control/send_offer_apk.bin	control	valid	80	an APK sent to a phone
+control/send_result_received.bin	control	valid	81	SendResult received
+control/send_result_declined.bin	control	valid	81	SendResult declined
 control/clipboard_text_image.bin	control	valid	64	text, HTML and an image
 control/clipboard_all_formats.bin	control	valid	64	every format
 malformed/control_empty.bin	control	error	3	empty input
@@ -182,6 +186,12 @@ malformed/drag_offer_name_nul.bin	control	error	9	name contains NUL
 malformed/drag_offer_name_cut.bin	control	error	3	name cut short
 malformed/drag_result_id_0.bin	control	error	8	drag_id 0
 malformed/drag_result_outcome_4.bin	control	error	8	outcome 4
+malformed/send_offer_id_0.bin	control	error	8	send_id 0
+malformed/send_offer_no_items.bin	control	error	8	item_count 0
+malformed/send_offer_reserved.bin	control	error	8	reserved is 1
+malformed/send_offer_item_kind_3.bin	control	error	8	item kind 3
+malformed/send_result_id_0.bin	control	error	8	send_id 0
+malformed/send_result_outcome_4.bin	control	error	8	outcome 4
 malformed/clipboard_id_0.bin	control	error	8	clip_id 0
 malformed/clipboard_no_formats.bin	control	error	8	format_count 0
 malformed/clipboard_6_formats.bin	control	error	8	format_count 6
@@ -206,6 +216,7 @@ malformed/pointer_motion_cut.bin	input	error	3	capture time cut short
 transfer/transfer_hello.bin	transfer	valid	129	TransferHello
 transfer/manifest_request_drag.bin	transfer	valid	130	manifest of dragged item 1
 transfer/manifest_request_last_item.bin	transfer	valid	130	dragged item 1023
+transfer/manifest_request_sent.bin	transfer	valid	130	manifest of sent item 2
 transfer/manifest_request_clipboard_files.bin	transfer	valid	130	manifest of the clipboard's files
 transfer/manifest_single_file.bin	transfer	valid	131	a file item's single entry
 transfer/manifest_tree.bin	transfer	valid	131	a folder with a subfolder, an executable and a link, not the last part
@@ -227,7 +238,8 @@ malformed/transfer_hello_zero_token.bin	transfer	error	8	token all zeros
 malformed/transfer_hello_stream_0.bin	transfer	error	8	stream_id 0
 malformed/transfer_hello_cut.bin	transfer	error	3	stream_id cut short
 malformed/manifest_request_id_0.bin	transfer	error	8	request_id 0
-malformed/manifest_request_kind_3.bin	transfer	error	8	object_kind 3
+malformed/manifest_request_kind_4.bin	transfer	error	8	object_kind 4
+malformed/manifest_request_sent_item_1024.bin	transfer	error	8	sent item 1024
 malformed/manifest_request_object_0.bin	transfer	error	8	object_id 0
 malformed/manifest_request_item_1024.bin	transfer	error	8	dragged item 1024
 malformed/manifest_request_format_0.bin	transfer	error	8	clipboard format 0
