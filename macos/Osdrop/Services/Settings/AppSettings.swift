@@ -33,6 +33,11 @@ final class AppSettings: InputPreferencesStoring {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Key.onboarding) }
     }
 
+    /// The menu opened by itself once, at the first launch, to show where Osdrop lives.
+    var hasShownMenu: Bool {
+        didSet { defaults.set(hasShownMenu, forKey: Key.shownMenu) }
+    }
+
     /// The name other computers see; nil: the Mac's own name.
     var deviceName: String? {
         didSet { defaults.set(deviceName, forKey: Key.deviceName) }
@@ -91,6 +96,7 @@ final class AppSettings: InputPreferencesStoring {
         checksForUpdates = defaults.object(forKey: Key.checksForUpdates) as? Bool ?? true
         lastUpdateCheck = defaults.object(forKey: Key.lastUpdateCheck) as? Date
         hasCompletedOnboarding = defaults.bool(forKey: Key.onboarding)
+        hasShownMenu = defaults.bool(forKey: Key.shownMenu)
         deviceName = defaults.string(forKey: Key.deviceName)
         input = Self.loadInput(from: defaults)
         pointerSpeeds = Self.loadSpeeds(from: defaults)
@@ -166,6 +172,7 @@ final class AppSettings: InputPreferencesStoring {
         static let checksForUpdates = "checkForUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
         static let onboarding = "completedOnboarding"
+        static let shownMenu = "shownMenu"
         static let deviceName = "deviceName"
         static let sharesClipboard = "shareClipboard"
         static let clipboardFilesLimit = "clipboardFilesLimit"
