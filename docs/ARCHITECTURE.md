@@ -374,10 +374,12 @@ Built in Phase 1 (`macos/Osdrop/Services/Input`):
   `BackgroundCursorHider` (the private `SetsCursorInBackground` property, looked up at run time).
   The cursor stays frozen where it crossed and is never warped while captured: macOS adds a
   warp's distance to the next event's delta. Coming home, it is warped to where it comes back
-  before the mouse is reconnected, which spares the quarter second macOS ignores the mouse for
-  after a warp, and the next movement's delta is dropped. macOS reconnects the mouse and the
-  cursor when another app comes to the front, so the capture watchdog compares the cursor with
-  where it was frozen every 100 ms and freezes it again where it is (`CursorFreeze`).
+  before the mouse is reconnected, and the next movement's delta is dropped. After a warp macOS
+  ignores the mouse for the local events suppression interval, a quarter second by default, and
+  reconnecting the mouse does not end that; the injector keeps a combined session event source
+  whose interval is zero for as long as it runs, which removes the pause. macOS reconnects the
+  mouse and the cursor when another app comes to the front, so the capture watchdog compares the
+  cursor with where it was frozen every 100 ms and freezes it again where it is (`CursorFreeze`).
 - **Ways out of a capture** — the release chord ⌃⌥⌘⎋ (handled in the tap callback); the in-app
   watchdog, which ends a capture whose owner stopped confirming it for 1 s or whose tap stayed
   disabled; and `OsdropCaptureGuard`, a separate process that ends Osdrop after 2 s without a

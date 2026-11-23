@@ -8,6 +8,9 @@ import os
 final class CGEventInjector: InputInjecting {
     private let factory: EventFactory
     private let poster: any EventPosting
+    /// Kept for as long as the injector lives: while it does, macOS does not ignore the mouse after
+    /// `placeCursor` warps the cursor (see `makeWarpSource`).
+    private let warpSource: CGEventSource?
     private let layout: () -> KeyboardPhysicalLayout
     private let now: () -> TimeInterval
 
@@ -22,6 +25,7 @@ final class CGEventInjector: InputInjecting {
     init(
         poster: any EventPosting = HIDEventPoster(),
         source: CGEventSource? = CGEventInjector.makeSource(),
+        warpSource: CGEventSource? = CGEventInjector.makeWarpSource(),
         cursorLocation: CGPoint = CGEventInjector.currentCursorLocation(),
         doubleClickInterval: TimeInterval = NSEvent.doubleClickInterval,
         layout: @escaping () -> KeyboardPhysicalLayout = KeyboardPhysicalLayout.current,
@@ -29,6 +33,7 @@ final class CGEventInjector: InputInjecting {
     ) {
         self.factory = EventFactory(source: source)
         self.poster = poster
+        self.warpSource = warpSource
         self.cursorLocation = cursorLocation
         self.clickCounter = ClickCounter(interval: doubleClickInterval, radius: Tunables.Input.clickRadius)
         self.layout = layout
@@ -39,6 +44,17 @@ final class CGEventInjector: InputInjecting {
     nonisolated static func makeSource() -> CGEventSource? {
         let source = CGEventSource(stateID: .hidSystemState)
         source?.userData = Tunables.Input.injectedEventTag
+        source?.localEventsSuppressionInterval = 0
+        return source
+    }
+
+    /// After `CGWarpMouseCursorPosition` macOS ignores the mouse for the combined session state's
+    /// local events suppression interval, a quarter second by default; reconnecting the mouse
+    /// right after the warp does not end it. A source of that state with the interval at zero
+    /// removes the pause while the source is alive (Defi measured 84 suppressed movements per
+    /// warp before, none after; Barrier sets the same interval with the deprecated global call).
+    nonisolated static func makeWarpSource() -> CGEventSource? {
+        let source = CGEventSource(stateID: .combinedSessionState)
         source?.localEventsSuppressionInterval = 0
         return source
     }
