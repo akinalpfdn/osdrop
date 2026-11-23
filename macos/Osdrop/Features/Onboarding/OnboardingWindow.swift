@@ -8,7 +8,7 @@ final class OnboardingWindow {
     private var closeObserver: (any NSObjectProtocol)?
     private let viewModel: OnboardingViewModel
 
-    /// Runs once, the next time the window closes, by its button or its close box.
+    /// Runs once, after the window next closes by its button or its close box.
     var onNextClose: (() -> Void)?
 
     init(viewModel: OnboardingViewModel) {
@@ -52,8 +52,9 @@ final class OnboardingWindow {
     }
 
     private func closing() {
-        let action = onNextClose
+        guard let action = onNextClose else { return }
         onNextClose = nil
-        action?()
+        // Once the window is gone, so it cannot take the focus back from what the action opens.
+        Task { action() }
     }
 }

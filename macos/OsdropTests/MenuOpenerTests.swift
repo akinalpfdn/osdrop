@@ -39,9 +39,17 @@ struct MenuOpenerTests {
         #expect(TestHost.isRunning)
     }
 
+    @Test("A private AppKit member counts only with the signature it was written for")
+    func checksSignatures() {
+        let description = NSSelectorFromString("description")
+        #expect(MenuBarIcon.has(description, signature: "@16@0:8", in: NSObject.self))
+        #expect(!MenuBarIcon.has(description, signature: "v24@0:8d16", in: NSObject.self))
+        #expect(!MenuBarIcon.has(NSSelectorFromString("noSuchMember"), signature: "@16@0:8", in: NSObject.self))
+    }
+
     private func makeOpener() -> MenuOpener {
         let clicks = clicks
-        return MenuOpener(settings: AppSettings(defaults: defaults), click: { clicks.count += 1 })
+        return MenuOpener(settings: AppSettings(defaults: defaults), show: { clicks.count += 1 })
     }
 }
 
