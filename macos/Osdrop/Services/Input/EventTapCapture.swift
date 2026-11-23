@@ -154,8 +154,8 @@ final class EventTapCapture: InputCapturing {
                 state.ignoresNextDelta = true
                 return state.looseCount
             }
-            // After the warp: reconnecting the mouse now also ends the quarter second macOS would
-            // otherwise ignore the mouse for after a warp, which kept the cursor at the edge.
+            // After the warp, so the mouse moves the cursor on from where it came home. The pause
+            // macOS would add after the warp is the injector's to prevent (`makeWarpSource`).
             CGAssociateMouseAndMouseCursorPosition(1)
             cursor.show()
             captureGuard.send(.disarm)

@@ -289,9 +289,8 @@ final class InputController {
             startHeartbeat()
         case .captureEnded(let device, let cursor, let reason, let capsLock):
             stopHeartbeat()
-            // Warped while still frozen: reconnecting the mouse afterwards spares the quarter second
-            // macOS would ignore it for after a warp, and the capture drops the warp from the next
-            // movement's delta.
+            // Warped while still frozen, then reconnected; the capture drops the warp from the next
+            // movement's delta, and the injector keeps macOS from ignoring the mouse after it.
             injector.placeCursor(at: ControlCoordinates.point(cursor))
             capture.setMode(.observe)
             setCapsLock(capsLock)

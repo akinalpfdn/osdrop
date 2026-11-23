@@ -35,6 +35,14 @@ struct InjectorTests {
             layout: { .ansi }, now: { clock.withLock { $0 } })
     }
 
+    @Test("The sources it keeps never make macOS ignore the mouse after a warp or an injection")
+    func noSuppression() throws {
+        let warp = try #require(CGEventInjector.makeWarpSource())
+        #expect(warp.localEventsSuppressionInterval == 0)
+        let inject = try #require(CGEventInjector.makeSource())
+        #expect(inject.localEventsSuppressionInterval == 0)
+    }
+
     @Test("Moves carry the location and the delta from the previous position")
     func move() throws {
         injector.moveCursor(to: CGPoint(x: 110, y: 95))
