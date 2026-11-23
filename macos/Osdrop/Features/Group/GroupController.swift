@@ -100,6 +100,7 @@ final class GroupController {
     private(set) var clipboard: ClipboardController?
     /// Transfers of dragged files, for the menu.
     private(set) var transfers: TransfersController?
+    private var sendInbox: SendInbox?
     private(set) var input: InputController?
     /// Every member's monitors and placement, for the arrangement editor.
     private(set) var arrangement: [LayoutComputer] = []
@@ -368,6 +369,7 @@ final class GroupController {
         mesh = nil
         clipboard = nil
         transfers = nil
+        sendInbox = nil
         input = nil
         members = []
         arrangement = []
@@ -425,7 +427,43 @@ final class GroupController {
                         Log.drag.error("Withdrawing a drag failed: \(String(describing: error), privacy: .public)")
                     }
                 }
+            },
+            withdrawSend: { sendID in
+                Task {
+                    do throws(CoreError) {
+                        try await mesh.withdraw(.sent, objectID: sendID)
+                    } catch {
+                        Log.drag.error("Withdrawing a send failed: \(String(describing: error), privacy: .public)")
+                    }
+                }
             })
+        sendInbox = SendInbox(
+            mesh: mesh, transfers: { [weak self] in self?.transfers },
+            folder: { FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0] })
+    }
+
+    /// Sends files and folders to a connected phone (DEVPLAN Phase 20); the transfers list shows
+    /// how they go, and a notice says when the phone did not take them.
+    func sendFiles(_ urls: [URL], to device: DeviceID) {
+        guard let mesh, !urls.isEmpty else { return }
+        let files = urls.map { url in
+            let type = (try? url.resourceValues(forKeys: [.typeIdentifierKey]))?.typeIdentifier
+            return DraggedFile(url: url, contentType: type ?? "public.data")
+        }
+        Task {
+            do throws(CoreError) {
+                let sendID = try await mesh.send(files, to: device)
+                transfers?.offeredSend(sendID: sendID, names: urls.map(\.lastPathComponent))
+            } catch {
+                Log.drag.error("Sending files failed: \(String(describing: error), privacy: .public)")
+                notSent(to: device)
+            }
+        }
+    }
+
+    private func notSent(to device: DeviceID) {
+        services.notifier.notify(
+            title: String(localized: "transfers.notify.notSent"), body: name(of: device))
     }
 
     // MARK: - Input control
@@ -500,9 +538,20 @@ final class GroupController {
             log(level, message)
         case .clipboardChanged, .contentReceived:
             clipboard?.handle(event)
-        case .transferFinished:
+        case .transferFinished(let id, let result):
             clipboard?.handle(event)
             transfers?.handle(event)
+            if case .success = result {
+                sendInbox?.finished(id, succeeded: true)
+            } else {
+                sendInbox?.finished(id, succeeded: false)
+            }
+        case .sendArrived(let device, let sendID, let items):
+            sendInbox?.arrived(from: device, sendID: sendID, items: items)
+        case .sendFinished(let device, _, let outcome):
+            if outcome != .received {
+                notSent(to: device)
+            }
         case .transferProgress:
             clipboard?.handle(event)
             transfers?.handle(event)

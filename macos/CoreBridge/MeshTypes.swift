@@ -213,6 +213,37 @@ public enum MeshEvent: Sendable, Equatable {
     case contentReceived(id: UInt64, Result<Data, CoreError>)
     /// A member fetches an item this Mac offered: about every 100 ms, and once at the end.
     case sendProgress(SendProgress)
+    /// A member sent this Mac files without a drag (a phone): fetch each item with
+    /// `TransferItem(kind: .sent, objectID: sendID, index:)`, then `answerSend`.
+    case sendArrived(DeviceID, sendID: UInt64, items: [ArrivingItem])
+    /// A send from this Mac ended: the member's answer, or `.failed`.
+    case sendFinished(DeviceID, sendID: UInt64, SendOutcome)
+}
+
+/// How files sent to one member ended.
+public enum SendOutcome: Sendable, Equatable {
+    /// Every item arrived.
+    case received
+    /// The member did not take them, or may not get files from this Mac.
+    case declined
+    /// An item could not travel, or the session ended first.
+    case failed
+
+    init(_ raw: osdrop_send_outcome) {
+        switch raw {
+        case OSDROP_SEND_RECEIVED: self = .received
+        case OSDROP_SEND_DECLINED: self = .declined
+        default: self = .failed
+        }
+    }
+
+    var raw: osdrop_send_outcome {
+        switch self {
+        case .received: OSDROP_SEND_RECEIVED
+        case .declined: OSDROP_SEND_DECLINED
+        case .failed: OSDROP_SEND_FAILED
+        }
+    }
 }
 
 /// A position in 1/16 point of a computer's native desktop (docs/PROTOCOL.md "Conventions").
@@ -552,6 +583,8 @@ public struct TransferItem: Sendable, Hashable {
         case drag
         /// `objectID` is the clip ID, `index` the format code.
         case clipboard
+        /// `objectID` is the send ID, `index` the item in the send.
+        case sent
     }
 
     public let kind: Kind
@@ -565,9 +598,13 @@ public struct TransferItem: Sendable, Hashable {
     }
 
     init(_ raw: osdrop_object_ref) {
-        self.init(
-            kind: raw.kind == OSDROP_OBJECT_CLIPBOARD ? .clipboard : .drag, objectID: raw.object_id,
-            index: raw.item_index)
+        let kind: Kind =
+            switch raw.kind {
+            case OSDROP_OBJECT_CLIPBOARD: .clipboard
+            case OSDROP_OBJECT_SENT: .sent
+            default: .drag
+            }
+        self.init(kind: kind, objectID: raw.object_id, index: raw.item_index)
     }
 
     var raw: osdrop_object_ref {
@@ -580,6 +617,7 @@ extension TransferItem.Kind {
         switch self {
         case .drag: OSDROP_OBJECT_DRAG
         case .clipboard: OSDROP_OBJECT_CLIPBOARD
+        case .sent: OSDROP_OBJECT_SENT
         }
     }
 }

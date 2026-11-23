@@ -92,6 +92,7 @@ enum Theme {
         static let mac = "laptopcomputer"
         static let pc = "pc"
         static let phone = "smartphone"
+        static let sendFiles = "square.and.arrow.up"
         static let remove = "minus.circle"
         static let pair = "link.badge.plus"
         static let failed = "xmark.octagon.fill"
