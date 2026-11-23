@@ -38,10 +38,19 @@ struct OsdropApp: App {
                 settings: dependencies.settings, group: dependencies.group, updates: updates,
                 launchAtLogin: SystemLaunchAtLogin(), logs: UnifiedLogExporter(), showPermissions: onboarding.show,
                 awdl: dependencies.awdl))
+        // Not while hosting the unit tests: they would use up the user's first launch.
+        let menu = TestHost.isRunning ? nil : MenuOpener(settings: dependencies.settings)
         AppDelegate.onLaunch = {
-            if onboardingModel.needsAttention { onboarding.show() }
+            if onboardingModel.needsAttention {
+                // After the permissions window, not under it: the menu closes when a window takes focus.
+                onboarding.onNextClose = { menu?.openAtFirstLaunch() }
+                onboarding.show()
+            } else {
+                menu?.openAtFirstLaunch()
+            }
             Task { await updates.checkIfDue() }
         }
+        AppDelegate.onReopen = { menu?.open() }
         #if DEBUG
             _developer = State(initialValue: DeveloperInputViewModel(dependencies: dependencies))
             _developerDrag = State(initialValue: DeveloperDragViewModel(dependencies: dependencies))
@@ -89,14 +98,21 @@ private struct MenuBarLabel: View {
     }
 }
 
-/// Runs the launch work once AppKit is ready to show windows.
+/// Runs the launch work once AppKit is ready to show windows, and opens the menu when Osdrop is
+/// opened again while it runs (from Finder, Launchpad or Spotlight).
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var onLaunch: (() -> Void)?
+    @MainActor static var onReopen: (() -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MainActor.assumeIsolated {
             Self.onLaunch?()
             Self.onLaunch = nil
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { Self.onReopen?() }
+        return false  // the menu is the answer; no window of a scene opens
     }
 }

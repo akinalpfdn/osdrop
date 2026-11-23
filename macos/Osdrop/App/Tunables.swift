@@ -152,6 +152,15 @@ enum Tunables {
         static let accessibilityPollInterval: Duration = .seconds(2)
     }
 
+    enum Menu {
+        /// Right after launch the menu bar icon may not exist yet: opening the menu by itself is
+        /// tried this many times, this far apart.
+        static let openAttempts = 20
+        static let openRetry: Duration = .milliseconds(100)
+        /// After the click, before looking whether the menu's window shows.
+        static let openCheck: Duration = .milliseconds(500)
+    }
+
     #if DEBUG
         enum Developer {
             static let captureDurations: [Int] = [3, 5, 10]

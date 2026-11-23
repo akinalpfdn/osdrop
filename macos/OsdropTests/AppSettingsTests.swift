@@ -25,6 +25,7 @@ struct AppSettingsTests {
         #expect(settings.sharesClipboard)
         #expect(settings.clipboardFilesLimit == Tunables.Clipboard.filesLimit)
         #expect(!settings.marksReceivedFiles, "received files are not marked (user decision)")
+        #expect(!settings.hasShownMenu)
     }
 
     @Test("Changes are saved and read back, within core's limits")
@@ -38,6 +39,7 @@ struct AppSettingsTests {
         settings.sharesClipboard = false
         settings.clipboardFilesLimit = 1024 * 1024 * 1024
         settings.marksReceivedFiles = true
+        settings.hasShownMenu = true
 
         let reread = AppSettings(defaults: defaults)
         #expect(reread.input == settings.input)
@@ -46,6 +48,7 @@ struct AppSettingsTests {
         #expect(!reread.sharesClipboard)
         #expect(reread.clipboardFilesLimit == 1024 * 1024 * 1024)
         #expect(reread.marksReceivedFiles)
+        #expect(reread.hasShownMenu)
     }
 
     @Test("Values written by hand outside the limits fall back")

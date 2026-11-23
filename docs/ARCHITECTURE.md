@@ -311,7 +311,10 @@ Turkish.
 
 - **Menu bar panel.** Where the mouse and keyboard are, the lock and clipboard sharing as quick
   toggles, an update when one is out, the group, and Settings and Quit as icons. Another icon
-  shows while another computer controls the Mac.
+  shows while another computer controls the Mac. It opens by itself once at the first launch
+  (after the permissions window when that shows) and whenever Osdrop is opened again while it
+  runs. SwiftUI has no call for this: `MenuOpener` clicks the icon's button up to macOS 26, and
+  from macOS 27 begins AppKit's expanded interface session through a private call it checks first.
 - **Settings.** `AppSettings` keeps every user setting in UserDefaults and saves each change at
   once; `SettingsViewModel` hands input settings, pointer speeds and chords to the running
   `InputController`, permissions and the arrangement to the group, and the name to a restart of
@@ -338,7 +341,8 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
   newest that ended, a notification when one ends; `TransfersViewModel`, from the engine's
   TRANSFER_* and SEND_PROGRESS events), copied files on their way, the group and nearby
   computers, and Settings and Quit as icons. Problems come first: an engine that did not start, the input service, an update.
-  A second start of Osdrop opens the running one's panel (`SingleInstance`).
+  A second start of Osdrop opens the running one's panel (`SingleInstance`), and so does the
+  first start on a PC, which is usually the installer's last step (`AppSettings.HasShownPanel`).
 - **Settings.** The Mac's tabs: General (start with Windows through the Run key, daily update
   check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
   permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds,

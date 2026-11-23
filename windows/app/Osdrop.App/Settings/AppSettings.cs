@@ -33,6 +33,10 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial DateTimeOffset? LastUpdateCheck { get; set; }
 
+    /// <summary>The panel opened by itself once, at the first start, to show where Osdrop lives.</summary>
+    [ObservableProperty]
+    public partial bool HasShownPanel { get; set; }
+
     /// <summary>Copies are shared with members whose clipboard permission is on.</summary>
     [ObservableProperty]
     public partial bool SharesClipboard { get; set; } = true;
@@ -127,6 +131,7 @@ public sealed partial class AppSettings : ObservableObject
             DeviceName = string.IsNullOrWhiteSpace(stored.DeviceName) ? null : stored.DeviceName;
             ChecksForUpdates = stored.ChecksForUpdates;
             LastUpdateCheck = stored.LastUpdateCheck;
+            HasShownPanel = stored.HasShownPanel;
             SharesClipboard = stored.SharesClipboard;
             // A damaged or older value falls back to the default.
             ClipboardFilesLimit = AppTunables.ClipboardFilesLimits.Contains(stored.ClipboardFilesLimit)
@@ -157,7 +162,7 @@ public sealed partial class AppSettings : ObservableObject
         var stored = new Stored(
             DeviceName, ChecksForUpdates, LastUpdateCheck, SharesClipboard, ClipboardFilesLimit, ModifierMapping,
             CrossesImmediately, CrossingModifiers, PushMilliseconds, new Dictionary<string, uint>(PointerSpeeds),
-            ReturnHotkey, LockHotkey, RespectsGameCursor);
+            ReturnHotkey, LockHotkey, RespectsGameCursor, HasShownPanel);
         try
         {
             _ = Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -182,7 +187,8 @@ public sealed partial class AppSettings : ObservableObject
         Dictionary<string, uint>? PointerSpeeds = null,
         Hotkey? ReturnHotkey = null,
         Hotkey? LockHotkey = null,
-        bool RespectsGameCursor = true);
+        bool RespectsGameCursor = true,
+        bool HasShownPanel = false);
 
     /// <summary>Stored chords, or the defaults when they are missing, damaged or the same.</summary>
     private static (Hotkey Return, Hotkey Lock) Usable(Hotkey? returnHome, Hotkey? lockInput) =>
