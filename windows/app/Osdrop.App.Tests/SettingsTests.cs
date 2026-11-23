@@ -140,13 +140,16 @@ public sealed class SettingsTests
         try
         {
             var first = AppSettings.Load(path);
+            Assert.False(first.HasShownPanel); // the first start opens the panel
             first.DeviceName = "Studio PC";
             first.ModifierMapping = ModifierMapping.Positions;
             first.SetPointerSpeed(_laptop, 2000);
+            first.HasShownPanel = true;
             var second = AppSettings.Load(path);
             Assert.Equal("Studio PC", second.DeviceName);
             Assert.Equal(ModifierMapping.Positions, second.ModifierMapping);
             Assert.Equal(2000U, second.PointerSpeed(_laptop));
+            Assert.True(second.HasShownPanel); // later starts do not
 
             File.WriteAllText(path, """{"ClipboardFilesLimit": 7, "PushMilliseconds": 99999, "PointerSpeeds": {"x": 9}}""");
             var damaged = AppSettings.Load(path);
