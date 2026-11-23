@@ -23,6 +23,9 @@ enum Tunables {
         /// While captured, a cursor further than this (points) from where it was frozen follows the
         /// mouse again: macOS reconnects them when another app comes to the front.
         static let looseCursorDistance = 2.0
+        /// For this long after it is frozen, the cursor may still finish the movement already on
+        /// its way: macOS disconnects it from the mouse a moment after being asked.
+        static let freezeSettleTime: Duration = .milliseconds(150)
         /// Captured events buffered for a slow consumer before the oldest are dropped.
         static let eventBufferLimit = 4096
         /// How long `stop` waits for the event tap thread to finish.

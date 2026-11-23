@@ -164,6 +164,15 @@ struct CursorFreezeTests {
         #expect(CursorFreeze.isLoose(location: CGPoint(x: 756, y: 480), frozen: frozen))
     }
 
+    @Test("Right after freezing, the cursor may finish its movement; later a move means it is loose")
+    func settlesThenLoose() {
+        let frozen = CGPoint(x: 1709, y: 400)
+        let moved = CGPoint(x: 1709, y: 412)
+        #expect(CursorFreeze.check(location: frozen, frozen: frozen, frozenFor: .seconds(5)) == .still)
+        #expect(CursorFreeze.check(location: moved, frozen: frozen, frozenFor: .milliseconds(80)) == .settled(moved))
+        #expect(CursorFreeze.check(location: moved, frozen: frozen, frozenFor: .milliseconds(400)) == .loose)
+    }
+
     @Test("Coming home drops the warp from the next movement, and from nothing else")
     func dropsTheWarp() {
         let moved = CursorFreeze.droppingWarp(from: [.button(.left, isDown: true), .pointerMoved(dx: 850, dy: 3)])

@@ -172,7 +172,10 @@ final class EventTapCapture: InputCapturing {
     private func freeze() {
         CGAssociateMouseAndMouseCursorPosition(0)
         let location = CGEvent(source: nil)?.location
-        context.state.withLock { $0.frozen = location }
+        context.state.withLock { state in
+            state.frozen = location
+            state.frozenSince = .now
+        }
     }
 
     /// Runs on `transitions` only, on every healthy watchdog check of a capture. The cursor itself
@@ -180,9 +183,17 @@ final class EventTapCapture: InputCapturing {
     /// while the cursor stands still. One that moved follows the mouse again, as macOS lets it when
     /// another app comes to the front; it is frozen again where it went, never warped back.
     private func checkFrozen() {
-        guard let frozen = context.state.withLock({ $0.frozen }), let location = CGEvent(source: nil)?.location,
-            CursorFreeze.isLoose(location: location, frozen: frozen)
-        else { return }
+        let (frozen, since) = context.state.withLock { ($0.frozen, $0.frozenSince) }
+        guard let frozen, let location = CGEvent(source: nil)?.location else { return }
+        switch CursorFreeze.check(location: location, frozen: frozen, frozenFor: .now - since) {
+        case .still:
+            return
+        case .settled(let point):
+            context.state.withLock { $0.frozen = point }
+            return
+        case .loose:
+            break
+        }
         let count = context.state.withLock { state -> Int in
             state.looseCount += 1
             return state.looseCount
@@ -278,6 +289,7 @@ private final class TapContext: @unchecked Sendable {
         var hotkeys = CaptureHotkeys()
         /// While captured, once the cursor is frozen: where it is held.
         var frozen: CGPoint?
+        var frozenSince = ContinuousClock.now
         /// How often the cursor followed the mouse in this capture.
         var looseCount = 0
         /// The next movement carries the warp that put the cursor back where it came home.

@@ -89,9 +89,21 @@ enum TapPolicy {
 
 /// Whether the cursor stayed where it was frozen while this Mac's input is used elsewhere.
 enum CursorFreeze {
-    /// Whether a captured event at `location` shows the cursor away from `frozen`. While the mouse
-    /// is disconnected from the cursor, every event carries the same location; one that moved means
-    /// the cursor follows the mouse again.
+    enum Check: Equatable {
+        case still
+        /// It finished the movement already on its way when it was frozen: it is held here now.
+        case settled(CGPoint)
+        /// It follows the mouse again.
+        case loose
+    }
+
+    /// What the cursor at `location` says, `frozenFor` after it was frozen at `frozen`.
+    static func check(location: CGPoint, frozen: CGPoint, frozenFor: Duration) -> Check {
+        guard isLoose(location: location, frozen: frozen) else { return .still }
+        return frozenFor < Tunables.Input.freezeSettleTime ? .settled(location) : .loose
+    }
+
+    /// Whether the cursor at `location` is away from `frozen`, where it should stand still.
     static func isLoose(location: CGPoint, frozen: CGPoint) -> Bool {
         abs(location.x - frozen.x) > Tunables.Input.looseCursorDistance
             || abs(location.y - frozen.y) > Tunables.Input.looseCursorDistance
