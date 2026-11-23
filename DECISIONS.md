@@ -841,3 +841,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** macOS adds a warp's distance to the next mouse event's delta. Parking warped the cursor from the edge to the middle, which threw the cursor on the PC back to the Mac; the warp home threw it over again, about a hundred times a second (797 captures in 40 minutes, 2026-11-23). Keys reached the PC, the mouse never stayed. Subtracting the warp would be needed at both ends of every capture and is easy to get wrong.
 **Trade-offs:** The Dock and hot corners can still react to a cursor left at an edge; when that brings another app forward, the tap freezes the cursor again.
 **Revisit if:** The log shows "The cursor followed the mouse during a capture" often.
+
+---
+
+## 2026-11-23 — Work reaches dev through a branch and a pull request, without CI
+**Chosen:** User decision, correcting the entry of 2026-11-10: each piece of work is on its own branch from `dev` (`git checkout -b <branch> --no-track origin/dev`) and reaches `dev` through a pull request; no CI runs on those pull requests, and nothing is committed straight to `dev`. When a release is prepared, `dev` goes to `main` through a pull request, and CI runs there and on `main`.
+**Alternatives:** Committing straight to `dev`, as done from 2026-11-10 to 2026-11-23; CI on every pull request into `dev`.
+**Why:** On 2026-11-10 the user asked for a `dev` branch without CI. The entry of that day also dropped branches and pull requests, which the user had not asked for. CI stays off for `dev` for the reason given then: each round took 15–17 minutes.
+**Trade-offs:** Each change needs a branch and a pull request. clang-tidy findings and MSVC-only errors still surface late, on the release pull request.
+**Revisit if:** A second contributor joins; then pull requests into `dev` run CI too.

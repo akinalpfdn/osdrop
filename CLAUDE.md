@@ -39,9 +39,10 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
 ## Project-Specific Constraints
 - Production grade from the first phase: no throwaway prototypes or spikes in the codebase (user
   decision 2026-11-02). Platform risks are retired by the go/no-go phases 1–4.
-- Public repository `akinalpfdn/osdrop`. Day-to-day work is committed and pushed straight to
-  `dev`: no feature branches, no PRs, no CI (user decision, 2026-11-10). `dev` reaches `main`
-  through a PR when a release is prepared; CI runs there and on `main`.
+- Public repository `akinalpfdn/osdrop`. Each piece of work is on its own branch from `dev`
+  (`git checkout -b <branch> --no-track origin/dev`) and reaches `dev` through a pull request,
+  without CI; nothing is committed straight to `dev` (user decision, corrected 2026-11-23).
+  `dev` reaches `main` through a PR when a release is prepared; CI runs there and on `main`.
 - Work is tracked only in `.claude/phases/` and `DECISIONS.md`, not in Lore.
 - Identifier prefix: `com.akinalpfdn.osdrop`. Bonjour service type `_osdrop._tcp`.
 - Code taken from Osplay is copied at a recorded commit and owned here; security fixes in either
@@ -56,7 +57,7 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
   process return error codes, never text.
 - Every visual value comes from the platform theme source.
 - Docs and READMEs use a plain tone: no emoji, no marketing headings.
-- Before pushing to `dev`: clang-format and the tests of what changed. `scripts/lint.sh` (with
+- Before pushing a branch: clang-format and the tests of what changed. `scripts/lint.sh` (with
   clang-tidy) runs before the PR into `main`, where CI fails on formatting and lint violations.
 - Builds and checks are described in `docs/BUILDING.md` — keep it exact; it is an acceptance criterion.
 
