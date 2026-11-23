@@ -123,7 +123,7 @@ public sealed partial class GroupViewModel : ObservableObject
     /// <summary>Asks for files to send to a phone, by its name; empty when the user chose none.</summary>
     internal Func<string, IReadOnlyList<string>> PickFiles { get; set; } = PickWithDialog;
 
-    /// <summary>Sends files the user picks to a connected phone, which asks its user before it takes them.</summary>
+    /// <summary>Sends files the user picks to a connected phone, which saves them in its Downloads.</summary>
     [RelayCommand]
     private async Task SendFilesAsync(MemberItem? member)
     {

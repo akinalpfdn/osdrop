@@ -125,7 +125,7 @@ internal interface IGroupEngine
     Task CancelTransferAsync(ulong transferId);
     /// <summary>Withdraws this PC's drag: the computers fetching its items stop.</summary>
     Task WithdrawDragAsync(uint dragId);
-    /// <summary>Sends files to a connected phone; the phone asks its user before it takes them.</summary>
+    /// <summary>Sends files to a connected phone, which saves them in its Downloads.</summary>
     Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths);
     /// <summary>Withdraws a send: the phone stops fetching its items.</summary>
     Task WithdrawSendAsync(ulong sendId);
