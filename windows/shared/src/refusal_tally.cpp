@@ -13,10 +13,10 @@ std::optional<RefusalTally::Line> RefusalTally::refused(const std::string& refus
     if (now - entry.logged < kSummaryInterval) {
         return std::nullopt;
     }
-    const Line line{.refusal = refusal, .more = entry.unlogged};
+    const auto more = entry.unlogged;
     entry.logged = now;
     entry.unlogged = 0;
-    return line;
+    return Line{.refusal = refusal, .more = more};
 }
 
 std::vector<RefusalTally::Line> RefusalTally::accepted() {

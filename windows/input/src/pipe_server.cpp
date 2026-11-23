@@ -94,21 +94,8 @@ bool PipeServer::run() {
 
     const sys::UniqueHandle connected = sys::make_event(true);
     while (WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
-        OVERLAPPED overlapped{};
-        overlapped.hEvent = connected.get();
-        ResetEvent(connected.get());
-        DWORD ignored = 0;
-        if (!ConnectNamedPipe(pipe.get(), &overlapped)) {
-            const DWORD error = GetLastError();
-            if (error == ERROR_IO_PENDING) {
-                if (wait_for(pipe.get(), overlapped, ignored) != Wait::Done) {
-                    continue; // stopping, or a client that went at once
-                }
-            } else if (error != ERROR_PIPE_CONNECTED) {
-                log_.error("Waiting for a client failed: " + std::to_string(error));
-                WaitForSingleObject(stop_, 1000);
-                continue;
-            }
+        if (!wait_for_client(pipe.get(), connected.get())) {
+            continue;
         }
         if (const auto refused = refusal(pipe.get())) {
             if (const auto line = refusals_.refused(refused->who, Clock::now())) {
@@ -129,6 +116,27 @@ bool PipeServer::run() {
             log_.info("Client disconnected");
         }
         DisconnectNamedPipe(pipe.get());
+    }
+    return true;
+}
+
+bool PipeServer::wait_for_client(HANDLE pipe, HANDLE connected) {
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = connected;
+    ResetEvent(connected);
+    if (ConnectNamedPipe(pipe, &overlapped)) {
+        return true;
+    }
+    const DWORD error = GetLastError();
+    if (error == ERROR_IO_PENDING) {
+        DWORD ignored = 0;
+        // Not done: stopping, or a client that went at once.
+        return wait_for(pipe, overlapped, ignored) == Wait::Done;
+    }
+    if (error != ERROR_PIPE_CONNECTED) {
+        log_.error("Waiting for a client failed: " + std::to_string(error));
+        WaitForSingleObject(stop_, 1000);
+        return false;
     }
     return true;
 }

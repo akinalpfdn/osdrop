@@ -43,6 +43,9 @@ private:
         std::string who; ///< for the log: "a client run from C:\..."
     };
 
+    /// Waits for the next client to connect; false when the server stops, the client went at
+    /// once, or waiting failed (logged, then retried a second later).
+    [[nodiscard]] bool wait_for_client(HANDLE pipe, HANDLE connected);
     /// Why the client on the pipe may not connect; nullopt when it may.
     [[nodiscard]] std::optional<Refusal> refusal(HANDLE pipe);
     /// Tells a refused client why, and waits up to kTurnAwayLinger for it to close its end.
