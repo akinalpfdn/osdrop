@@ -102,6 +102,9 @@ typedef struct osdrop_engine_input_state {
     uint8_t notice_reason;
     uint8_t notice_refused;
     uint8_t notice_device_id[OSDROP_DEVICE_ID_SIZE];
+    /* While reachable is 0: 1 OsdropInput runs but serves the copy of Osdrop in another folder,
+       2 it runs and refused this Osdrop for another reason, 0 it is not running. */
+    uint8_t turned_away;
 } osdrop_engine_input_state;
 
 /* A chord: a key by its scan code, with modifiers held (1 Ctrl, 2 Alt, 4 Shift, 8 Windows; Ctrl,
@@ -224,6 +227,9 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_get_input_state(osdrop_engine* eng
                                                               osdrop_engine_input_state* out_state);
 /* Clears the input state's notice. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_dismiss_input_notice(osdrop_engine* engine);
+/* Connects to OsdropInput again now, without waiting out the delay after a refusal: call it once
+   the service is repaired. INPUT_CHANGED follows when the state changes. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_reconnect_input(osdrop_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

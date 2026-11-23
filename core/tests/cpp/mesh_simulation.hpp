@@ -52,6 +52,7 @@ public:
     std::vector<std::pair<std::uint32_t, protocol::TransferMessage>> transfer_messages;
     std::vector<std::uint32_t> writable;
     std::vector<std::pair<std::uint32_t, std::optional<Error>>> transfers_closed;
+    std::vector<std::string> logs;
     std::size_t connects = 0;
 
     mesh::TrustVerdict on_trust_query(const crypto::Key& /*key*/,
@@ -105,7 +106,9 @@ public:
         transfers_closed.emplace_back(stream_id, reason);
     }
     void on_stats(const DeviceId& /*device*/, const session::SessionStats& /*stats*/) override {}
-    void on_log(mesh::LogLevel /*level*/, std::string_view /*message*/) override {}
+    void on_log(mesh::LogLevel /*level*/, std::string_view message) override {
+        logs.emplace_back(message);
+    }
 };
 
 /// Records what the group layer reports to the platform.

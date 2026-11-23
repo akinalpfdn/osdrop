@@ -6,10 +6,11 @@
 // a hung engine never keeps it. Input another computer sends is injected through the same pipe.
 // Requests go out from a thread of the bridge's own, so core's thread never waits on the pipe;
 // reports come in on the pipe's reader thread and go straight to core. While OsdropInput cannot be
-// reached (the service is not installed, or not running yet), this PC tells the others it cannot
-// be controlled, and tries again every few seconds. Someone using this PC's own mouse or keyboard
-// during control takes it back, and a cursor moved by something else here is reported, so the
-// controller's cursor follows.
+// reached (the service is not installed, or not running yet) or turns this Osdrop away (it serves
+// a copy in another folder), this PC tells the others it cannot be controlled, and tries again:
+// every few seconds, and after a refusal from 2 s up to 30 s. Someone using this PC's own mouse
+// or keyboard during control takes it back, and a cursor moved by something else here is
+// reported, so the controller's cursor follows.
 
 #include <osdrop/osdrop.h>
 #include <osdrop/sys/input_client.hpp>
@@ -38,9 +39,11 @@ class InputBridge {
 public:
     /// What the shell shows; called on the bridge's threads, so they must return quickly.
     struct Listener {
-        std::function<void(bool reachable)> reachable; ///< whether OsdropInput answers
-        std::function<void(bool locked)> locked;       ///< "lock input here"
-        std::function<void(const char* message)> log;  ///< a line for the shell's log
+        /// Whether OsdropInput took this Osdrop; while not, `turned_away` is
+        /// osdrop_engine_input_state.turned_away.
+        std::function<void(bool reachable, std::uint8_t turned_away)> reachable;
+        std::function<void(bool locked)> locked;      ///< "lock input here"
+        std::function<void(const char* message)> log; ///< a line for the shell's log
         /// Before the cursor is parked at `park` for a capture; returns once ready for it.
         std::function<void(POINT park)> parking;
         /// A drag that came home could not be pressed here: the hand let go first, or
@@ -84,6 +87,9 @@ public:
     /// with this PC's own hand, and OsdropInput presses it only while that hand holds the button.
     /// Any thread.
     void press_for_drag(const osdrop_input& press);
+    /// Connects to OsdropInput again now, without waiting out a refusal's delay: the shell
+    /// repaired the service. Any thread.
+    void reconnect();
 
     /// Ends the bridge's thread; what arrives later is dropped. Before the group engine goes.
     void stop();
@@ -104,6 +110,7 @@ private:
         Chords chords;
         bool release_drag = false;
         bool drag_press = false; ///< also among `inputs`
+        bool reconnect = false;
         bool stopping = false;
     };
 
@@ -141,6 +148,7 @@ private:
     bool chords_changed_ = false;
     bool release_drag_ = false;
     bool drag_press_ = false;
+    bool reconnect_ = false;
     bool stopping_ = false;
 
     // The forwarder turns reports into core's input on the reader thread; captures move it.
@@ -156,6 +164,9 @@ private:
     // The bridge's thread only.
     std::unique_ptr<sys::InputClient> client_;
     std::optional<bool> reachable_; // as last told to core
+    std::uint8_t turned_away_ = 0;  // as last told to the shell
+    Clock::duration refused_delay_{};
+    Clock::time_point retry_at_; // no connection is tried before it, after a refusal
     bool controlled_ = false;
     bool watching_ = false;             // as last told to OsdropInput
     std::optional<Chords> chords_sent_; // as last told to OsdropInput

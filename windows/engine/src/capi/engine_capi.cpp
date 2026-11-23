@@ -293,9 +293,11 @@ public:
         }
     }
     /// From the input bridge's threads.
-    void input_reachable(bool reachable) {
-        change_input(
-            [&](osdrop_engine_input_state& state) { state.reachable = reachable ? 1 : 0; });
+    void input_reachable(bool reachable, std::uint8_t turned_away) {
+        change_input([&](osdrop_engine_input_state& state) {
+            state.reachable = reachable ? 1 : 0;
+            state.turned_away = turned_away;
+        });
     }
     void input_locked(bool locked) {
         change_input([&](osdrop_engine_input_state& state) { state.locked = locked ? 1 : 0; });
@@ -506,7 +508,10 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
     engine->input = std::make_unique<osdrop::engine::InputBridge>(
         *engine->group,
         osdrop::engine::InputBridge::Listener{
-            .reachable = [events](bool reachable) { events->input_reachable(reachable); },
+            .reachable =
+                [events](bool reachable, std::uint8_t turned_away) {
+                    events->input_reachable(reachable, turned_away);
+                },
             .locked = [events](bool locked) { events->input_locked(locked); },
             .log = [events](const char* message) { events->log(OSDROP_LOG_INFO, message); },
             .parking = [events](POINT park) { events->parking(park); },
@@ -834,6 +839,14 @@ osdrop_result osdrop_engine_dismiss_input_notice(osdrop_engine* engine) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->events.dismiss_input_notice();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_reconnect_input(osdrop_engine* engine) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->input->reconnect();
     return OSDROP_OK;
 }
 

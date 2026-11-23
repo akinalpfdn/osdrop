@@ -6,11 +6,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <random>
 #include <set>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -162,6 +164,73 @@ TEST_F(InputControl, ALostControllerLeavesNothingPressed) {
     EXPECT_TRUE(left.keys.empty());
     EXPECT_TRUE(left.buttons.empty());
     EXPECT_EQ(node(1).control_observer.controlled.back(), std::nullopt);
+}
+
+TEST_F(InputControl, ASilenceOnlyTheControlledComputerNoticedStillBringsTheCursorHome) {
+    // A Wi-Fi hiccup that only computer 1 noticed: it ends the control, and computer 0 must not
+    // keep capturing the user's input for a control that is over.
+    cross_from_0();
+    key(0, kKeyA, KeyAction::Down);
+    command(1, [this](control::Control& c) { c.on_peer_responsive(id(0), false); });
+    EXPECT_EQ(node(1).control_observer.controlled.back(), std::nullopt);
+    EXPECT_TRUE(held_after(node(1).control_observer.injected).keys.empty())
+        << "nothing stays pressed";
+    command(1, [this](control::Control& c) { c.on_peer_responsive(id(0), true); });
+    ASSERT_EQ(node(0).control_observer.ended.size(), 1U);
+    EXPECT_EQ(node(0).control_observer.ended.back().reason, CaptureEnd::Takeover);
+    EXPECT_EQ(node(0).control_observer.ended.back().cursor, at(kWidth - 1, 400))
+        << "the cursor reappears where it left";
+    EXPECT_FALSE(node(0).control->capturing());
+}
+
+TEST_F(InputControl, TheLogSaysWhereTheCursorCanCrossAndWhatItDid) {
+    const std::string zero = osdrop::mesh::short_id(id(0));
+    const std::string one = osdrop::mesh::short_id(id(1));
+    const std::string two = osdrop::mesh::short_id(id(2));
+    const auto last_crossings = [this](std::size_t on) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        const auto found = std::find_if(logs.rbegin(), logs.rend(), [](const std::string& line) {
+            return line.starts_with("Crossings: ");
+        });
+        return found == logs.rend() ? std::string() : *found;
+    };
+    const auto logged = [this](std::size_t on, const std::string& line) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        return std::find(logs.begin(), logs.end(), line) != logs.end();
+    };
+    const auto mentions = [this](std::size_t on, const std::string& part) {
+        const std::vector<std::string>& logs = node(on).observer.logs;
+        return std::any_of(logs.begin(), logs.end(), [&](const std::string& line) {
+            return line.find(part) != std::string::npos;
+        });
+    };
+    EXPECT_EQ(last_crossings(0), "Crossings: right edge of the monitor at 0,0 1000x800 to " + one);
+    EXPECT_EQ(last_crossings(1), "Crossings: left edge of the monitor at 0,0 1000x800 to " + zero +
+                                     "; right edge of the monitor at 0,0 1000x800 to " + two);
+
+    button(0, 0, ButtonAction::Down);
+    cross_from_0();
+    EXPECT_TRUE(logged(0, "A push toward " + one + " was held back: a mouse button is down"));
+    button(0, 0, ButtonAction::Up);
+
+    // Crossings and the user's own ways home are not logged: Copy diagnostics takes the newest
+    // lines, and frequent crossings would push everything else out of them.
+    cross_from_0();
+    command(0, [](control::Control& c) { c.return_home(protocol::LeaveReason::ReleasedByHotkey); });
+    cross_from_0();
+    move(0, kWidth - 1, 400, -10, 0); // pushed back
+    EXPECT_FALSE(mentions(0, "The cursor"));
+    EXPECT_FALSE(mentions(1, "Control by"));
+
+    cross_from_0();
+    move(1, 500, 500, 1, 0); // someone moves computer 1's own mouse
+    EXPECT_TRUE(logged(0, "The cursor came back from " + one + ", its control ended there"));
+    EXPECT_TRUE(logged(1, "Control by " + zero +
+                              " ended: this computer's own mouse or keyboard took over"));
+
+    command(0, [this](control::Control& c) { c.on_peer_responsive(id(1), false); });
+    EXPECT_EQ(last_crossings(0), "Crossings: no edge of this computer leads to another one (" +
+                                     one + " is not answering)");
 }
 
 TEST_F(InputControl, RefusalsSendTheCursorHome) {

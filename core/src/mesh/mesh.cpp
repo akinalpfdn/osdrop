@@ -12,16 +12,6 @@ namespace {
 
 constexpr std::size_t kLoggedIdBytes = 4;
 
-std::string short_id(const DeviceId& id) {
-    constexpr std::string_view kHex = "0123456789abcdef";
-    std::string text;
-    for (std::size_t i = 0; i < kLoggedIdBytes; ++i) {
-        text.push_back(kHex.at(id.at(i) >> 4U));
-        text.push_back(kHex.at(id.at(i) & 0x0FU));
-    }
-    return text;
-}
-
 bool is_zero(const protocol::Id& id) {
     return std::ranges::all_of(id, [](std::uint8_t byte) { return byte == 0; });
 }
@@ -33,6 +23,16 @@ bool blocks_redial(std::optional<Error> reason) {
 }
 
 } // namespace
+
+std::string short_id(const DeviceId& id) {
+    constexpr std::string_view kHex = "0123456789abcdef";
+    std::string text;
+    for (std::size_t i = 0; i < kLoggedIdBytes; ++i) {
+        text.push_back(kHex.at(id.at(i) >> 4U));
+        text.push_back(kHex.at(id.at(i) & 0x0FU));
+    }
+    return text;
+}
 
 struct Mesh::Peer {
     DeviceId id{};

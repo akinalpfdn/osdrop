@@ -39,6 +39,9 @@ using session::SessionStats;
 using session::TrustDecision;
 using session::TrustVerdict;
 
+/// The first bytes of a device ID in hex, as the logs name a computer.
+[[nodiscard]] std::string short_id(const DeviceId& id);
+
 struct PeerAddress {
     std::string host;
     std::uint16_t port = 0;

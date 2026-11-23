@@ -30,3 +30,6 @@ Osdrop behaves predictably through everyday disruptions.
   (user report); R5, R6, R9–R11 not run (user: edge cases, assumed). Open: R12, the two-hour run,
   deferred by the user (2026-11-21) to a day the PC stays on for two hours.
 
+- User decision (2026-11-21): the two-hour run R12 is not needed; a look at the running apps'
+  memory replaces it ("a leak would show anyway"). Mac: flat at 52 MB after three hours (TESTING
+  Runs). The phase closes once the PC's numbers are in.

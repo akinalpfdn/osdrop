@@ -98,4 +98,16 @@ public sealed class ControlViewModelTests
         await control.RefreshAsync();
         Assert.False(control.HasServiceProblem);
     }
+
+    [Fact]
+    public async Task AServiceOfAnotherCopyIsNamedAndRepairingItReconnectsAtOnce()
+    {
+        (FakeEngine engine, _, ControlViewModel control) = await MakeAsync(InputServiceState.Running);
+        engine.InputState = new InputState(IsReachable: false, false, null, null, null, ServesOtherCopy: true);
+        await control.RefreshAsync();
+        Assert.Equal(Localization.Strings.ServiceOtherCopy, control.ServiceProblem);
+
+        await control.RepairCommand.ExecuteAsync(null);
+        Assert.Equal(1, engine.InputReconnects);
+    }
 }

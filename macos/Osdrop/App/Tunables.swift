@@ -20,6 +20,12 @@ enum Tunables {
         /// Watchdog checks in a row that may find the event tap disabled before capture ends;
         /// the tap callback normally turns it back on within one.
         static let tapLostChecks = 3
+        /// While captured, a cursor further than this (points) from where it was frozen follows the
+        /// mouse again: macOS reconnects them when another app comes to the front.
+        static let looseCursorDistance = 2.0
+        /// For this long after it is frozen, the cursor may still finish the movement already on
+        /// its way: macOS disconnects it from the mouse a moment after being asked.
+        static let freezeSettleTime: Duration = .milliseconds(150)
         /// Captured events buffered for a slow consumer before the oldest are dropped.
         static let eventBufferLimit = 4096
         /// How long `stop` waits for the event tap thread to finish.
@@ -144,6 +150,15 @@ enum Tunables {
         /// macOS posts no reliable notification when Accessibility access changes, so it is
         /// re-read on this interval while the app runs.
         static let accessibilityPollInterval: Duration = .seconds(2)
+    }
+
+    enum Menu {
+        /// Right after launch the menu bar icon may not exist yet: opening the menu by itself is
+        /// tried this many times, this far apart.
+        static let openAttempts = 20
+        static let openRetry: Duration = .milliseconds(100)
+        /// After the click, before looking whether the menu's window shows.
+        static let openCheck: Duration = .milliseconds(500)
     }
 
     #if DEBUG

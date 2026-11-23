@@ -55,16 +55,14 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     tidy_extra+=("--extra-arg=-isysroot$(xcrun --show-sdk-path)")
 fi
 
+# Configured every time: a compile database from before a source file was added leaves that file
+# out, and clang-tidy then passes here while CI fails on it (refusal_tally.cpp, release 0.1.1).
 echo "==> clang-tidy ${CLANG_TIDY_VERSION} (core)"
-if [[ ! -f core/build/debug/compile_commands.json ]]; then
-    (cd core && cmake --preset debug >/dev/null)
-fi
+(cd core && cmake --preset debug >/dev/null)
 python3 scripts/run_clang_tidy.py core/build/debug core/src -- ${tidy_extra[@]+"${tidy_extra[@]}"}
 
 echo "==> clang-tidy ${CLANG_TIDY_VERSION} (portable Windows libraries)"
-if [[ ! -f windows/build/portable/compile_commands.json ]]; then
-    (cd windows && cmake --preset portable >/dev/null)
-fi
+(cd windows && cmake --preset portable >/dev/null)
 python3 scripts/run_clang_tidy.py windows/build/portable windows/shared -- ${tidy_extra[@]+"${tidy_extra[@]}"}
 
 echo "All checks passed."

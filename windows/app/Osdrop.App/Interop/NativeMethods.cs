@@ -140,4 +140,8 @@ internal static unsafe partial class NativeMethods
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_dismiss_input_notice")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult DismissInputNotice(nint engine);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_reconnect_input")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult ReconnectInput(nint engine);
 }

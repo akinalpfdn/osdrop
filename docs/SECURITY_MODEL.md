@@ -109,7 +109,8 @@ own process but needs an Authenticode-signed binary, which the project does not 
   clients are rejected. A client must run in the same session, as the session's user (checked by
   identification-level impersonation), and be `Osdrop.exe` or `OsdropInputTool.exe` from
   `OsdropInput`'s own folder (checked by the client's process image), which only an administrator
-  can write to once installed under Program Files.
+  can write to once installed under Program Files. A refused client is told which check failed (a
+  one-byte reason, nothing about the session or its user) and nothing else.
 - **Requests** are a small versioned set with every value bounds-checked (positions, buttons,
   wheel amounts, scan codes that exist on a keyboard). Injection is accepted only while the client
   controls this PC or captures its input, and whatever the client pressed is released when control

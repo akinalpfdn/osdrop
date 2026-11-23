@@ -86,3 +86,36 @@ enum TapPolicy {
     }
 
 }
+
+/// Whether the cursor stayed where it was frozen while this Mac's input is used elsewhere.
+enum CursorFreeze {
+    enum Check: Equatable {
+        case still
+        /// It finished the movement already on its way when it was frozen: it is held here now.
+        case settled(CGPoint)
+        /// It follows the mouse again.
+        case loose
+    }
+
+    /// What the cursor at `location` says, `frozenFor` after it was frozen at `frozen`.
+    static func check(location: CGPoint, frozen: CGPoint, frozenFor: Duration) -> Check {
+        guard isLoose(location: location, frozen: frozen) else { return .still }
+        return frozenFor < Tunables.Input.freezeSettleTime ? .settled(location) : .loose
+    }
+
+    /// Whether the cursor at `location` is away from `frozen`, where it should stand still.
+    static func isLoose(location: CGPoint, frozen: CGPoint) -> Bool {
+        abs(location.x - frozen.x) > Tunables.Input.looseCursorDistance
+            || abs(location.y - frozen.y) > Tunables.Input.looseCursorDistance
+    }
+
+    /// `inputs` with the delta of the first pointer movement dropped: macOS adds a warp's distance
+    /// to the next movement, and the cursor was just warped to where it came home. `dropped` says
+    /// whether there was a movement to drop it from.
+    static func droppingWarp(from inputs: [InputEvent]) -> (inputs: [InputEvent], dropped: Bool) {
+        guard let index = inputs.firstIndex(where: \.isPointerMotion) else { return (inputs, false) }
+        var inputs = inputs
+        inputs[index] = .pointerMoved(dx: 0, dy: 0)
+        return (inputs, true)
+    }
+}

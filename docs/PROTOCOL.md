@@ -113,7 +113,7 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x25 | ScrollEvent | controller → endpoint |
 | 0x26 | ReleaseAll | controller → endpoint: release every key and button |
 | 0x27 | CursorReport | endpoint → controller: where the cursor really is |
-| 0x28 | LocalTakeover | endpoint → controller: the endpoint's own user took over |
+| 0x28 | LocalTakeover | endpoint → controller: the endpoint's own user took over, or it stopped hearing the controller |
 | 0x30 | DragProbe | controller → computer under the cursor: is a drag in progress there? |
 | 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
 | 0x32 | DragResult | drop target → source and controller; controller → source when no target ends it |
@@ -324,8 +324,11 @@ cursor reappears where it left.
 
 An endpoint injects the release of a key or button only if it pressed it, and releases everything
 it holds on Leave, ReleaseAll (the control goes on), physical input of its own (it sends
-LocalTakeover), and a controller that stops answering or leaves. It sends CursorReport when
-something other than the controller moved its cursor by more than one unit.
+LocalTakeover), and a controller that stops answering or leaves. For a controller that stops
+answering it sends LocalTakeover too: the session delivers it once messages flow again, and a
+controller that did not notice the silence itself brings its cursor home instead of sending input
+that nothing injects. It sends CursorReport when something other than the controller moved its
+cursor by more than one unit.
 
 #### 0x20 Enter
 

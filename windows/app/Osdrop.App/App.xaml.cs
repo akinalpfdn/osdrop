@@ -17,8 +17,9 @@ using Wpf.Ui.Appearance;
 namespace Osdrop.App;
 
 /// <summary>
-/// Tray application: the engine runs from start to quit; a click on the tray icon opens the panel,
-/// and Settings, pairing and copied files have their own windows.
+/// Tray application: the engine runs from start to quit; a click on the tray icon opens the panel
+/// (so do the first start and a start while it runs), and Settings, pairing and copied files have
+/// their own windows.
 /// </summary>
 public partial class App : Application, IDisposable
 {
@@ -65,6 +66,13 @@ public partial class App : Application, IDisposable
         _trayIconTheme = new TrayIconTheme(_trayIcon);
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
         _instance.OnShowRequested(() => Dispatcher.BeginInvoke(ShowPanel));
+        if (!_settings.HasShownPanel)
+        {
+            // The first start, often the installer's last step: the panel shows where Osdrop lives
+            // (user decision 2026-11-23; the Mac opens its menu the same way).
+            _settings.HasShownPanel = true;
+            _ = Dispatcher.BeginInvoke(ShowPanel);
+        }
 
         _ = StartAsync(updates);
     }

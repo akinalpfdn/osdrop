@@ -34,6 +34,8 @@ enum class Type : std::uint8_t {
     WatchedMotion = 108,
     HotkeyPressed = 109,
     Released = 110,
+    Accepted = 111,
+    TurnedAway = 112,
 };
 
 template <typename... Visitors>
@@ -441,6 +443,11 @@ Bytes encode(const Report& report) {
                                          w.u8(static_cast<std::uint8_t>(m.reason));
                                          return Type::Released;
                                      },
+                                     [](const Accepted&) { return Type::Accepted; },
+                                     [&](const TurnedAway& m) {
+                                         w.u8(static_cast<std::uint8_t>(m.reason));
+                                         return Type::TurnedAway;
+                                     },
                                      [](const LocalInput&) { return Type::LocalInput; },
                                      [&](const Stats& m) {
                                          w.u64(m.events);
@@ -576,6 +583,14 @@ Expected<Report, DecodeError> decode_report(std::span<const std::uint8_t> messag
             return reason ? Field<Released>(Released{.reason = reason.value()})
                           : Field<Released>::failure(reason.error());
         });
+    case Type::Accepted:
+        return empty<Report, Accepted>(bytes);
+    case Type::TurnedAway:
+        return body<Report, TurnedAway>(bytes, [](Reader& r) {
+            const auto reason = read_code(r, TurnAway::OtherCopy);
+            return reason ? Field<TurnedAway>(TurnedAway{.reason = reason.value()})
+                          : Field<TurnedAway>::failure(reason.error());
+        });
     case Type::Stats:
         return body<Report, Stats>(bytes, read_stats);
     case Type::Rejected:
@@ -616,7 +631,7 @@ std::uint16_t type_of(const Request& request) {
 }
 
 std::string_view type_name(std::uint16_t type) {
-    static constexpr std::array<std::pair<Type, std::string_view>, 25> kNames{{
+    static constexpr std::array<std::pair<Type, std::string_view>, 27> kNames{{
         {Type::BeginControl, "BeginControl"},
         {Type::EndControl, "EndControl"},
         {Type::Move, "Move"},
@@ -642,6 +657,8 @@ std::string_view type_name(std::uint16_t type) {
         {Type::WatchedMotion, "WatchedMotion"},
         {Type::HotkeyPressed, "HotkeyPressed"},
         {Type::Released, "Released"},
+        {Type::Accepted, "Accepted"},
+        {Type::TurnedAway, "TurnedAway"},
     }};
     for (const auto& [known, name] : kNames) {
         if (static_cast<std::uint16_t>(known) == type) {

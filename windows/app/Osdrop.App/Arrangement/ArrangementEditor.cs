@@ -146,19 +146,22 @@ public sealed class ArrangementEditor : FrameworkElement
         {
             return;
         }
-        ReleaseMouseCapture();
+        // The drop is taken before the capture goes: releasing it raises LostMouseCapture at once,
+        // which would otherwise throw the drop away.
+        Vector translation = _translation;
         _dragged = null;
+        _translation = default;
+        ReleaseMouseCapture();
         if (Geometry is { } geometry && TryLayout(geometry, out _, out double scale) &&
             geometry.Computers.FirstOrDefault(computer => computer.DeviceId == device) is { } moved &&
-            _translation.Length > 0)
+            translation.Length > 0)
         {
-            var move = new ArrangementMove(device, moved.Offset + (_translation / scale));
+            var move = new ArrangementMove(device, moved.Offset + (translation / scale));
             if (MoveCommand?.CanExecute(move) == true)
             {
                 MoveCommand.Execute(move);
             }
         }
-        _translation = default;
         InvalidateVisual();
         e.Handled = true;
     }
@@ -166,6 +169,10 @@ public sealed class ArrangementEditor : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        if (_dragged is null)
+        {
+            return; // a drop released it
+        }
         _dragged = null; // Escape or another window: nothing moves
         _translation = default;
         InvalidateVisual();

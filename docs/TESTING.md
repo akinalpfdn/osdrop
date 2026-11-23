@@ -12,7 +12,7 @@ Run by CI on every pull request (commands in [`BUILDING.md`](BUILDING.md)):
 | `core/tests/cpp` | GoogleTest | Every `core` module; the protocol fixtures and the C API |
 | `windows/shared/tests` | GoogleTest | Windows-header-free libraries, on macOS and Windows |
 | `macos/CoreBridgeTests` | Swift Testing | The Swift wrapper over the C API; the protocol fixtures through it |
-| `macos/OsdropTests` | Swift Testing | Mac app logic: key and modifier tables, event translation and building, injection with a recording poster, the tap policy, replay plans, the capture guard's decisions and the guard process against a stand-in |
+| `macos/OsdropTests` | Swift Testing | Mac app logic: key and modifier tables, event translation and building, injection with a recording poster, the tap policy, replay plans, the capture guard's decisions and the guard process against a stand-in. They run inside the app, which then starts empty (`OsdropMain`), so a run leaves the Osdrop in use alone |
 | `windows/app/Osdrop.Localization.Tests` | xUnit | Shell strings in every shipped language |
 
 The core also runs under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer on macOS.
@@ -267,6 +267,8 @@ second Mac. Before each run, say which computer's mouse and keyboard will be use
 | I7 | Refusals | Lock the other computer's screen, then push into it; deny control in its permissions, then push | The cursor stays home; the menu says it is locked; with control denied the edge is a wall |
 | I8 | Being controlled | While controlled, look at the controlled Mac's menu bar and menu | Another icon, and the menu names the controller |
 | I9 | Latency | Developer… › Mesh on the controlled computer while moving the cursor on it for 10 s: wired gigabit, then 5 GHz Wi-Fi | Wired: median under 8 ms, p99 under 20 ms; Wi-Fi: median under 15 ms |
+| I10 | Mac above the PC | Place the Mac above the PC in Settings › Arrangement. With the Mac's mouse, cross down near the bottom-right corner, work on the PC for two minutes, then cross back. Repeat with a file dragged from Finder | The PC's cursor moves at once after the crossing; the Mac's cursor stays hidden and still, even if Quick Note or the Dock opens; it comes back where it crossed; the drag works as before |
+| I11 | Back and forth | With the Mac's mouse, cross to the PC and back several times quickly, at different heights; do the same with the PC's mouse | Coming back, the cursor moves on at once from where it entered, without stopping at the edge or bouncing back to the other computer, the same with either mouse |
 
 ### Input fidelity (Phase 12)
 
@@ -324,6 +326,7 @@ these tests take over input on every computer they cross.
 | U6 | Clipboard and files | Turn sharing off; set the files limit to 128 MB; turn marking on and copy an app from the other computer | Nothing is shared while off; larger copies show the notice; the pasted app asks before it first opens |
 | U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
 | U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
+| U9 | Menu opens by itself | Quit Osdrop, run `defaults delete com.akinalpfdn.osdrop shownMenu`, start it; quit and start it again; while it runs, open it again from Applications or Spotlight | The first start opens the menu under the icon, after the permissions window is closed when that shows; the second start does not; opening it while it runs opens the menu |
 
 ### Windows interface (Phase 17)
 
@@ -334,12 +337,13 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU1 | Icon and panel | Look at the notification area, click the icon, click elsewhere; switch the taskbar between light and dark (Settings › Personalization › Colors) | Osdrop's glyph shows, readable on both taskbars; the click opens the panel above the taskbar and a click elsewhere closes it; Osdrop.exe has the same icon in Explorer |
 | WU2 | Light and dark, Turkish | Switch Windows between light and dark mode with the panel and Settings open; switch the display language to Turkish and start Osdrop again | Both windows change colors at once; every text is Turkish, nothing is cut off |
 | WU3 | Being controlled | Push the Mac's cursor into the PC; open the panel from the PC's tray with the Mac's mouse | The tray icon turns into the filled square while the Mac controls the PC; the panel says the Mac is controlling this computer |
-| WU4 | Input service | Stop the service (`OsdropService.exe --stop` as administrator), open the panel, press Repair and allow it | The panel says the service is stopped; after Repair the warning goes within a few seconds and the cursor crosses again |
+| WU4 | Input service | Stop the service (`OsdropService.exe --stop` as administrator), open the panel, press Repair and allow it. Then quit Osdrop, copy its folder elsewhere, start `Osdrop.exe` from the copy, push the Mac's cursor into the PC, and press Repair | The panel says the service is stopped; after Repair the warning goes within a few seconds and the cursor crosses again. The copy's panel says the service belongs to a copy in another folder and the Mac's crossing is refused; `input.log` has one refusal line; after Repair the copy connects within a few seconds |
 | WU5 | Arrangement | In Settings › Arrangement drag the Mac to the PC's other side | It snaps beside the PC; the Mac shows the same arrangement within a second; the cursor crosses at the new edge |
 | WU6 | Devices and input settings | Turn off "Can control this computer" for the Mac on the Mac, then rename the PC and save; change the push time and the pointer speed on the PC | The PC's cursor no longer crosses to the Mac; the Mac shows the PC's new name after it reconnects; push time and speed apply at once |
 | WU7 | Clipboard and Advanced | Turn sharing off in the panel, copy on the Mac and paste on the PC; turn it on again; press Copy in Settings › Advanced and paste it into Notepad | Nothing comes over while off; the pasted diagnostics have no computer names or addresses |
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
+| WU10 | Panel opens by itself | Quit Osdrop, remove `"HasShownPanel": true` from `%APPDATA%\Osdrop\settings.json` (or install for a user who never ran it) and start it, or let the installer start it; quit and start it again; while it runs, start it again from the Start menu | The first start opens the panel above the taskbar; the second start does not; a start while it runs opens it |
 
 ### Robustness (Phase 18)
 
@@ -365,6 +369,10 @@ the members are connected again and the cursor crosses, without restarting Osdro
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-23 | dev (ee4e13a), Debug, M3 Air + PC | Mac → PC in daily use | Fail: the cursor crossed and came back about a hundred times a second (797 captures in 40 minutes); keys reached the PC, the mouse never stayed. The warp that parked the Mac's cursor added its distance to the next mouse delta (b2bafc2); parking removed |
+| 2026-11-22 | dev (6a78f6b) on the PC (debug engine and shell) and the M3 Air | PC → Mac crossings with the new crossing log | Pass: 18 of 18 crossings with the PC's mouse in 26 minutes, each logged by core, and OsdropInput's capture lines within 1–3 ms of each. WU5 and I10 not run yet |
+| 2026-11-21 | dev (21a3a93), Debug, M3 Air connected to the PC | R12, replaced by a look at the running app (user decision) | Mac: after 2 h 45 min of the day's use, footprint 52.3 MB with a lifetime peak of 52.5 MB; over the next 10 minutes 52.1–52.3 MB, 61 open files, 9–11 threads, Mach ports 313 then 299, one TCP connection. No growth. PC: numbers to come |
+| 2026-11-21 | v0.1.0 release: `Osdrop-Setup.exe` from the release workflow on the PC (a development service installed), M3 Air on a dev build | Windows installer: install, Start with Windows, connect, cross, drag, uninstall | Pass, as reported from the PC. The installer took the development service over; the uninstaller removed the service, the input process, the firewall rule and the Run entry and left the cursors at their defaults. `%APPDATA%\Osdrop` and `%LOCALAPPDATA%\Osdrop` stay by design. Not run: an upgrade, a clean Windows 11 |
 | 2026-11-21 | dev (f5ae0d0) | R5, R6, R9–R11 | Not run: the user chose to assume them (edge cases). Copy diagnostics checked in code instead: names are redacted, log lines carry counts only |
 | 2026-11-21 | dev (61727d5), Debug, M3 Air + PC (debug engine and shell) | R1–R4, R7, R8, Mac ↔ PC | Pass, as reported by the user. R1 from the sleep run of 2026-11-12. Win+L with the cursor on the Mac first left Control held there (every click a right-click); fixed in 5d63a03. Osplay's displays stayed in the arrangement after they were gone; fixed in 61727d5 |
 | 2026-11-20 | dev (50e1bc6), Debug, M3 Air + PC (debug engine and shell) | D1, D2, D4–D8, D10, D11, Mac ↔ PC | Pass. D10 first sent Photos' preview instead of the photo, then the photo with its preview (fixed in 2b72306 and 50e1bc6); D2 showed a link left out without a notice (9cb12e6). D3, D9, Mac ↔ Mac and PC ↔ PC wait for a third computer |

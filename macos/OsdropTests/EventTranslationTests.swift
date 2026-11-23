@@ -152,6 +152,38 @@ struct EventFactoryTests {
     }
 }
 
+@Suite("Cursor freeze")
+struct CursorFreezeTests {
+    @Test("Only a cursor more than a couple of points from where it waits follows the mouse")
+    func loose() {
+        let frozen = CGPoint(x: 756, y: 491)
+        #expect(!CursorFreeze.isLoose(location: frozen, frozen: frozen))
+        // A drag let go at the edge moves it one point and back.
+        #expect(!CursorFreeze.isLoose(location: CGPoint(x: 757, y: 491), frozen: frozen))
+        #expect(CursorFreeze.isLoose(location: CGPoint(x: 760, y: 491), frozen: frozen))
+        #expect(CursorFreeze.isLoose(location: CGPoint(x: 756, y: 480), frozen: frozen))
+    }
+
+    @Test("Right after freezing, the cursor may finish its movement; later a move means it is loose")
+    func settlesThenLoose() {
+        let frozen = CGPoint(x: 1709, y: 400)
+        let moved = CGPoint(x: 1709, y: 412)
+        #expect(CursorFreeze.check(location: frozen, frozen: frozen, frozenFor: .seconds(5)) == .still)
+        #expect(CursorFreeze.check(location: moved, frozen: frozen, frozenFor: .milliseconds(80)) == .settled(moved))
+        #expect(CursorFreeze.check(location: moved, frozen: frozen, frozenFor: .milliseconds(400)) == .loose)
+    }
+
+    @Test("Coming home drops the warp from the next movement, and from nothing else")
+    func dropsTheWarp() {
+        let moved = CursorFreeze.droppingWarp(from: [.button(.left, isDown: true), .pointerMoved(dx: 850, dy: 3)])
+        #expect(moved.inputs == [.button(.left, isDown: true), .pointerMoved(dx: 0, dy: 0)])
+        #expect(moved.dropped)
+        let clicked = CursorFreeze.droppingWarp(from: [.button(.left, isDown: false)])
+        #expect(clicked.inputs == [.button(.left, isDown: false)])
+        #expect(!clicked.dropped, "the next movement still carries the warp")
+    }
+}
+
 @Suite("Tap policy")
 struct TapPolicyTests {
     @Test("Captured input is swallowed; observed and injected input passes")

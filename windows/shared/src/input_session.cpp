@@ -124,12 +124,16 @@ std::optional<Report> InputSession::start_capture(const StartCapture& start,
                        .deadline = now + kHeartbeatTimeout,
                        .released = false};
     device_.start_capture(start.park_x, start.park_y);
+    log_.info("Capture began");
     return std::nullopt;
 }
 
 std::optional<Report> InputSession::stop_capture(const StopCapture& stop) {
     if (!capture_) {
         return std::nullopt;
+    }
+    if (!capture_->released) {
+        log_.info("Capture ended"); // the chord and the watchdog say so when they end it
     }
     capture_.reset();
     device_.stop_capture(stop.x, stop.y);

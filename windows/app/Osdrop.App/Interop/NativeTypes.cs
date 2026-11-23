@@ -232,6 +232,7 @@ internal unsafe struct NativeEngineInputState
     public byte NoticeReason;
     public byte NoticeRefused;
     public fixed byte NoticeDeviceId[NativeSizes.DeviceId];
+    public byte TurnedAway;
 }
 
 /// <summary>osdrop_rect.</summary>

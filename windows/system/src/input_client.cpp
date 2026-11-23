@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <span>
 #include <utility>
+#include <variant>
 
 namespace osdrop::sys {
 namespace {
@@ -12,9 +13,58 @@ namespace {
 constexpr DWORD kBusyWaitMilliseconds = 2000;
 constexpr DWORD kWriteTimeoutMilliseconds = 2000;
 
+/// OsdropInput's first word on a new connection.
+struct Admission {
+    enum class Kind : std::uint8_t {
+        Accepted,
+        TurnedAway,
+        Closed, ///< the pipe closed first: refused by an OsdropInput from before TurnedAway
+        Silent, ///< nothing within kAdmissionTimeout: an OsdropInput from before Accepted took it
+    };
+    Kind kind = Kind::Silent;
+    win::input::TurnAway reason = win::input::TurnAway::OtherCopy;
+};
+
+Admission admission(std::span<const std::uint8_t> message) {
+    const auto report = win::input::decode_report(message);
+    if (report) {
+        if (const auto* refused = std::get_if<win::input::TurnedAway>(&report.value())) {
+            return {.kind = Admission::Kind::TurnedAway, .reason = refused->reason};
+        }
+        if (std::holds_alternative<win::input::Accepted>(report.value())) {
+            return {.kind = Admission::Kind::Accepted};
+        }
+    }
+    return {}; // nothing an OsdropInput says first: carry on as with one that says nothing
+}
+
+Admission read_admission(HANDLE pipe) {
+    const UniqueHandle done = make_event(true);
+    std::array<std::uint8_t, win::input::kMaxMessageSize> buffer{};
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = done.get();
+    DWORD received = 0;
+    if (ReadFile(pipe, buffer.data(), static_cast<DWORD>(buffer.size()), &received, &overlapped) ==
+        FALSE) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            return {.kind = Admission::Kind::Closed};
+        }
+        const auto timeout = static_cast<DWORD>(win::input::kAdmissionTimeout.count());
+        if (WaitForSingleObject(done.get(), timeout) != WAIT_OBJECT_0) {
+            CancelIoEx(pipe, &overlapped);
+            if (GetOverlappedResult(pipe, &overlapped, &received, TRUE) == FALSE) {
+                return {}; // still open and silent
+            }
+        } else if (GetOverlappedResult(pipe, &overlapped, &received, FALSE) == FALSE) {
+            return {.kind = Admission::Kind::Closed};
+        }
+    }
+    return admission(std::span<const std::uint8_t>(buffer.data(), received));
+}
+
 } // namespace
 
-std::unique_ptr<InputClient> InputClient::connect(OnReport on_report, OnClosed on_closed) {
+InputConnection InputClient::connect(OnReport on_report, OnClosed on_closed) {
     const std::wstring name = input_pipe_name(current_session());
     for (int attempt = 0; attempt < 2; ++attempt) {
         // Identification lets OsdropInput check who connects; it cannot act as this user.
@@ -24,17 +74,29 @@ std::unique_ptr<InputClient> InputClient::connect(OnReport on_report, OnClosed o
         if (pipe.get() != INVALID_HANDLE_VALUE) {
             DWORD mode = PIPE_READMODE_MESSAGE;
             if (!SetNamedPipeHandleState(pipe.get(), &mode, nullptr, nullptr)) {
-                return nullptr;
+                return {};
             }
-            return std::unique_ptr<InputClient>(
-                new InputClient(std::move(pipe), std::move(on_report), std::move(on_closed)));
+            const Admission answer = read_admission(pipe.get());
+            switch (answer.kind) {
+            case Admission::Kind::TurnedAway:
+                return {.client = nullptr, .turned_away = true, .reason = answer.reason};
+            case Admission::Kind::Closed:
+                return {.client = nullptr, .turned_away = true, .reason = std::nullopt};
+            case Admission::Kind::Accepted:
+            case Admission::Kind::Silent:
+                break;
+            }
+            return {.client = std::unique_ptr<InputClient>(new InputClient(
+                        std::move(pipe), std::move(on_report), std::move(on_closed))),
+                    .turned_away = false,
+                    .reason = std::nullopt};
         }
         if (GetLastError() != ERROR_PIPE_BUSY ||
             !WaitNamedPipeW(name.c_str(), kBusyWaitMilliseconds)) {
-            return nullptr;
+            return {};
         }
     }
-    return nullptr;
+    return {};
 }
 
 InputClient::InputClient(UniqueHandle pipe, OnReport on_report, OnClosed on_closed)

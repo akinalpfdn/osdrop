@@ -218,8 +218,36 @@ struct Released {
     bool operator==(const Released&) const = default;
 };
 
-using Report = std::variant<CapturedMotion, PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput,
-                            Stats, Rejected, WatchedMotion, HotkeyPressed, Released>;
+/// The first report on a connection OsdropInput takes: it carries out the client's requests from
+/// now on.
+struct Accepted {
+    bool operator==(const Accepted&) const = default;
+};
+
+/// Why OsdropInput turned a client away.
+enum class TurnAway : std::uint8_t {
+    OtherSession = 1,      ///< the client runs in another session
+    NotIdentified = 2,     ///< it did not allow identification
+    OtherUser = 3,         ///< it runs as another user
+    UnknownExecutable = 4, ///< its executable could not be read
+    OtherCopy = 5,         ///< it is not run from OsdropInput's folder: another copy of Osdrop
+};
+/// The first and only report to a client OsdropInput refuses; the pipe closes once the client has
+/// read it, or after kTurnAwayLinger.
+struct TurnedAway {
+    TurnAway reason = TurnAway::OtherCopy;
+    bool operator==(const TurnedAway&) const = default;
+};
+inline constexpr std::chrono::milliseconds kTurnAwayLinger{1000};
+/// How long a client waits for Accepted or TurnedAway. An OsdropInput from before they existed
+/// says neither and closes the pipe on a client it refuses, so a pipe still open by then took it.
+inline constexpr std::chrono::milliseconds kAdmissionTimeout{1000};
+
+// Reports added within a version (Accepted, TurnedAway) reach an older client as UnknownType,
+// which it ignores.
+using Report =
+    std::variant<CapturedMotion, PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats,
+                 Rejected, WatchedMotion, HotkeyPressed, Released, Accepted, TurnedAway>;
 
 enum class DecodeError : std::uint8_t {
     Truncated,

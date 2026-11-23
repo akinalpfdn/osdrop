@@ -311,7 +311,10 @@ Turkish.
 
 - **Menu bar panel.** Where the mouse and keyboard are, the lock and clipboard sharing as quick
   toggles, an update when one is out, the group, and Settings and Quit as icons. Another icon
-  shows while another computer controls the Mac.
+  shows while another computer controls the Mac. It opens by itself once at the first launch
+  (after the permissions window when that shows) and whenever Osdrop is opened again while it
+  runs. SwiftUI has no call for this: `MenuOpener` clicks the icon's button up to macOS 26, and
+  from macOS 27 begins AppKit's expanded interface session through a private call it checks first.
 - **Settings.** `AppSettings` keeps every user setting in UserDefaults and saves each change at
   once; `SettingsViewModel` hands input settings, pointer speeds and chords to the running
   `InputController`, permissions and the arrangement to the group, and the name to a restart of
@@ -338,7 +341,8 @@ dark theme live, every visual value from `Theme/Tokens.xaml`, every string from
   newest that ended, a notification when one ends; `TransfersViewModel`, from the engine's
   TRANSFER_* and SEND_PROGRESS events), copied files on their way, the group and nearby
   computers, and Settings and Quit as icons. Problems come first: an engine that did not start, the input service, an update.
-  A second start of Osdrop opens the running one's panel (`SingleInstance`).
+  A second start of Osdrop opens the running one's panel (`SingleInstance`), and so does the
+  first start on a PC, which is usually the installer's last step (`AppSettings.HasShownPanel`).
 - **Settings.** The Mac's tabs: General (start with Windows through the Run key, daily update
   check), Arrangement (the same editor and snapping, `ArrangementGeometry`), Devices (name,
   permissions, remove, block, unblock, pair), Input (crossing, modifier mapping, pointer speeds,
@@ -372,6 +376,14 @@ Built in Phase 1 (`macos/Osdrop/Services/Input`):
   source user data and always pass.
 - **Freezing and hiding the cursor** — `CGAssociateMouseAndMouseCursorPosition` and
   `BackgroundCursorHider` (the private `SetsCursorInBackground` property, looked up at run time).
+  The cursor stays frozen where it crossed and is never warped while captured: macOS adds a
+  warp's distance to the next event's delta. Coming home, it is warped to where it comes back
+  before the mouse is reconnected, and the next movement's delta is dropped. After a warp macOS
+  ignores the mouse for the local events suppression interval, a quarter second by default, and
+  reconnecting the mouse does not end that; the injector keeps a combined session event source
+  whose interval is zero for as long as it runs, which removes the pause. macOS reconnects the
+  mouse and the cursor when another app comes to the front, so the capture watchdog compares the
+  cursor with where it was frozen every 100 ms and freezes it again where it is (`CursorFreeze`).
 - **Ways out of a capture** — the release chord ⌃⌥⌘⎋ (handled in the tap callback); the in-app
   watchdog, which ends a capture whose owner stopped confirming it for 1 s or whose tap stayed
   disabled; and `OsdropCaptureGuard`, a separate process that ends Osdrop after 2 s without a
@@ -500,7 +512,13 @@ process").
   PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64, p50, p99, max u32
   in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version, 3 injection without
   control or capture, 4 PressForDrag while the left button is up), WatchedMotion (x, y, dx, dy
-  i32, ticks u64), HotkeyPressed (u8: 1 return, 2 lock) and Released (u8: 1 return chord, 2 no heartbeat). Ticks
+  i32, ticks u64), HotkeyPressed (u8: 1 return, 2 lock), Released (u8: 1 return chord, 2 no heartbeat),
+  Accepted (first on every connection OsdropInput takes) and TurnedAway (u8: 1 another session,
+  2 no identification, 3 another user, 4 unknown executable, 5 not run from OsdropInput's folder,
+  that is another copy of Osdrop; the only report before the pipe closes, which OsdropInput holds
+  open up to a second for the client to read it; its log has the first refusal of each kind and
+  then a count at most every 10 minutes, `refusal_tally`). An older client ignores both as unknown types; a
+  client gives an OsdropInput that says neither a second before taking the open pipe as accepted. Ticks
   are QueryPerformanceCounter values, so the engine knows how old an input is. Positions are at
   most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.
   `InputSession` applies them: injection while the client controls this PC or captures its input
@@ -509,7 +527,9 @@ process").
   moves use SendInput's 0-65535 scale over the virtual desktop, rounded so every pixel is reached
   exactly (`absolute`).
 - **Engine** (`windows/engine/src/input`). `InputBridge` connects to the pipe (again every 2 s
-  while it cannot) and tells core this PC cannot be controlled while it is unreachable. Its thread
+  while it cannot, and after a TurnedAway from 2 s doubling up to 30 s, or at once when the shell
+  repaired the service) and tells core this PC cannot be controlled while it is unreachable or
+  turned away; the panel names a service of another copy, whose Repair points it at this one. Its thread
   is per-monitor DPI aware, so it reads and writes physical pixels as OsdropInput does. Core's
   callbacks only queue; the bridge's thread turns each injected input into requests (`Injection`:
   positions from 1/16 pixel, buttons and scrolls moving the cursor first, keys by scan code, Caps

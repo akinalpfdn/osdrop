@@ -805,3 +805,75 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** One approval in Login Items, no password per launch, and AWDL comes back whenever Osdrop goes, crash included. The user's manual test (2026-11-12) showed macOS does not bring AWDL back by itself, so restoring is the helper's job.
 **Trade-offs:** AirDrop, AirPlay and Sidecar stop while it is on; ad hoc builds cannot run the helper (the setting then reports a failure).
 **Revisit if:** macOS offers an API to pause AWDL for an app, or AWDL stays a problem with the switch on.
+
+---
+
+## 2026-11-21 — Uninstalling keeps the user's data
+**Chosen:** The Windows uninstaller removes the program, the service, the firewall rule, the "Start with Windows" entry and the service's logs in `%ProgramData%\Osdrop`, and keeps `%APPDATA%\Osdrop` (identity, group state, settings) and `%LOCALAPPDATA%\Osdrop` (the app's logs). Moving the Mac app to the Trash likewise keeps its Keychain items and preferences.
+**Alternatives:** Delete everything; ask in the uninstaller.
+**Why:** Reinstalling, or upgrading by removing and installing again, keeps the pairings: the other computers still trust this identity, whereas a new one would leave a stale member on each of them to remove by hand. Found during the 0.1.0 installer run; it had not been written down.
+**Trade-offs:** A complete removal takes deleting those two folders by hand.
+**Revisit if:** Users ask for a complete removal; then the uninstaller asks whether to delete them.
+
+---
+
+## 2026-11-22 — The Mac parks its captured cursor and freezes it again
+**Chosen:** While its input is used elsewhere, the Mac moves its hidden cursor to the middle of the display it is on, as the PC does (not with a mouse button held: a drag waits at the edge), and the event tap freezes it there again whenever a captured movement shows it moved.
+**Alternatives:** Leave the cursor frozen at the edge it crossed (before); take the foreground with the invisible key window on every crossing.
+**Why:** A tester with the Mac above the PC saw the Mac's cursor move along with the PC's. `CGAssociateMouseAndMouseCursorPosition` holds only "while an application is in the foreground" (SDK header), and Osdrop is a background menu bar app. What brought another app forward in the tester's case is not known; the likely triggers sit at the edge the cursor was left on: the Dock at the bottom, and Quick Note, macOS's default bottom-right hot corner. Parking removes those; refreezing covers the rest.
+**Trade-offs:** One more warp per crossing. Whether macOS also shows the hidden cursor again cannot be read reliably (`CGCursorIsVisible` is no longer supported), so a re-shown cursor stays visible, though frozen, until the cursor comes home.
+**Revisit if:** The log shows "The cursor followed the mouse during a capture" often, or a cursor visible during a capture is reported.
+
+---
+
+## 2026-11-22 — An endpoint that stops hearing its controller tells it with LocalTakeover
+**Chosen:** When a controlled computer finds its controller unresponsive, it releases what it holds and ends the control as before, and now also sends LocalTakeover with the control's ID, which the session delivers once messages flow again.
+**Alternatives:** A new message or Refuse reason for "stopped hearing you"; keeping the control through short silences.
+**Why:** A tester's PC saw the Mac go quiet for 140 ms (2026-11-22) and ended the control; the Mac had not noticed, kept the cursor on the PC and captured the user's keyboard and mouse for 35 minutes until it was restarted. LocalTakeover already ends a capture without a notice on both apps, and 0.1.0 peers understand it; a new message would not reach them.
+**Trade-offs:** The controller's log and notice cannot tell this from the endpoint's own user taking over; core's log on the endpoint says which it was. Short Wi-Fi silences still end the control: the cursor comes home.
+**Revisit if:** Users find the cursor coming home after Wi-Fi hiccups disruptive; then the endpoint could keep a control through a silence shorter than a second.
+
+---
+
+## 2026-11-23 — The Mac freezes its captured cursor in place, without warping
+**Chosen:** The captured cursor stays where it crossed, and the tap freezes it again where it is when it follows the mouse; it is never warped while captured. This replaces the parking of 2026-11-22.
+**Alternatives:** Keep parking and subtract the warp from the next delta, as SDL does.
+**Why:** macOS adds a warp's distance to the next mouse event's delta. Parking warped the cursor from the edge to the middle, which threw the cursor on the PC back to the Mac; the warp home threw it over again, about a hundred times a second (797 captures in 40 minutes, 2026-11-23). Keys reached the PC, the mouse never stayed. Subtracting the warp would be needed at both ends of every capture and is easy to get wrong.
+**Trade-offs:** The Dock and hot corners can still react to a cursor left at an edge; when that brings another app forward, the tap freezes the cursor again.
+**Revisit if:** The log shows "The cursor followed the mouse during a capture" often.
+
+---
+
+## 2026-11-23 — Work reaches dev through a branch and a pull request, without CI
+**Chosen:** User decision, correcting the entry of 2026-11-10: each piece of work is on its own branch from `dev` (`git checkout -b <branch> --no-track origin/dev`) and reaches `dev` through a pull request; no CI runs on those pull requests, and nothing is committed straight to `dev`. When a release is prepared, `dev` goes to `main` through a pull request, and CI runs there and on `main`.
+**Alternatives:** Committing straight to `dev`, as done from 2026-11-10 to 2026-11-23; CI on every pull request into `dev`.
+**Why:** On 2026-11-10 the user asked for a `dev` branch without CI. The entry of that day also dropped branches and pull requests, which the user had not asked for. CI stays off for `dev` for the reason given then: each round took 15–17 minutes.
+**Trade-offs:** Each change needs a branch and a pull request. clang-tidy findings and MSVC-only errors still surface late, on the release pull request.
+**Revisit if:** A second contributor joins; then pull requests into `dev` run CI too.
+
+---
+
+## 2026-11-23 — The Mac keeps an event source that stops macOS ignoring the mouse after a warp
+**Chosen:** The injector keeps a `CGEventSource` of the combined session state with its local events suppression interval at zero for as long as it runs. Coming home, the warp is then followed by no pause.
+**Alternatives:** Reconnecting the mouse right after the warp alone (09f7253, which assumed it ends the pause); the deprecated global `CGSetLocalEventsSuppressionInterval(0)`, as Barrier does; posting a mouse move through the injection source instead of warping.
+**Why:** The user still saw the cursor wait at the edge for about half a second after coming home with the Mac's trackpad, and the PC's mouse did not, whose moves on the Mac are injected through a source without suppression. Defi measured the same pause with the warp and the reconnection in place (gaps of 254–265 ms, 84 suppressed movements) and none with this source. It uses no deprecated or private call.
+**Trade-offs:** Movement still in flight at the warp now lands at the place the cursor came home; the capture already drops the next delta. The source's effect on warps is measured by others, not documented by Apple.
+**Revisit if:** The cursor still waits after coming home; then measure when it first moves after the warp.
+
+---
+
+## 2026-11-23 — The menu opens by itself at the first start and when Osdrop is opened again
+**Chosen:** User decision: the Mac's menu bar window and the PC's tray panel open by themselves once at the first start (on the Mac after the permissions window, when that shows) and whenever Osdrop is opened again while it runs. SwiftUI's `MenuBarExtra` has no call that opens it, so the Mac clicks the menu bar icon's button up to macOS 26 and, from macOS 27, where that button does nothing, begins AppKit's expanded interface session through the private `_beginExpandedInterfaceSession:` (`MenuOpener`; user decision after the click failed on macOS 27.2); the PC shows its panel at the first start (`AppSettings.HasShownPanel`), and already did on a second start. Both ship in 0.1.1.
+**Alternatives:** A welcome window or a notification at the first start; building the Mac's menu bar item on `NSStatusItem` with a panel of Osdrop's own, which public API can open but whose look and behavior would have to be rebuilt; the MenuBarExtraAccess package, which makes the same private call; leaving the Mac menu closed on macOS 27; opening only at the first start.
+**Why:** People who installed Osdrop did not notice that it was installed: nothing but an icon appeared, and Windows 11 puts new tray icons behind the ^ button. The menu shows where Osdrop lives and what it does. Opening it on a second start is what the PC already did.
+**Trade-offs:** The Mac relies on AppKit internals: the menu bar window's private `statusItem`, and on macOS 27 the private session call. Each is used only while it is there with the signature it has in macOS 27.2, so a later release that changes them leaves the menu closed, with a line in the log, and cannot crash the app. People upgrading see the menu open once. The app hosts its own unit tests, so it skips this there (`TestHost`).
+**Revisit if:** The log shows "Opening the menu by itself showed no window" or "This macOS release has no known way to open the menu by itself"; then build the menu bar item on `NSStatusItem`.
+
+---
+
+## 2026-11-23 — The app starts empty when it hosts the unit tests
+**Chosen:** User decision: `OsdropMain` starts an empty app (one empty Settings scene: no menu bar icon, no window) when Xcode runs the unit tests inside the app (`TestHost`, from Xcode's test variables), and Osdrop otherwise.
+**Alternatives:** Guarding each launch step in `OsdropApp` (the menu, the group, the AWDL switch, the staging cleanup, the permissions window, the update check); a separate host app target for the tests.
+**Why:** The tests ran inside a full Osdrop: it joined the user's group with this Mac's Keychain identity, which took the PC's session from the Osdrop already running (2026-11-23 18:09:42), emptied that Osdrop's drag staging folder in the shared temporary folder, and could open the permissions window or check for updates. Guarding each step misses the next one added; a second app target is more to build and sign.
+**Trade-offs:** The tests no longer exercise `OsdropApp`'s wiring; it is covered by the manual matrix. Should Xcode stop setting those variables, the full app runs again; a test checks the host has no menu bar icon.
+**Revisit if:** A test needs the running app; then it builds what it needs itself.

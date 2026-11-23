@@ -94,23 +94,21 @@ bool PipeServer::run() {
 
     const sys::UniqueHandle connected = sys::make_event(true);
     while (WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
-        OVERLAPPED overlapped{};
-        overlapped.hEvent = connected.get();
-        ResetEvent(connected.get());
-        DWORD ignored = 0;
-        if (!ConnectNamedPipe(pipe.get(), &overlapped)) {
-            const DWORD error = GetLastError();
-            if (error == ERROR_IO_PENDING) {
-                if (wait_for(pipe.get(), overlapped, ignored) != Wait::Done) {
-                    continue; // stopping, or a client that went at once
-                }
-            } else if (error != ERROR_PIPE_CONNECTED) {
-                log_.error("Waiting for a client failed: " + std::to_string(error));
-                WaitForSingleObject(stop_, 1000);
-                continue;
-            }
+        if (!wait_for_client(pipe.get(), connected.get())) {
+            continue;
         }
-        if (accepted(pipe.get())) {
+        if (const auto refused = refusal(pipe.get())) {
+            if (const auto line = refusals_.refused(refused->who, Clock::now())) {
+                log_.warning("Refused " + line->refusal +
+                             (line->more > 0 ? " " + std::to_string(line->more) + " more times"
+                                             : std::string()));
+            }
+            turn_away(pipe.get(), refused->reason);
+        } else if (write(pipe.get(), protocol::encode(protocol::Accepted{}))) {
+            for (const auto& line : refusals_.accepted()) {
+                log_.warning("Refused " + line.refusal + " " + std::to_string(line.more) +
+                             " more times before a client was accepted");
+            }
             log_.info("Client connected");
             serve(pipe.get());
             session_.reset();
@@ -122,36 +120,57 @@ bool PipeServer::run() {
     return true;
 }
 
-bool PipeServer::accepted(HANDLE pipe) {
+bool PipeServer::wait_for_client(HANDLE pipe, HANDLE connected) {
+    OVERLAPPED overlapped{};
+    overlapped.hEvent = connected;
+    ResetEvent(connected);
+    if (ConnectNamedPipe(pipe, &overlapped)) {
+        return true;
+    }
+    const DWORD error = GetLastError();
+    if (error == ERROR_IO_PENDING) {
+        DWORD ignored = 0;
+        // Not done: stopping, or a client that went at once.
+        return wait_for(pipe, overlapped, ignored) == Wait::Done;
+    }
+    if (error != ERROR_PIPE_CONNECTED) {
+        log_.error("Waiting for a client failed: " + std::to_string(error));
+        WaitForSingleObject(stop_, 1000);
+        return false;
+    }
+    return true;
+}
+
+std::optional<PipeServer::Refusal> PipeServer::refusal(HANDLE pipe) {
     ULONG client_session = 0;
     if (!GetNamedPipeClientSessionId(pipe, &client_session) || client_session != session_id_) {
-        log_.warning("Refused a client from another session");
-        return false;
+        return Refusal{.reason = protocol::TurnAway::OtherSession,
+                       .who = "a client from another session"};
     }
     const auto sid = client_sid(pipe);
     if (!sid) {
-        log_.warning("Refused a client that did not allow identification");
-        return false;
+        return Refusal{.reason = protocol::TurnAway::NotIdentified,
+                       .who = "a client that did not allow identification"};
     }
     if (*sid != user_sid_) {
-        log_.warning("Refused a client running as " + sys::log_text(*sid));
-        return false;
+        return Refusal{.reason = protocol::TurnAway::OtherUser,
+                       .who = "a client running as " + sys::log_text(*sid)};
     }
     ULONG process_id = 0;
     const auto image = GetNamedPipeClientProcessId(pipe, &process_id)
                            ? sys::process_image(process_id)
                            : std::nullopt;
     if (!image) {
-        log_.warning("Refused a client whose executable is unknown");
-        return false;
+        return Refusal{.reason = protocol::TurnAway::UnknownExecutable,
+                       .who = "a client whose executable is unknown"};
     }
     for (const std::wstring& allowed : clients_) {
         if (sys::same_path(*image, allowed)) {
-            return true;
+            return std::nullopt;
         }
     }
-    log_.warning("Refused a client run from " + sys::log_text(*image));
-    return false;
+    return Refusal{.reason = protocol::TurnAway::OtherCopy,
+                   .who = "a client run from " + sys::log_text(*image)};
 }
 
 struct PipeServer::Reading {
@@ -160,6 +179,32 @@ struct PipeServer::Reading {
     OVERLAPPED overlapped{};
     bool pending = false;
 };
+
+void PipeServer::turn_away(HANDLE pipe, protocol::TurnAway reason) {
+    if (!write(pipe, protocol::encode(protocol::TurnedAway{.reason = reason}))) {
+        return;
+    }
+    // Disconnecting now would discard the answer unread. The client reads it and closes its end;
+    // what it sends meanwhile is dropped, and one that never closes is dropped at the deadline,
+    // which also keeps a client that ignores the answer from retrying in a tight loop.
+    const Clock::time_point deadline = Clock::now() + protocol::kTurnAwayLinger;
+    Reading reading;
+    while (read_next(pipe, reading)) {
+        const auto left = std::chrono::ceil<std::chrono::milliseconds>(deadline - Clock::now());
+        const std::array<HANDLE, 2> handles{reading.done.get(), stop_};
+        if (left.count() <= 0 ||
+            WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE,
+                                   static_cast<DWORD>(left.count())) != WAIT_OBJECT_0) {
+            cancel(pipe, reading.overlapped);
+            return;
+        }
+        reading.pending = false;
+        DWORD received = 0;
+        if (GetOverlappedResult(pipe, &reading.overlapped, &received, FALSE) == FALSE) {
+            return; // the client closed its end
+        }
+    }
+}
 
 void PipeServer::serve(HANDLE pipe) {
     Reading reading;

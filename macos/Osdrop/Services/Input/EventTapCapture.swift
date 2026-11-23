@@ -3,8 +3,12 @@ import Foundation
 
 /// Captures input with an active event tap at the HID level, on a thread of its own whose callback
 /// only translates and enqueues (DEVPLAN, macOS constraints). Mode changes, the release chord and
-/// the watchdog all go through one serial queue, so the cursor is frozen, hidden, unfrozen and
-/// shown exactly once per capture.
+/// the watchdog all go through one serial queue, so the cursor is hidden and shown exactly once per
+/// capture. It is frozen where it crossed, and frozen again where it is whenever the watchdog finds
+/// it followed the mouse (CursorFreeze). It is never warped while captured: macOS adds a warp's
+/// distance to the next event's delta, which would throw the cursor on the other computer back.
+/// For the same reason the first movement after a capture loses its delta: the owner warps the
+/// cursor to where it comes home just before.
 final class EventTapCapture: InputCapturing {
     let events: AsyncStream<CaptureEvent>
     private let continuation: AsyncStream<CaptureEvent>.Continuation
@@ -137,17 +141,67 @@ final class EventTapCapture: InputCapturing {
                 state.mode = .capture
                 state.lastHeartbeat = .now
                 state.tapDisabledChecks = 0
+                state.looseCount = 0
             }
-            CGAssociateMouseAndMouseCursorPosition(0)
+            freeze()
             cursor.hide()
         case .observe:
-            context.state.withLock { $0.mode = .observe }
+            let looseCount = context.state.withLock { state -> Int in
+                state.mode = .observe
+                state.frozen = nil
+                // The owner has just warped the cursor to where it comes back, and macOS adds a
+                // warp to the next movement's delta: that one would push it straight back out.
+                state.ignoresNextDelta = true
+                return state.looseCount
+            }
+            // After the warp, so the mouse moves the cursor on from where it came home. The pause
+            // macOS would add after the warp is the injector's to prevent (`makeWarpSource`).
             CGAssociateMouseAndMouseCursorPosition(1)
             cursor.show()
             captureGuard.send(.disarm)
+            if looseCount > 1 {
+                Log.input.error("The cursor followed the mouse \(looseCount, privacy: .public) times in one capture")
+            }
             continuation.yield(.released(reason))
         }
         Log.input.info("Capture mode \(String(describing: mode), privacy: .public)")
+    }
+
+    /// Runs on `transitions` only. Disconnects the cursor from the mouse where it is and notes that
+    /// place, which the watchdog compares the cursor with.
+    private func freeze() {
+        CGAssociateMouseAndMouseCursorPosition(0)
+        let location = CGEvent(source: nil)?.location
+        context.state.withLock { state in
+            state.frozen = location
+            state.frozenSince = .now
+        }
+    }
+
+    /// Runs on `transitions` only, on every healthy watchdog check of a capture. The cursor itself
+    /// is compared, not the events: at the HID level an event's location moves with the mouse even
+    /// while the cursor stands still. One that moved follows the mouse again, as macOS lets it when
+    /// another app comes to the front; it is frozen again where it went, never warped back.
+    private func checkFrozen() {
+        let (frozen, since) = context.state.withLock { ($0.frozen, $0.frozenSince) }
+        guard let frozen, let location = CGEvent(source: nil)?.location else { return }
+        switch CursorFreeze.check(location: location, frozen: frozen, frozenFor: .now - since) {
+        case .still:
+            return
+        case .settled(let point):
+            context.state.withLock { $0.frozen = point }
+            return
+        case .loose:
+            break
+        }
+        let count = context.state.withLock { state -> Int in
+            state.looseCount += 1
+            return state.looseCount
+        }
+        if count == 1 {
+            Log.input.error("The cursor followed the mouse during a capture; frozen again")
+        }
+        freeze()
     }
 
     private func makeWatchdog() -> DispatchSourceTimer {
@@ -180,6 +234,7 @@ final class EventTapCapture: InputCapturing {
             apply(.observe, reason: .tapLost)
         } else {
             captureGuard.send(.heartbeat)
+            checkFrozen()
         }
     }
 
@@ -232,6 +287,13 @@ private final class TapContext: @unchecked Sendable {
         /// Consecutive watchdog checks that found the tap disabled.
         var tapDisabledChecks = 0
         var hotkeys = CaptureHotkeys()
+        /// While captured, once the cursor is frozen: where it is held.
+        var frozen: CGPoint?
+        var frozenSince = ContinuousClock.now
+        /// How often the cursor followed the mouse in this capture.
+        var looseCount = 0
+        /// The next movement carries the warp that put the cursor back where it came home.
+        var ignoresNextDelta = false
     }
 
     let state = Locked(State())
@@ -269,7 +331,13 @@ private final class TapContext: @unchecked Sendable {
             if state.mode == .capture, isReleaseChord {
                 return (state.mode, [])
             }
-            return (state.mode, state.translator.translate(event))
+            var inputs = state.translator.translate(event)
+            if state.ignoresNextDelta {
+                let warp = CursorFreeze.droppingWarp(from: inputs)
+                inputs = warp.inputs
+                state.ignoresNextDelta = !warp.dropped
+            }
+            return (state.mode, inputs)
         }
         if mode == .capture, isReleaseChord {
             onReleaseChord?()
