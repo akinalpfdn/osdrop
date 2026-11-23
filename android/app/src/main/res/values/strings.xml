@@ -22,4 +22,17 @@
     </plurals>
     <string name="arrival_failed">Files from %1$s did not all arrive</string>
     <string name="arrival_install">Install</string>
+    <string name="share_label">Send to a computer</string>
+    <plurals name="share_title">
+        <item quantity="one">Send %1$d file to</item>
+        <item quantity="other">Send %1$d files to</item>
+    </plurals>
+    <string name="share_nothing">Nothing here can be sent.</string>
+    <string name="share_no_computer">No computer is connected. Open Osdrop on your Mac or PC on the same Wi-Fi network.</string>
+    <string name="share_send">Send</string>
+    <string name="share_sending">Sending to %1$s…</string>
+    <string name="share_received">%1$s received them.</string>
+    <string name="share_declined">%1$s did not take them.</string>
+    <string name="share_failed">Sending to %1$s failed.</string>
+    <string name="share_done">Done</string>
 </resources>

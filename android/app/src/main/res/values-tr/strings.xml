@@ -21,4 +21,17 @@
     </plurals>
     <string name="arrival_failed">%1$s: dosyaların hepsi gelmedi</string>
     <string name="arrival_install">Yükle</string>
+    <string name="share_label">Bilgisayara gönder</string>
+    <plurals name="share_title">
+        <item quantity="one">%1$d dosyayı gönder</item>
+        <item quantity="other">%1$d dosyayı gönder</item>
+    </plurals>
+    <string name="share_nothing">Burada gönderilebilecek bir şey yok.</string>
+    <string name="share_no_computer">Bağlı bilgisayar yok. Aynı Wi-Fi ağındaki Mac ya da PC\'nde Osdrop\'u aç.</string>
+    <string name="share_send">Gönder</string>
+    <string name="share_sending">Gönderiliyor: %1$s…</string>
+    <string name="share_received">Alındı: %1$s</string>
+    <string name="share_declined">Alınmadı: %1$s</string>
+    <string name="share_failed">Gönderilemedi: %1$s</string>
+    <string name="share_done">Bitti</string>
 </resources>

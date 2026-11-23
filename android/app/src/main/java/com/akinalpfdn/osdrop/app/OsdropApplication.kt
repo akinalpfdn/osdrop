@@ -13,6 +13,7 @@ import com.akinalpfdn.osdrop.discovery.NsdDiscovery
 import com.akinalpfdn.osdrop.inbox.ArrivalNotifier
 import com.akinalpfdn.osdrop.inbox.DownloadsPublisher
 import com.akinalpfdn.osdrop.inbox.Inbox
+import com.akinalpfdn.osdrop.outbox.Outbox
 import com.akinalpfdn.osdrop.storage.AndroidSecureStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,18 +29,24 @@ class OsdropApplication : Application() {
         private set
     lateinit var inbox: Inbox
         private set
+    lateinit var outbox: Outbox
+        private set
 
     override fun onCreate() {
         super.onCreate()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         inbox = Inbox(cacheDir, DownloadsPublisher(this), ArrivalNotifier(this), scope)
+        outbox = Outbox(contentResolver, cacheDir)
         phone = PhoneMesh(
             store = AndroidSecureStore(this),
             discovery = CombinedDiscovery(listOf(NsdDiscovery(this), MulticastDiscovery(this))),
             advertiser = NsdAdvertiser(this),
             deviceName = ::deviceName,
             scope = scope,
-        ).also { it.transfers = inbox }
+        ).also {
+            it.transfers = inbox
+            it.outbox = outbox
+        }
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = phone.start()
 

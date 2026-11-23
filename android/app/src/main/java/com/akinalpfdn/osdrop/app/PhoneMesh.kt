@@ -11,6 +11,7 @@ import com.akinalpfdn.osdrop.core.utf8
 import com.akinalpfdn.osdrop.discovery.DiscoveredDevice
 import com.akinalpfdn.osdrop.discovery.DiscoveryEvent
 import com.akinalpfdn.osdrop.discovery.PeerDiscovering
+import com.akinalpfdn.osdrop.outbox.Outbox
 import com.akinalpfdn.osdrop.storage.SecureStoring
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -59,6 +60,9 @@ class PhoneMesh(
     /** Gets files sent to this phone and reports on sends from it; set before [start]. */
     var transfers: MeshTransfers? = null
 
+    /** Sends what was shared to Osdrop; set before [start]. */
+    var outbox: Outbox? = null
+
     @Volatile private var mesh: Mesh? = null
     private var browsing: Job? = null
     private val discovered = mutableMapOf<String, DiscoveredDevice>() // label → device
@@ -74,6 +78,7 @@ class PhoneMesh(
         }
         mesh = started
         transfers?.attach(started)
+        outbox?.attach(started)
         mutableState.update { it.copy(running = true) }
         advertise()
         refreshMembers()
@@ -87,6 +92,7 @@ class PhoneMesh(
         browsing = null
         advertiser.stop()
         transfers?.detach()
+        outbox?.detach()
         mesh?.close()
         mesh = null
         synchronized(discovered) { discovered.clear() }
@@ -196,6 +202,7 @@ class PhoneMesh(
 
     override fun onSendFinished(deviceId: ByteArray, sendId: Long, outcome: Int) {
         transfers?.onSendFinished(DeviceId(deviceId), sendId, outcome)
+        outbox?.onSendFinished(sendId, outcome)
     }
 
     private companion object {
