@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
 
             override fun sendFiles(member: Member) {
                 pickingFor = member.deviceId to member.name
+                app.hold() // the picker is another app: stay connected to the computer meanwhile
                 picker.launch(arrayOf("*/*"))
             }
 
@@ -71,10 +72,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun picked(uris: List<Uri>) {
+        val app = application as OsdropApplication
+        app.release()
         val (device, name) = pickingFor ?: return
         pickingFor = null
         if (uris.isEmpty()) return
-        val app = application as OsdropApplication
         lifecycleScope.launch {
             withContext(Dispatchers.IO) { app.outbox.send(device, name, uris) }
         }

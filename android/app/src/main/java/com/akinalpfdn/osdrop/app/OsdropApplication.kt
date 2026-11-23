@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import android.provider.Settings
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.akinalpfdn.osdrop.discovery.CombinedDiscovery
@@ -22,7 +23,8 @@ import kotlinx.coroutines.SupervisorJob
 /**
  * The composition root. The phone is a member of the group only while Osdrop is in front (user
  * decision 2026-11-09, kept 2026-11-23): the mesh starts when the app comes to the front and stops
- * when it leaves.
+ * when it leaves. While the app's own file picker covers it, the mesh stays up: the picker is
+ * another app, and stopping there would drop the computer the files are about to go to.
  */
 class OsdropApplication : Application() {
     lateinit var phone: PhoneMesh
@@ -31,6 +33,8 @@ class OsdropApplication : Application() {
         private set
     lateinit var outbox: Outbox
         private set
+
+    private var holds = 0 // pickers open over the app; main thread only
 
     override fun onCreate() {
         super.onCreate()
@@ -50,8 +54,23 @@ class OsdropApplication : Application() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) = phone.start()
 
-            override fun onStop(owner: LifecycleOwner) = phone.stop()
+            override fun onStop(owner: LifecycleOwner) {
+                if (holds == 0) phone.stop()
+            }
         })
+    }
+
+    /** Keeps the mesh up while a picker this app opened is in front; ended by [release]. */
+    fun hold() {
+        holds += 1
+    }
+
+    /** Ends a [hold]; the mesh stops if the app is no longer in front. */
+    fun release() {
+        if (holds == 0) return
+        holds -= 1
+        val inFront = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (holds == 0 && !inFront) phone.stop()
     }
 
     /** The phone's name as the user set it, cut to the 64 bytes the protocol allows. */
