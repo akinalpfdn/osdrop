@@ -19,6 +19,7 @@ using osdrop::transfer::TreeNames;
 
 constexpr auto kMac = TargetPlatform::MacOS;
 constexpr auto kWindows = TargetPlatform::Windows;
+constexpr auto kAndroid = TargetPlatform::Android;
 
 TEST(TransferNames, NamesBothSystemsHoldMapToThemselves) {
     const std::vector<std::string> corpus{"report.pdf",
@@ -77,6 +78,21 @@ TEST(TransferNames, LongNamesAreCutKeepingTheExtension) {
     EXPECT_LE(on_mac.size(), 255U);
     EXPECT_TRUE(on_mac.ends_with(".txt"));
     EXPECT_EQ(map_name(long_name, kWindows), long_name) << "fits NTFS's 255 UTF-16 units";
+}
+
+TEST(TransferNames, AndroidRefusesWhatWindowsRefusesAndCountsBytes) {
+    EXPECT_EQ(map_name("Q&A: what? *yes*.txt", kAndroid), "Q&A： what？ ＊yes＊.txt");
+    EXPECT_EQ(map_name("ends with dot.", kAndroid), "ends with dot．");
+    // 150 two-byte characters: 300 bytes of UTF-8 (too long for ext4 and F2FS), 150 UTF-16 units.
+    std::string long_name;
+    for (int i = 0; i < 150; ++i) {
+        long_name += "ğ";
+    }
+    long_name += ".apk";
+    const std::string on_android = map_name(long_name, kAndroid);
+    EXPECT_LE(on_android.size(), 255U);
+    EXPECT_TRUE(on_android.ends_with(".apk"));
+    EXPECT_EQ(map_name(long_name, kWindows), long_name);
 }
 
 TEST(TransferNames, OneFolderNeverHoldsTwoNamesThatDifferOnlyInCase) {
@@ -139,7 +155,7 @@ TEST(TransferNames, MappingAlwaysFitsAndIsStable) {
         if (!osdrop::protocol::is_valid_name(osdrop::protocol::bytes_of(name))) {
             continue;
         }
-        for (const auto target : {kMac, kWindows}) {
+        for (const auto target : {kMac, kWindows, kAndroid}) {
             const std::string mapped = map_name(name, target);
             ASSERT_FALSE(mapped.empty()) << name;
             ASSERT_TRUE(osdrop::transfer::fits(mapped, target)) << name << " -> " << mapped;
