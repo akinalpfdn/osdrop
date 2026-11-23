@@ -2,7 +2,8 @@
 """Prints the release version after checking that every place holding it agrees.
 
 The Windows app's version is <Version> in windows/app/Directory.Build.props, the Mac app's is
-MARKETING_VERSION in macos/project.yml. With --tag, the release tag (v<version>) must match too.
+MARKETING_VERSION in macos/project.yml and the Android app's is osdropVersion in
+android/gradle.properties. With --tag, the release tag (v<version>) must match too.
 The release workflow and scripts/macos/release.sh both call it, so the two downloads of a release
 always carry the same version.
 
@@ -20,8 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WINDOWS_PROPS = ROOT / "windows/app/Directory.Build.props"
 MAC_PROJECT = ROOT / "macos/project.yml"
+ANDROID_PROPERTIES = ROOT / "android/gradle.properties"
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 MARKETING_VERSION = re.compile(r'^\s*MARKETING_VERSION:\s*"?([^"\s]+)"?\s*$', re.MULTILINE)
+ANDROID_VERSION = re.compile(r"^osdropVersion=(\S+)\s*$", re.MULTILINE)
 
 
 def windows_version() -> str:
@@ -34,12 +37,17 @@ def mac_version() -> str:
     return match.group(1) if match else ""
 
 
+def android_version() -> str:
+    match = ANDROID_VERSION.search(ANDROID_PROPERTIES.read_text(encoding="utf-8"))
+    return match.group(1) if match else ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--tag", help="the release tag, which must be v<version>")
     arguments = parser.parse_args()
 
-    windows, mac = windows_version(), mac_version()
+    windows, mac, android = windows_version(), mac_version(), android_version()
     problems = []
     if not VERSION.match(windows):
         problems.append(f"{WINDOWS_PROPS.relative_to(ROOT)}: <Version> '{windows}' is not X.Y.Z")
@@ -47,6 +55,8 @@ def main() -> int:
         problems.append(f"{MAC_PROJECT.relative_to(ROOT)}: MARKETING_VERSION '{mac}' is not X.Y.Z")
     if windows != mac:
         problems.append(f"the Windows app is {windows} but the Mac app is {mac}")
+    if windows != android:
+        problems.append(f"the Windows app is {windows} but the Android app is {android}")
     if arguments.tag is not None and arguments.tag != f"v{windows}":
         problems.append(f"the tag {arguments.tag} does not match the apps' version v{windows}")
     if problems:

@@ -8,13 +8,13 @@ An Android phone joins the group, receives files sent to it and sends files to a
 Osdrop is open on it.
 
 ## Tasks
-- [ ] `core` for Android: NDK build from the same CMake sources, `OSDROP_PLATFORM_ANDROID`, random bytes from `getrandom`, the computers show the phone as a phone.
-- [ ] Kotlin app with `core` through JNI; identity in the Android Keystore; NSD discovery; pairing with the six-digit code; the group roster.
-- [ ] Files-only member: announces file transfer only; no screens, input or clipboard.
-- [ ] Receiving into Downloads through MediaStore (images and videos in the gallery), progress, cancel, notification; a received APK opens the installer from the notification (`REQUEST_INSTALL_PACKAGES`).
-- [ ] Sending from the share sheet and an in-app picker to a chosen connected computer; until Phase 022 the computer saves a phone's files to Downloads with a notification (Mac and PC).
-- [ ] Listens only while the app is open; English and Turkish, light and dark; Android 12 or later.
-- [ ] Release: APK signed with the shared release keystore, attached to the GitHub release; BUILDING.md and RELEASING.md describe it.
+- [x] `core` for Android: NDK build from the same CMake sources, `OSDROP_PLATFORM_ANDROID`, random bytes from `getrandom`, the computers show the phone as a phone.
+- [x] Kotlin app with `core` through JNI; identity in the Android Keystore; NSD discovery; pairing with the six-digit code; the group roster.
+- [x] Files-only member: announces file transfer only; no screens, input or clipboard.
+- [x] Receiving into Downloads through MediaStore (images and videos in the gallery), progress, cancel, notification; a received APK opens the installer from the notification (`REQUEST_INSTALL_PACKAGES`).
+- [x] Sending from the share sheet and an in-app picker to a chosen connected computer; until Phase 022 the computer saves a phone's files to Downloads with a notification (Mac and PC).
+- [x] Listens only while the app is open; English and Turkish, light and dark; Android 12 or later.
+- [ ] Release: APK signed with the shared release keystore, attached to the GitHub release; BUILDING.md and RELEASING.md describe it. (Docs and `release.sh` check done; signing happens at the 0.2.0 release.)
 
 ## Acceptance Criteria
 - [ ] A phone pairs with a Mac and a PC and shows up in both group lists as a phone.
@@ -24,5 +24,6 @@ Osdrop is open on it.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- 2026-11-24: until Phase 022 a computer sends to a phone from the phone's row (Mac menu, PC panel "…"); the phone takes every send without asking and saves it to Download/Osdrop; the receiving side can cancel.
 - 2026-11-09 (user): the phone app must be open on the phone; no background service. Kept 2026-11-23.
 - 2026-11-23 (user): files both ways (not receive-only); clipboard later (Phase 025); Android first; GitHub APK first, Google Play later.

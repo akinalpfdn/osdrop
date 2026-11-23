@@ -365,6 +365,22 @@ the members are connected again and the cursor crosses, without restarting Osdro
 | R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
 | R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
 
+### Phones (Phase 20)
+
+Run with an Android phone (Android 12 or later) and the 0.2 apps on a Mac and a PC, on one Wi-Fi
+network. Osdrop stays open on the phone unless a row says otherwise.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| P1 | Pairing | On the phone, **Pair** next to the Mac; accept the code on both. Then pair the PC from the Mac's group | The phone lists both computers as connected; the Mac's menu and the PC's panel show it with a phone icon |
+| P2 | Computer → phone | Mac: the phone's row › **Send files to this phone**, pick a photo, a 2 GB file and a folder of photos. PC: the same from the panel's "…" menu | Progress on the computer and on the phone; everything arrives intact in Download › Osdrop, the photos also in the gallery; a notification on the phone |
+| P3 | APK | Send an APK from a computer | The phone's notification opens the installer |
+| P4 | Phone → computer | Share a photo and a 2 GB video from the gallery to Osdrop, pick the Mac; again from the app's **Send files** to the PC | They arrive in the computer's Downloads, listed with progress and a notification |
+| P5 | Cancel | During P2 and P4, cancel on the receiving side, then on the sending side | Both sides stop; no partial file stays in Downloads; the sender says the sending stopped |
+| P6 | App closed | Close Osdrop on the phone (swipe it away), then open it again | The computers show the phone as not connected, and connected again without a code |
+| P7 | Files permission | On the Mac, turn off files for the phone; send from the phone | The send is refused at once and the phone says so |
+| P8 | Old computer | A computer on 0.1 in the group | The 0.1 computer keeps working with the others and does not list the phone |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
