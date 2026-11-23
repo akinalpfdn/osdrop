@@ -11,6 +11,7 @@
 #include "mesh/mesh.hpp"
 #include "protocol/control_messages.hpp"
 #include "protocol/wire.hpp"
+#include "send/sends.hpp"
 #include "transfer/file_thread.hpp"
 #include "transfer/files.hpp"
 #include "transfer/service.hpp"
@@ -40,6 +41,7 @@ namespace control = osdrop::control;
 namespace layout = osdrop::layout;
 namespace mesh = osdrop::mesh;
 namespace protocol = osdrop::protocol;
+namespace sending = osdrop::sending;
 namespace transfer = osdrop::transfer;
 using osdrop::Error;
 using osdrop::TimePoint;
@@ -56,7 +58,11 @@ static_assert(OSDROP_FEATURE_TAKES_CONTROL == protocol::kFeatureTakesControl &&
 static_assert(OSDROP_MONITOR_KEY_SIZE == protocol::kIdSize &&
               OSDROP_MAX_MONITORS == protocol::kMaxMonitors);
 static_assert(OSDROP_OBJECT_DRAG == static_cast<int>(protocol::ObjectKind::Drag) &&
-              OSDROP_OBJECT_CLIPBOARD == static_cast<int>(protocol::ObjectKind::Clipboard));
+              OSDROP_OBJECT_CLIPBOARD == static_cast<int>(protocol::ObjectKind::Clipboard) &&
+              OSDROP_OBJECT_SENT == static_cast<int>(protocol::ObjectKind::Sent));
+static_assert(OSDROP_SEND_RECEIVED == static_cast<int>(protocol::SendOutcome::Received) &&
+              OSDROP_SEND_DECLINED == static_cast<int>(protocol::SendOutcome::Declined) &&
+              OSDROP_SEND_FAILED == static_cast<int>(protocol::SendOutcome::Failed));
 static_assert(OSDROP_CLIPBOARD_TEXT == static_cast<int>(protocol::ClipboardFormat::PlainText) &&
               OSDROP_CLIPBOARD_RTF == static_cast<int>(protocol::ClipboardFormat::RichText) &&
               OSDROP_CLIPBOARD_HTML == static_cast<int>(protocol::ClipboardFormat::Html) &&
@@ -234,10 +240,11 @@ osdrop_object_ref to_c(const protocol::ObjectRef& item) {
 /// An object reference the protocol can carry (PROTOCOL.md, "Transfer streams").
 osdrop::Expected<protocol::ObjectRef, Error> to_object(const osdrop_object_ref& item) {
     using Result = osdrop::Expected<protocol::ObjectRef, Error>;
-    if (item.kind != OSDROP_OBJECT_DRAG && item.kind != OSDROP_OBJECT_CLIPBOARD) {
+    if (item.kind != OSDROP_OBJECT_DRAG && item.kind != OSDROP_OBJECT_CLIPBOARD &&
+        item.kind != OSDROP_OBJECT_SENT) {
         return Result::failure(Error::ValueOutOfRange);
     }
-    const bool drag = item.kind == OSDROP_OBJECT_DRAG;
+    const bool drag = item.kind != OSDROP_OBJECT_CLIPBOARD; // a dragged or a sent item
     if (item.object_id == 0 || (drag && item.item_index >= protocol::kMaxDragItems) ||
         (!drag && (item.item_index < 1 || item.item_index > protocol::kMaxClipboardFormats))) {
         return Result::failure(Error::ValueOutOfRange);
@@ -254,6 +261,7 @@ class CallbackObserver final : public group::GroupObserver,
                                public layout::LayoutObserver,
                                public transfer::TransferObserver,
                                public clipboard::ClipboardObserver,
+                               public sending::SendsObserver,
                                public control::ControlObserver,
                                public mesh::MeshObserver {
 public:
@@ -261,9 +269,10 @@ public:
 
     /// The layers to tell about group changes; set once, before the mesh starts.
     void follow(layout::Layout& arrangement, transfer::TransferService& transfers,
-                clipboard::Clipboard& shared, control::Control& input) {
+                sending::Sends& sends, clipboard::Clipboard& shared, control::Control& input) {
         layout_ = &arrangement;
         transfers_ = &transfers;
+        sends_ = &sends;
         clipboard_ = &shared;
         control_ = &input;
     }
@@ -275,6 +284,9 @@ public:
         }
         if (transfers_ != nullptr) {
             transfers_->set_files_permitted(state.file_senders());
+        }
+        if (sends_ != nullptr) {
+            sends_->set_file_senders(state.file_senders());
         }
         if (clipboard_ != nullptr) {
             clipboard_->set_members(state.clipboard_members());
@@ -530,6 +542,31 @@ public:
                                 static_cast<std::int32_t>(arrival.position.y), items.data(),
                                 items.size());
     }
+    // --- sending::SendsObserver ---
+    void on_send_arrived(const sending::ArrivedSend& arrived) override {
+        if (callbacks_.send_arrived == nullptr) {
+            return; // an app that takes no sends: it declines in answer
+        }
+        std::vector<osdrop_drag_item> items;
+        items.reserve(arrived.items.size());
+        for (const protocol::OfferedItem& item : arrived.items) {
+            items.push_back({.is_folder = static_cast<std::uint8_t>(
+                                 item.kind == protocol::ItemKind::Folder ? 1 : 0),
+                             .byte_count = item.byte_count,
+                             .content_type = item.content_type.c_str(),
+                             .name = item.name.c_str()});
+        }
+        callbacks_.send_arrived(callbacks_.context, arrived.device.data(), arrived.send_id,
+                                items.data(), items.size());
+    }
+    void on_send_finished(const mesh::DeviceId& device, std::uint64_t send_id,
+                          protocol::SendOutcome outcome) override {
+        if (callbacks_.send_finished != nullptr) {
+            callbacks_.send_finished(callbacks_.context, device.data(), send_id,
+                                     static_cast<osdrop_send_outcome>(outcome));
+        }
+    }
+
     void on_drag_withdrawn(std::uint32_t drag_id) override {
         if (callbacks_.drag_withdrawn != nullptr) {
             callbacks_.drag_withdrawn(callbacks_.context, drag_id);
@@ -551,6 +588,7 @@ private:
     osdrop_mesh_callbacks callbacks_;
     layout::Layout* layout_ = nullptr;
     transfer::TransferService* transfers_ = nullptr;
+    sending::Sends* sends_ = nullptr;
     clipboard::Clipboard* clipboard_ = nullptr;
     control::Control* control_ = nullptr;
 };
@@ -719,6 +757,7 @@ struct osdrop_mesh {
     NodeExecutor executor;
     std::unique_ptr<control::Control> control;
     std::unique_ptr<clipboard::Clipboard> clipboard;
+    std::unique_ptr<sending::Sends> sends;
     std::unique_ptr<transfer::TransferService> transfers;
     std::unique_ptr<layout::Layout> layout;
     std::unique_ptr<group::Group> group;
@@ -776,24 +815,27 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     if (!handle) {
         return OSDROP_ERROR_INTERNAL;
     }
-    // mesh → group → layout → transfers → clipboard → control → callbacks; the clipboard and the
-    // control also stand between the transfers and the callbacks, the control between the layout
-    // and them.
+    // mesh → group → layout → transfers → sends → clipboard → control → callbacks; the sends, the
+    // clipboard and the control also stand between the transfers and the callbacks, the control
+    // between the layout and them.
     const mesh::DeviceId self = osdrop::crypto::device_id(identity.value().public_key());
     handle->control = std::make_unique<control::Control>(
         self, mesh_config.platform, control::ControlTunables{}, handle->observer, handle->observer,
         handle->observer, handle->observer);
     handle->clipboard = std::make_unique<clipboard::Clipboard>(self, handle->observer,
                                                                *handle->control, *handle->control);
+    handle->sends = std::make_unique<sending::Sends>(self, handle->observer, *handle->clipboard,
+                                                     *handle->clipboard);
     handle->transfers = std::make_unique<transfer::TransferService>(
         transfer::TransferTunables{.max_streams = config->max_transfer_streams}, handle->executor,
-        *handle->clipboard, *handle->clipboard);
+        *handle->sends, *handle->sends);
     handle->layout = std::make_unique<layout::Layout>(self, std::move(arrangement.value()),
                                                       *handle->control, *handle->transfers);
-    handle->observer.follow(*handle->layout, *handle->transfers, *handle->clipboard,
+    handle->observer.follow(*handle->layout, *handle->transfers, *handle->sends, *handle->clipboard,
                             *handle->control);
     handle->layout->group_changed(state.value().group_id, members_of(state.value()));
     handle->transfers->set_files_permitted(state.value().file_senders());
+    handle->sends->set_file_senders(state.value().file_senders());
     handle->clipboard->set_members(state.value().clipboard_members());
     handle->control->set_controllers(state.value().controllers());
     handle->control->set_file_senders(state.value().file_senders());
@@ -803,16 +845,18 @@ osdrop_result osdrop_mesh_create(const osdrop_mesh_config* config,
     group::Group& member_layer = *handle->group;
     layout::Layout& arrangement_layer = *handle->layout;
     transfer::TransferService& transfer_layer = *handle->transfers;
+    sending::Sends& send_layer = *handle->sends;
     clipboard::Clipboard& clipboard_layer = *handle->clipboard;
     control::Control& control_layer = *handle->control;
     auto node = osdrop::transport::AsioNode::create(
         std::move(mesh_config), std::move(identity.value()), handle->random, member_layer,
         osdrop::transport::NodeOptions{.listen_port = config->listen_port},
-        [&member_layer, &arrangement_layer, &transfer_layer, &clipboard_layer,
+        [&member_layer, &arrangement_layer, &transfer_layer, &send_layer, &clipboard_layer,
          &control_layer](mesh::Mesh& mesh) {
             member_layer.attach(mesh);
             arrangement_layer.attach(mesh);
             transfer_layer.attach(mesh);
+            send_layer.attach(mesh, transfer_layer);
             clipboard_layer.attach(mesh, transfer_layer);
             control_layer.attach(mesh, arrangement_layer, transfer_layer);
         });
@@ -1386,6 +1430,54 @@ osdrop_result osdrop_mesh_drop_finished(osdrop_mesh* mesh, uint32_t drag_id,
         node_mesh.flush(now);
     });
     return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_send(osdrop_mesh* mesh, const uint8_t* device_id,
+                               const osdrop_dragged_item* items, size_t count,
+                               uint64_t* out_send_id) {
+    if (mesh == nullptr || device_id == nullptr || items == nullptr || out_send_id == nullptr ||
+        count == 0 || count > protocol::kMaxDragItems) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<sending::SentPath> sent;
+    sent.reserve(count);
+    for (const osdrop_dragged_item& item : std::span(items, count)) {
+        if (item.path == nullptr || item.content_type == nullptr) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        sent.push_back(
+            {.path = transfer::path_from_utf8(item.path), .content_type = item.content_type});
+    }
+    const mesh::DeviceId device = read_id(device_id);
+    auto result = osdrop::Expected<std::uint64_t, Error>::failure(Error::Internal);
+    sending::Sends& send_layer = *mesh->sends;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        result = send_layer.send(device, std::move(sent));
+        node_mesh.flush(now);
+    }));
+    if (!result) {
+        return to_result(result.error());
+    }
+    *out_send_id = result.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_mesh_answer_send(osdrop_mesh* mesh, const uint8_t* device_id, uint64_t send_id,
+                                      osdrop_send_outcome outcome) {
+    if (mesh == nullptr || device_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    if (send_id == 0 || outcome < OSDROP_SEND_RECEIVED || outcome > OSDROP_SEND_FAILED) {
+        return OSDROP_ERROR_VALUE_OUT_OF_RANGE;
+    }
+    const mesh::DeviceId device = read_id(device_id);
+    auto result = osdrop::Status<Error>::failure(Error::Internal);
+    sending::Sends& send_layer = *mesh->sends;
+    static_cast<void>(mesh->node->run_and_wait([&](mesh::Mesh& node_mesh, TimePoint now) {
+        result = send_layer.answer(device, send_id, static_cast<protocol::SendOutcome>(outcome));
+        node_mesh.flush(now);
+    }));
+    return result ? OSDROP_OK : to_result(result.error());
 }
 
 osdrop_result osdrop_mesh_cancel_transfer(osdrop_mesh* mesh, uint64_t transfer_id) {

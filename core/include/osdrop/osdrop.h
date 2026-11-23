@@ -267,6 +267,7 @@ typedef struct osdrop_session_stats {
 typedef enum osdrop_object_kind {
     OSDROP_OBJECT_DRAG = 1,      /* object_id: the drag ID; item_index: the item in the DragOffer */
     OSDROP_OBJECT_CLIPBOARD = 2, /* object_id: the clip ID; item_index: the format code */
+    OSDROP_OBJECT_SENT = 3,      /* object_id: the send ID; item_index: the item in the send */
     OSDROP_OBJECT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_object_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -343,6 +344,14 @@ typedef enum osdrop_drag_outcome {
     OSDROP_DRAG_FAILED = 3,    /* the drag could not start */
     OSDROP_DRAG_OUTCOME_MAX_ENUM = 0x7FFFFFFF
 } osdrop_drag_outcome;
+
+/* How files sent to one member ended (PROTOCOL.md "Sending files"). */
+typedef enum osdrop_send_outcome {
+    OSDROP_SEND_RECEIVED = 1, /* every item arrived */
+    OSDROP_SEND_DECLINED = 2, /* the member did not take them, or may not send this one files */
+    OSDROP_SEND_FAILED = 3,   /* an item could not travel, or the session ended first */
+    OSDROP_SEND_OUTCOME_MAX_ENUM = 0x7FFFFFFF
+} osdrop_send_outcome;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
 
 /* A file or folder of a drag that arrives here (docs/PROTOCOL.md, "0x31 DragOffer"). */
@@ -498,6 +507,17 @@ typedef struct osdrop_mesh_callbacks {
      */
     void (*entry_written)(void* context, uint64_t transfer_id, uint32_t entry, const char* path,
                           uint64_t bytes, uint8_t complete);
+    /*
+     * The member `device_id` sent this computer files (protocol minor 1). Fetch each with
+     * osdrop_mesh_receive (OBJECT_SENT, object_id `send_id`, item_index its place in `items`),
+     * then answer with osdrop_mesh_answer_send; answer DECLINED to take none. Valid during the
+     * call only.
+     */
+    void (*send_arrived)(void* context, const uint8_t* device_id, uint64_t send_id,
+                         const osdrop_drag_item* items, size_t count);
+    /* A send from this computer ended: the member's answer, or FAILED. */
+    void (*send_finished)(void* context, const uint8_t* device_id, uint64_t send_id,
+                          osdrop_send_outcome outcome);
 } osdrop_mesh_callbacks;
 
 typedef struct osdrop_mesh_config {
@@ -760,6 +780,19 @@ osdrop_result osdrop_mesh_drag_stopped(osdrop_mesh* mesh);
 /* The drag started for drag_arrived ended. */
 osdrop_result osdrop_mesh_drop_finished(osdrop_mesh* mesh, uint32_t drag_id,
                                         osdrop_drag_outcome outcome);
+
+/*
+ * Sending files to one member without a drag (PROTOCOL.md "Sending files"). osdrop_mesh_send
+ * offers `count` files and folders to the connected member `device_id` and sends them once they
+ * are scanned; send_finished reports the end. INVALID_STATE when the member is not connected,
+ * UNSUPPORTED_VERSION when its Osdrop is too old to take sends. osdrop_mesh_answer_send answers a
+ * send_arrived, NOT_FOUND when that send is not waiting for an answer.
+ */
+osdrop_result osdrop_mesh_send(osdrop_mesh* mesh, const uint8_t* device_id,
+                               const osdrop_dragged_item* items, size_t count,
+                               uint64_t* out_send_id);
+osdrop_result osdrop_mesh_answer_send(osdrop_mesh* mesh, const uint8_t* device_id, uint64_t send_id,
+                                      osdrop_send_outcome outcome);
 
 /*
  * Pure and thread-safe: the problems of an arrangement, for the editor while the user drags.

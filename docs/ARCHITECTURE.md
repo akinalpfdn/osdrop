@@ -199,6 +199,19 @@ the others fetch it in the background and put it on their own clipboard as real 
   or CF_DIB through WIC; written as "PNG" and CF_DIB), files as CF_HDROP with "Preferred
   DropEffect" set to copy. The shell shows a notice in the Computers window.
 
+## Sending files to one member
+
+Built in Phase 20 for phones (protocol minor 1): a phone sends what was shared to it, a computer
+what was dropped on a phone's corner.
+
+- **Core** (`core/src/send`). `Sends` sits between the transfers and the clipboard in the observer
+  chain. `send` offers the items to that member alone as object kind 3 and sends a SendOffer once
+  their scan gives names and sizes; a member before minor 1 is refused before anything is offered.
+  The receiving side reports the offer (`send_arrived`), unless the sender's files permission is
+  off, which declines it at once. The app fetches each item with `receive` and answers with
+  `answer_send`; the sender withdraws the items on the answer or when the session ends, and
+  reports the end (`send_finished`) ([`PROTOCOL.md`](PROTOCOL.md), "Sending files").
+
 ## Cursor and keyboard across computers
 
 Built in Phase 11 for `core` and the Mac; on Windows, both halves came with Phase 3 (see
