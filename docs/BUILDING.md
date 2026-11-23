@@ -57,10 +57,12 @@ xcodebuild -project Osdrop.xcodeproj -scheme Osdrop -destination 'platform=macOS
 open DerivedData/Build/Products/Debug/Osdrop.app
 ```
 
-The app has no Dock icon; it appears in the menu bar as two half arrows crossing a vertical line. Its menu shows the app and
-core versions, the computers in this Mac's group, the Macs and PCs nearby that run Osdrop (with
-**Pair**), and a Quit button. A pairing opens a window with the code on both computers. The app
-bundle also carries `OsdropCaptureGuard` in `Contents/MacOS`, built by the same scheme.
+The app has no Dock icon; it appears in the menu bar as two half arrows crossing a vertical line.
+Its menu opens by itself at the first launch (after the permissions window, when that shows) and
+when the app is opened again while it runs. The menu shows the app and core versions, the computers
+in this Mac's group, the Macs and PCs nearby that run Osdrop (with **Pair**), and a Quit button. A
+pairing opens a window with the code on both computers. The app bundle also carries
+`OsdropCaptureGuard` in `Contents/MacOS`, built by the same scheme.
 
 Osdrop finds other computers with Bonjour, so macOS asks for Local Network access the first time
 (System Settings › Privacy & Security › Local Network); while it is off, the menu says so and
@@ -146,11 +148,12 @@ dotnet test --solution Osdrop.slnx -c Release --no-build
 dotnet run --project Osdrop.App -c Release
 ```
 
-The shell starts without a window and shows Osdrop's icon (a screen edge with a half arrow
-crossing it each way) in the notification area. A click opens the panel: where the mouse and
-keyboard are, quick switches, the group and nearby computers, and the way to Settings; **Mesh…**
-sits at its bottom in Debug builds. Right-click the icon to open the panel or Settings, or to quit.
-Windows may hide new icons in the overflow menu (the `^` arrow on the taskbar).
+The shell shows Osdrop's icon (a screen edge with a half arrow crossing it each way) in the
+notification area; it opens no window, except the panel at its first start on the PC and when it is
+started again while it runs. A click opens the panel: where the mouse and keyboard are, quick
+switches, the group and nearby computers, and the way to Settings; **Mesh…** sits at its bottom in
+Debug builds. Right-click the icon to open the panel or Settings, or to quit. Windows may hide new
+icons in the overflow menu (the `^` arrow on the taskbar).
 
 The icons in `windows/app/Osdrop.App/Assets` are drawn from the Mac menu bar icon's geometry by
 `uvx --with pillow python scripts/windows/make_icons.py`; run it again after changing that icon.
