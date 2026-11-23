@@ -868,3 +868,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** People who installed Osdrop did not notice that it was installed: nothing but an icon appeared, and Windows 11 puts new tray icons behind the ^ button. The menu shows where Osdrop lives and what it does. Opening it on a second start is what the PC already did.
 **Trade-offs:** The Mac relies on AppKit internals: the menu bar window's private `statusItem`, and on macOS 27 the private session call. Each is used only while it is there with the signature it has in macOS 27.2, so a later release that changes them leaves the menu closed, with a line in the log, and cannot crash the app. People upgrading see the menu open once. The app hosts its own unit tests, so it skips this there (`TestHost`).
 **Revisit if:** The log shows "Opening the menu by itself showed no window" or "This macOS release has no known way to open the menu by itself"; then build the menu bar item on `NSStatusItem`.
+
+---
+
+## 2026-11-23 — The app starts empty when it hosts the unit tests
+**Chosen:** User decision: `OsdropMain` starts an empty app (one empty Settings scene: no menu bar icon, no window) when Xcode runs the unit tests inside the app (`TestHost`, from Xcode's test variables), and Osdrop otherwise.
+**Alternatives:** Guarding each launch step in `OsdropApp` (the menu, the group, the AWDL switch, the staging cleanup, the permissions window, the update check); a separate host app target for the tests.
+**Why:** The tests ran inside a full Osdrop: it joined the user's group with this Mac's Keychain identity, which took the PC's session from the Osdrop already running (2026-11-23 18:09:42), emptied that Osdrop's drag staging folder in the shared temporary folder, and could open the permissions window or check for updates. Guarding each step misses the next one added; a second app target is more to build and sign.
+**Trade-offs:** The tests no longer exercise `OsdropApp`'s wiring; it is covered by the manual matrix. Should Xcode stop setting those variables, the full app runs again; a test checks the host has no menu bar icon.
+**Revisit if:** A test needs the running app; then it builds what it needs itself.
