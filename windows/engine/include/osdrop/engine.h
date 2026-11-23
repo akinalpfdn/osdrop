@@ -56,6 +56,11 @@ typedef enum osdrop_engine_event_kind {
                                              (the member fetching it), name, bytes_done,
                                              bytes_total; code: 1 sending, 2 every byte went out,
                                              3 stopped */
+    OSDROP_ENGINE_SEND_FINISHED = 22,     /* connection: a send's ID; device_id: the member it
+                                             went to; code: 1 received, 2 declined, 3 failed */
+    OSDROP_ENGINE_SENT_PROGRESS = 23,     /* as SEND_PROGRESS, for files this PC sent a member
+                                             (a phone): connection is the send's ID << 32 | item
+                                             index */
     OSDROP_ENGINE_EVENT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_engine_event_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -188,6 +193,16 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* eng
 /* Withdraws this PC's drag `drag_id`: members fetching its items stop. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine,
                                                             uint32_t drag_id);
+/* Sends `count` files and folders (NUL-terminated UTF-8 absolute paths) to the connected member
+   `device_id`, a phone (DEVPLAN Phase 20): SENT_PROGRESS and SEND_FINISHED follow. Files phones
+   send this PC arrive in Downloads, listed as TRANSFER_RECEIVING. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_send_files(osdrop_engine* engine,
+                                                         const uint8_t* device_id,
+                                                         const char* const* paths, size_t count,
+                                                         uint64_t* out_send_id);
+/* Withdraws a send: the member stops fetching its items. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_withdraw_send(osdrop_engine* engine,
+                                                            uint64_t send_id);
 /* Stops fetching copied files from another computer; the clipboard keeps what it had. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine);
 /* The user's clipboard settings. Turned off, this PC's copy is withdrawn and copies are neither
