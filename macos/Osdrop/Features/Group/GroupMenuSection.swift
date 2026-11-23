@@ -81,7 +81,7 @@ private struct MemberRow: View {
                 .fill(statusColor)
                 .frame(width: Theme.Size.statusDot, height: Theme.Size.statusDot)
                 .accessibilityHidden(true)
-            Image(systemName: member.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+            Image(systemName: member.platform.symbol)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(member.name)
@@ -126,7 +126,7 @@ private struct NearbyRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
-            Image(systemName: computer.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+            Image(systemName: computer.platform.symbol)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(computer.name)

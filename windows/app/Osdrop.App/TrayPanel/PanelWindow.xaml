@@ -32,6 +32,9 @@
         <DataTrigger Binding="{Binding IsWindows}" Value="True">
           <Setter Property="Symbol" Value="Desktop24" />
         </DataTrigger>
+        <DataTrigger Binding="{Binding IsPhone}" Value="True">
+          <Setter Property="Symbol" Value="Phone24" />
+        </DataTrigger>
       </Style.Triggers>
     </Style>
   </ui:FluentWindow.Resources>

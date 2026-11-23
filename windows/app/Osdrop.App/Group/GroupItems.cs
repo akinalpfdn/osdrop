@@ -28,6 +28,7 @@ public sealed partial class MemberItem : ObservableObject
         IsSelf = member.IsSelf;
         IsConnected = member.IsConnected;
         IsWindows = member.Platform == Platform.Windows;
+        IsPhone = member.Platform == Platform.Android;
         AllowsControl = member.Permissions.Control;
         AllowsFiles = member.Permissions.Files;
         AllowsClipboard = member.Permissions.Clipboard;
@@ -39,6 +40,7 @@ public sealed partial class MemberItem : ObservableObject
     public bool IsSelf { get; }
     public bool IsConnected { get; }
     public bool IsWindows { get; }
+    public bool IsPhone { get; }
     public bool CanRemove => !IsSelf;
 
     [ObservableProperty]
@@ -96,6 +98,7 @@ public sealed class NearbyItem
         DeviceId = computer.DeviceId;
         Name = computer.Name;
         IsWindows = computer.Platform == Platform.Windows;
+        IsPhone = computer.Platform == Platform.Android;
         Note = computer.NeedsUpdate ? Localization.Strings.GroupNeedsUpdate
             : computer.InAnotherGroup ? Localization.Strings.GroupInAnotherGroup
             : string.Empty;
@@ -105,6 +108,7 @@ public sealed class NearbyItem
     public string DeviceId { get; }
     public string Name { get; }
     public bool IsWindows { get; }
+    public bool IsPhone { get; }
     public string Note { get; }
     public bool HasNote => Note.Length > 0;
     public bool CanPair { get; }
@@ -118,9 +122,11 @@ public sealed class BlockedItem
         DeviceId = computer.DeviceId;
         Name = computer.Name;
         IsWindows = computer.Platform == Platform.Windows;
+        IsPhone = computer.Platform == Platform.Android;
     }
 
     public string DeviceId { get; }
     public string Name { get; }
     public bool IsWindows { get; }
+    public bool IsPhone { get; }
 }

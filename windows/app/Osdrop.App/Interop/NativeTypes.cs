@@ -52,6 +52,7 @@ internal enum Platform
 {
     MacOS = 1,
     Windows = 2,
+    Android = 3,
 }
 
 /// <summary>osdrop_log_level.</summary>

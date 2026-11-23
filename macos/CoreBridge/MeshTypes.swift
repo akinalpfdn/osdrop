@@ -4,18 +4,24 @@ import OsdropCore
 public enum PeerPlatform: Sendable, Equatable {
     case macOS
     case windows
+    case android
 
     /// The platform this app runs on.
     public static var current: PeerPlatform { .macOS }
 
     init(_ raw: osdrop_platform) {
-        self = raw == OSDROP_PLATFORM_WINDOWS ? .windows : .macOS
+        switch raw {
+        case OSDROP_PLATFORM_WINDOWS: self = .windows
+        case OSDROP_PLATFORM_ANDROID: self = .android
+        default: self = .macOS
+        }
     }
 
     var raw: osdrop_platform {
         switch self {
         case .macOS: OSDROP_PLATFORM_MACOS
         case .windows: OSDROP_PLATFORM_WINDOWS
+        case .android: OSDROP_PLATFORM_ANDROID
         }
     }
 }
