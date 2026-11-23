@@ -369,6 +369,8 @@ the members are connected again and the cursor crosses, without restarting Osdro
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-23 | dev (a8bf2b5 and the branches before it), Debug, M3 Air on macOS 27.2 + PC | U9, WU10, I11 with the Mac's trackpad | Pass: the menu opened by itself at the first start (after the permissions window) and when Osdrop was opened again, not at a second start; the PC's panel the same; coming home with the trackpad no longer waits at the edge (8a1db77). The click alone had not opened the menu on macOS 27 |
+| 2026-11-23 | 0.1.1 candidates on the PC and the M3 Air | WU5, I10, I11 with the PC's mouse, installer upgrade from 0.1.0 | Pass (maintainer) |
 | 2026-11-23 | dev (ee4e13a), Debug, M3 Air + PC | Mac → PC in daily use | Fail: the cursor crossed and came back about a hundred times a second (797 captures in 40 minutes); keys reached the PC, the mouse never stayed. The warp that parked the Mac's cursor added its distance to the next mouse delta (b2bafc2); parking removed |
 | 2026-11-22 | dev (6a78f6b) on the PC (debug engine and shell) and the M3 Air | PC → Mac crossings with the new crossing log | Pass: 18 of 18 crossings with the PC's mouse in 26 minutes, each logged by core, and OsdropInput's capture lines within 1–3 ms of each. WU5 and I10 not run yet |
 | 2026-11-21 | dev (21a3a93), Debug, M3 Air connected to the PC | R12, replaced by a look at the running app (user decision) | Mac: after 2 h 45 min of the day's use, footprint 52.3 MB with a lifetime peak of 52.5 MB; over the next 10 minutes 52.1–52.3 MB, 61 open files, 9–11 threads, Mach ports 313 then 299, one TCP connection. No growth. PC: numbers to come |

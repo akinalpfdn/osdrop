@@ -275,10 +275,10 @@ Phase 5 writes the authoritative `docs/PROTOCOL.md` and fixtures in `protocol/fi
 - Trackpad gestures beyond scrolling (pinch, swipe between spaces).
 - Linux endpoints (X11, and Wayland through libei / the input-capture portal).
 - Homebrew cask and winget manifest; Windows code signing (SignPath Foundation), which would also allow `uiAccess`.
-- Phones as drop targets (Phases 20–22, user decision 2026-11-09): a paired Android phone or iPhone receives files dragged to a corner of a Mac or PC, while Osdrop is open on the phone.
+- Phones (Phases 20–23, user decisions 2026-11-09 and 2026-11-23; 0.2.0 starts with Android): a paired phone sends and receives files through a corner of each Mac and PC, while Osdrop is open on the phone; clipboard with phones later.
 
 ### Out of scope
-- Controlling tablets and phones: iPadOS and Android give apps no way to inject system-wide input. Phones only receive files (Post-MVP).
+- Controlling tablets and phones: iPadOS and Android give apps no way to inject system-wide input. Phones only exchange files (Post-MVP).
 - Screen sharing (Osplay) and control over the internet.
 
 ---
@@ -620,41 +620,54 @@ Phases 1–4 retire the platform risks first. They build production modules, tes
 - [ ] Uninstall leaves no service, process, firewall rule or altered cursor behind.
 - [ ] A new contributor can build both apps using only `BUILDING.md`.
 
-### Phase 20: Android receiver (after 1.0)
-**Goal**: An Android phone joins the group and receives files sent to it while Osdrop is open on it.
+### Phase 20: Android app (0.2.0)
+**Goal**: An Android phone joins the group, receives files sent to it and sends files to a computer, while Osdrop is open on it.
 **Delivers**:
-- Kotlin app with `core` through JNI: identity in the Android Keystore, discovery over NSD, pairing with the same six-digit code, the group roster.
-- The phone is a receive-only member: it announces only file receiving, has no screens in the arrangement, takes no input and shares no clipboard; other members see it as a phone.
-- Received files go to Downloads through MediaStore (images and videos also appear in the gallery), with progress, cancel and a notification; APKs open the system installer from the notification.
-- It listens only while the app is open (user decision 2026-11-09: no background service); English and Turkish, light and dark.
+- Kotlin app with `core` through JNI, built by the NDK from the same CMake sources; `core` learns the Android platform (random bytes from `getrandom`), and the computers show the phone as a phone. Identity in the Android Keystore, discovery over NSD, pairing with the same six-digit code, the group roster.
+- The phone is a files-only member: it announces file transfer only, has no screens in the arrangement, takes no input and shares no clipboard.
+- Receiving: files go to Downloads through MediaStore (images and videos also appear in the gallery), with progress, cancel and a notification; a received APK opens the system installer from the notification (`REQUEST_INSTALL_PACKAGES`).
+- Sending: Osdrop in Android's share sheet and a file picker in the app; the user picks a connected computer, and the files go through the transfer engine. Until Phase 21 the computer saves files from a phone to its Downloads folder and shows a notification.
+- It listens only while the app is open (user decision 2026-11-09, kept 2026-11-23: no background service). English and Turkish, light and dark, Android 12 or later.
+- Release: an APK signed with the release keystore, attached to the GitHub release next to the DMG and the installer (user decision 2026-11-23: GitHub first, Google Play later).
 **Depends on**: Phase 19
 **Acceptance criteria**:
-- [ ] A phone pairs with a Mac and a PC and shows up in both apps' group lists.
-- [ ] A 2 GB file and a folder of photos arrive intact over Wi-Fi.
+- [ ] A phone pairs with a Mac and a PC and shows up in both apps' group lists as a phone.
+- [ ] A 2 GB file and a folder of photos arrive intact over Wi-Fi in both directions.
+- [ ] An APK sent from a computer installs from the notification.
 - [ ] Closing the app ends the session; the computers show the phone as not connected.
 
-### Phase 21: Corner drop zones on the computers (after 1.0)
-**Goal**: A file dragged to a corner of a Mac or PC lands on a phone, as in Dropover.
+### Phase 21: Phone corners on the computers (0.2.0)
+**Goal**: Each phone has a corner on each Mac and PC: files dragged into it go to the phone, and files the phone sends appear there to be dragged out.
 **Delivers**:
-- A corner per phone, chosen in Settings › Devices; a drop target there, shown during drags only while that phone is connected (the app open on it).
-- Dropping opens a small panel at the corner with the phone's name, the files, progress and cancel; the files go through the transfer engine as any drag does.
+- A corner per phone, chosen in Settings › Devices on each computer. While that phone is connected, a drag that reaches the corner shows a small box there with the phone's name, as in Dropover.
+- Files dropped into the box go to the phone through the transfer engine, with progress and cancel in the box.
+- Files the phone sends open the box at its corner by themselves; each can be dragged out of the box into any folder or app (Mac: file promises; PC: an OLE drag source). Files not taken stay in the box; closing it moves them to Downloads.
 - Mac (`EdgeDropTarget`) and PC (Phase 4's `EdgeTargets`) both.
 **Depends on**: Phases 14, 20
 **Acceptance criteria**:
 - [ ] Files dragged from Finder and Explorer to the phone's corner arrive on the phone.
-- [ ] With the app closed on the phone, the corner takes nothing and shows nothing.
+- [ ] Photos shared from the phone appear in the box at its corner on the chosen computer and can be dragged into Finder, Explorer and a chat app.
+- [ ] With the app closed on the phone, the corner shows nothing and takes nothing.
 - [ ] Crossing to other computers through the same edge is unaffected away from the corner.
 
-### Phase 22: iPhone receiver (after 1.0)
-**Goal**: An iPhone receives files sent to it, as the Android app does.
+### Phase 22: iPhone app (after the Android app)
+**Goal**: An iPhone sends and receives files as the Android app does, while Osdrop is in the foreground on it.
 **Delivers**:
 - Swift app with `core` through the Swift package, identity in the Keychain, Bonjour with the Local Network permission, pairing and the group.
 - Received files go to the app's folder in the Files app; images and videos can be saved to Photos with the user's permission.
-- It listens only while the app is in the foreground (iOS ends its sockets in the background).
+- Sending from the app and from the share sheet (a share extension hands the files to the app; extensions have tight memory limits).
+- It listens only while the app is in the foreground (iOS suspends its sockets in the background).
 **Depends on**: Phase 21
 **Acceptance criteria**:
-- [ ] An iPhone pairs, appears on both computers, and receives files dropped on its corner.
+- [ ] An iPhone pairs, appears on both computers, receives files dropped on its corner and sends photos to a computer's box.
 - [ ] Sending the app to the background ends the session cleanly; reopening it reconnects.
+
+### Phase 23: Clipboard with phones (backlog)
+**Goal**: Text copied on a computer reaches the phone, and the phone sends its clipboard with one tap.
+**Delivers**:
+- Computer to phone: copies reach the phone's clipboard while the app is connected.
+- Phone to computer: a button in the app. Android and iOS let no app read the clipboard in the background, so it cannot be automatic.
+**Depends on**: Phase 20. Deferred by user decision 2026-11-23: files first.
 
 ---
 
