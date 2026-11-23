@@ -1,5 +1,5 @@
 # Phase 021 (MOBILE-01) — Android app
-Status: PENDING — 0.2.0 (user decisions 2026-11-09 and 2026-11-23)
+Status: ACTIVE — 0.2.0 (user decisions 2026-11-09 and 2026-11-23)
 
 DEVPLAN reference: Phase 20. Depends on: Phase 19
 
