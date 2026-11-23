@@ -88,6 +88,8 @@ internal enum EngineEventKind
     TransferProgress = 19,
     TransferFinished = 20,
     SendProgress = 21,
+    SendFinished = 22,
+    SentProgress = 23,
 }
 
 internal static class NativeSizes

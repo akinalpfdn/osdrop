@@ -43,6 +43,9 @@ public sealed partial class MemberItem : ObservableObject
     public bool IsPhone { get; }
     public bool CanRemove => !IsSelf;
 
+    /// <summary>A connected phone: this PC can send it files.</summary>
+    public bool CanSendFiles => IsPhone && IsConnected;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Status), nameof(State))]
     public partial bool IsResponsive { get; set; } = true;

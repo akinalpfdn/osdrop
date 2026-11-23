@@ -118,6 +118,59 @@ public sealed class TransfersViewModelTests
     }
 
     [Fact]
+    public async Task AnItemSentToAPhoneIsListedAndCancellingWithdrawsTheSendWithoutANotification()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 1, Connection: Item(4, 0), DeviceId: _laptop, Name: "app.apk",
+            BytesDone: 10, BytesTotal: 40));
+        TransferRow row = Assert.Single(transfers.Rows);
+        Assert.True(row.IsSending);
+        Assert.Equal("app.apk", row.Name);
+
+        await row.CancelCommand.ExecuteAsync(null);
+        Assert.Equal([4UL], engine.WithdrawnSends);
+        Assert.Empty(engine.WithdrawnDrags);
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 3, Connection: Item(4, 0), DeviceId: _laptop, BytesDone: 10, BytesTotal: 40));
+        engine.Raise(new EngineEvent(EngineEventKind.SendFinished, Code: 3, Connection: 4, DeviceId: _laptop));
+        Assert.Equal(TransferState.Cancelled, row.State);
+        Assert.Empty(notes);
+    }
+
+    [Fact]
+    public void AnItemSentToAPhoneEndsDoneAndAReceivedSendAddsNoNotification()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 1, Connection: Item(5, 0), DeviceId: _laptop, Name: "photo.jpg", BytesTotal: 8));
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 2, Connection: Item(5, 0), DeviceId: _laptop, BytesDone: 8, BytesTotal: 8));
+        engine.Raise(new EngineEvent(EngineEventKind.SendFinished, Code: 1, Connection: 5, DeviceId: _laptop));
+        Assert.Equal(TransferState.Done, Assert.Single(transfers.Rows).State);
+        Assert.Equal(Localization.Strings.TransfersNotifySent, Assert.Single(notes).Title);
+    }
+
+    [Fact]
+    public void ASendThePhoneDeclinesIsReportedOnceAndOneThatFailsEndsItsRunningRows()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();
+        engine.Raise(new EngineEvent(EngineEventKind.SendFinished, Code: 2, Connection: 6, DeviceId: _laptop));
+        Assert.Empty(transfers.Rows);
+        Assert.Equal((Localization.Strings.TransfersNotifyNotSent, "Laptop"), Assert.Single(notes));
+
+        notes.Clear();
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 1, Connection: Item(7, 0), DeviceId: _laptop, Name: "a.jpg", BytesTotal: 8));
+        engine.Raise(new EngineEvent(
+            EngineEventKind.SentProgress, Code: 1, Connection: Item(9, 0), DeviceId: _laptop, Name: "b.jpg", BytesTotal: 8));
+        engine.Raise(new EngineEvent(EngineEventKind.SendFinished, Code: 3, Connection: 7, DeviceId: _laptop));
+        Assert.Equal(TransferState.Failed, transfers.Rows.Single(row => row.Name == "a.jpg").State);
+        Assert.True(transfers.Rows.Single(row => row.Name == "b.jpg").IsRunning);
+        Assert.Equal(Localization.Strings.TransfersNotifyNotSent, Assert.Single(notes).Title);
+    }
+
+    [Fact]
     public void ASendThatStopsByItselfFailsAndOneThatEndsUnlistedIsNotShown()
     {
         (FakeEngine engine, TransfersViewModel transfers, var notes) = Make();

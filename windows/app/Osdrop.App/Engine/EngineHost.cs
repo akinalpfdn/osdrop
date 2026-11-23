@@ -109,6 +109,15 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task WithdrawDragAsync(uint dragId) => Native.Run(() => NativeMethods.WithdrawDrag(_engine, dragId));
 
+    public Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        byte[][] texts = [.. paths.Select(Utf8.Terminated)];
+        return Native.Run(() => SendFilesNative(_engine, id, texts));
+    }
+
+    public Task WithdrawSendAsync(ulong sendId) => Native.Run(() => NativeMethods.WithdrawSend(_engine, sendId));
+
     public Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions)
     {
         byte[] id = Convert.FromHexString(deviceId);
@@ -423,6 +432,36 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         {
             CoreResult result = NativeMethods.Pair(engine, id, &connection);
             return (result, connection);
+        }
+    }
+
+    private static unsafe CoreResult SendFilesNative(nint engine, byte[] deviceId, byte[][] paths)
+    {
+        var handles = new GCHandle[paths.Length];
+        nint[] pointers = new nint[paths.Length];
+        try
+        {
+            for (int index = 0; index < paths.Length; index++)
+            {
+                handles[index] = GCHandle.Alloc(paths[index], GCHandleType.Pinned);
+                pointers[index] = handles[index].AddrOfPinnedObject();
+            }
+            ulong sendId = 0;
+            fixed (byte* id = deviceId)
+            fixed (nint* list = pointers)
+            {
+                return NativeMethods.SendFiles(engine, id, (byte**)list, (nuint)paths.Length, &sendId);
+            }
+        }
+        finally
+        {
+            foreach (GCHandle handle in handles)
+            {
+                if (handle.IsAllocated)
+                {
+                    handle.Free();
+                }
+            }
         }
     }
 

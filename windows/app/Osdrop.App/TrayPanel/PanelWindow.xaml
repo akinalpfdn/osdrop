@@ -224,6 +224,9 @@
                   <ui:SymbolIcon Symbol="MoreHorizontal24" FontSize="{StaticResource Osdrop.FontSize.SmallIcon}" />
                   <ui:Button.ContextMenu>
                     <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                      <MenuItem Header="{x:Static res:Strings.GroupSendFiles}" Command="{Binding SendFilesCommand}"
+                                CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                Visibility="{Binding PlacementTarget.DataContext.CanSendFiles, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource Osdrop.Converter.Visible}}" />
                       <MenuItem Header="{x:Static res:Strings.GroupRemove}" Command="{Binding RevokeCommand}"
                                 CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                       <MenuItem Header="{x:Static res:Strings.GroupBlock}" Command="{Binding BlockCommand}"
