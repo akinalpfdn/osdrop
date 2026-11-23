@@ -12,7 +12,7 @@ Run by CI on every pull request (commands in [`BUILDING.md`](BUILDING.md)):
 | `core/tests/cpp` | GoogleTest | Every `core` module; the protocol fixtures and the C API |
 | `windows/shared/tests` | GoogleTest | Windows-header-free libraries, on macOS and Windows |
 | `macos/CoreBridgeTests` | Swift Testing | The Swift wrapper over the C API; the protocol fixtures through it |
-| `macos/OsdropTests` | Swift Testing | Mac app logic: key and modifier tables, event translation and building, injection with a recording poster, the tap policy, replay plans, the capture guard's decisions and the guard process against a stand-in |
+| `macos/OsdropTests` | Swift Testing | Mac app logic: key and modifier tables, event translation and building, injection with a recording poster, the tap policy, replay plans, the capture guard's decisions and the guard process against a stand-in. They run inside the app, which then starts empty (`OsdropMain`), so a run leaves the Osdrop in use alone |
 | `windows/app/Osdrop.Localization.Tests` | xUnit | Shell strings in every shipped language |
 
 The core also runs under AddressSanitizer, UndefinedBehaviorSanitizer and ThreadSanitizer on macOS.

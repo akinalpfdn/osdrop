@@ -34,11 +34,6 @@ struct MenuOpenerTests {
         #expect(clicks.count == 3)
     }
 
-    @Test("The app knows it hosts these tests, so it leaves the user's menu alone")
-    func knowsItHostsTests() {
-        #expect(TestHost.isRunning)
-    }
-
     @Test("A private AppKit member counts only with the signature it was written for")
     func checksSignatures() {
         let description = NSSelectorFromString("description")

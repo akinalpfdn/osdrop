@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main
+/// Osdrop itself; `OsdropMain` starts it, unless the app hosts the unit tests.
 struct OsdropApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
     private let dependencies: AppDependencies
@@ -38,19 +38,18 @@ struct OsdropApp: App {
                 settings: dependencies.settings, group: dependencies.group, updates: updates,
                 launchAtLogin: SystemLaunchAtLogin(), logs: UnifiedLogExporter(), showPermissions: onboarding.show,
                 awdl: dependencies.awdl))
-        // Not while hosting the unit tests: they would use up the user's first launch.
-        let menu = TestHost.isRunning ? nil : MenuOpener(settings: dependencies.settings)
+        let menu = MenuOpener(settings: dependencies.settings)
         AppDelegate.onLaunch = {
             if onboardingModel.needsAttention {
                 // After the permissions window, not under it: the menu closes when a window takes focus.
-                onboarding.onNextClose = { menu?.openAtFirstLaunch() }
+                onboarding.onNextClose = { menu.openAtFirstLaunch() }
                 onboarding.show()
             } else {
-                menu?.openAtFirstLaunch()
+                menu.openAtFirstLaunch()
             }
             Task { await updates.checkIfDue() }
         }
-        AppDelegate.onReopen = { menu?.open() }
+        AppDelegate.onReopen = { menu.open() }
         #if DEBUG
             _developer = State(initialValue: DeveloperInputViewModel(dependencies: dependencies))
             _developerDrag = State(initialValue: DeveloperDragViewModel(dependencies: dependencies))
