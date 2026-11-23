@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 object Tokens {
     val screenPadding = 24.dp
     val gap = 12.dp
+    val smallGap = 4.dp
 }
 
 /** Material 3 with the phone's own colors (Android 12 and later), light or dark as the system is. */
