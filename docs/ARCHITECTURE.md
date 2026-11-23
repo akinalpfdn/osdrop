@@ -510,7 +510,8 @@ process").
   Accepted (first on every connection OsdropInput takes) and TurnedAway (u8: 1 another session,
   2 no identification, 3 another user, 4 unknown executable, 5 not run from OsdropInput's folder,
   that is another copy of Osdrop; the only report before the pipe closes, which OsdropInput holds
-  open up to a second for the client to read it). An older client ignores both as unknown types; a
+  open up to a second for the client to read it; its log has the first refusal of each kind and
+  then a count at most every 10 minutes, `refusal_tally`). An older client ignores both as unknown types; a
   client gives an OsdropInput that says neither a second before taking the open pipe as accepted. Ticks
   are QueryPerformanceCounter values, so the engine knows how old an input is. Positions are at
   most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.

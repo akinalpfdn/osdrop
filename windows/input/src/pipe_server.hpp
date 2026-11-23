@@ -10,6 +10,7 @@
 #include <osdrop/sys/file_log.hpp>
 #include <osdrop/sys/handles.hpp>
 #include <osdrop/win/input_session.hpp>
+#include <osdrop/win/refusal_tally.hpp>
 #include <osdrop/win/report_queue.hpp>
 
 #include <windows.h>
@@ -37,9 +38,13 @@ public:
 private:
     enum class Wait : std::uint8_t { Done, Failed, Stopped };
     struct Reading;
+    struct Refusal {
+        win::input::TurnAway reason = win::input::TurnAway::OtherCopy;
+        std::string who; ///< for the log: "a client run from C:\..."
+    };
 
     /// Why the client on the pipe may not connect; nullopt when it may.
-    [[nodiscard]] std::optional<win::input::TurnAway> refusal(HANDLE pipe);
+    [[nodiscard]] std::optional<Refusal> refusal(HANDLE pipe);
     /// Tells a refused client why, and waits up to kTurnAwayLinger for it to close its end.
     void turn_away(HANDLE pipe, win::input::TurnAway reason);
     void serve(HANDLE pipe);
@@ -66,6 +71,7 @@ private:
     DWORD session_id_;
     std::wstring user_sid_;
     std::vector<std::wstring> clients_; // executables that may connect
+    win::input::RefusalTally refusals_; // a client that keeps trying is logged once in a while
     sys::UniqueHandle written_;
 };
 

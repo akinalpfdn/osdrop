@@ -111,8 +111,17 @@ bool PipeServer::run() {
             }
         }
         if (const auto refused = refusal(pipe.get())) {
-            turn_away(pipe.get(), *refused);
+            if (const auto line = refusals_.refused(refused->who, Clock::now())) {
+                log_.warning("Refused " + line->refusal +
+                             (line->more > 0 ? " " + std::to_string(line->more) + " more times"
+                                             : std::string()));
+            }
+            turn_away(pipe.get(), refused->reason);
         } else if (write(pipe.get(), protocol::encode(protocol::Accepted{}))) {
+            for (const auto& line : refusals_.accepted()) {
+                log_.warning("Refused " + line.refusal + " " + std::to_string(line.more) +
+                             " more times before a client was accepted");
+            }
             log_.info("Client connected");
             serve(pipe.get());
             session_.reset();
@@ -124,36 +133,36 @@ bool PipeServer::run() {
     return true;
 }
 
-std::optional<protocol::TurnAway> PipeServer::refusal(HANDLE pipe) {
+std::optional<PipeServer::Refusal> PipeServer::refusal(HANDLE pipe) {
     ULONG client_session = 0;
     if (!GetNamedPipeClientSessionId(pipe, &client_session) || client_session != session_id_) {
-        log_.warning("Refused a client from another session");
-        return protocol::TurnAway::OtherSession;
+        return Refusal{.reason = protocol::TurnAway::OtherSession,
+                       .who = "a client from another session"};
     }
     const auto sid = client_sid(pipe);
     if (!sid) {
-        log_.warning("Refused a client that did not allow identification");
-        return protocol::TurnAway::NotIdentified;
+        return Refusal{.reason = protocol::TurnAway::NotIdentified,
+                       .who = "a client that did not allow identification"};
     }
     if (*sid != user_sid_) {
-        log_.warning("Refused a client running as " + sys::log_text(*sid));
-        return protocol::TurnAway::OtherUser;
+        return Refusal{.reason = protocol::TurnAway::OtherUser,
+                       .who = "a client running as " + sys::log_text(*sid)};
     }
     ULONG process_id = 0;
     const auto image = GetNamedPipeClientProcessId(pipe, &process_id)
                            ? sys::process_image(process_id)
                            : std::nullopt;
     if (!image) {
-        log_.warning("Refused a client whose executable is unknown");
-        return protocol::TurnAway::UnknownExecutable;
+        return Refusal{.reason = protocol::TurnAway::UnknownExecutable,
+                       .who = "a client whose executable is unknown"};
     }
     for (const std::wstring& allowed : clients_) {
         if (sys::same_path(*image, allowed)) {
             return std::nullopt;
         }
     }
-    log_.warning("Refused a client run from " + sys::log_text(*image));
-    return protocol::TurnAway::OtherCopy;
+    return Refusal{.reason = protocol::TurnAway::OtherCopy,
+                   .who = "a client run from " + sys::log_text(*image)};
 }
 
 struct PipeServer::Reading {
