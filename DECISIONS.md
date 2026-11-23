@@ -859,3 +859,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The user still saw the cursor wait at the edge for about half a second after coming home with the Mac's trackpad, and the PC's mouse did not, whose moves on the Mac are injected through a source without suppression. Defi measured the same pause with the warp and the reconnection in place (gaps of 254–265 ms, 84 suppressed movements) and none with this source. It uses no deprecated or private call.
 **Trade-offs:** Movement still in flight at the warp now lands at the place the cursor came home; the capture already drops the next delta. The source's effect on warps is measured by others, not documented by Apple.
 **Revisit if:** The cursor still waits after coming home; then measure when it first moves after the warp.
+
+---
+
+## 2026-11-23 — The menu opens by itself at the first start and when Osdrop is opened again
+**Chosen:** User decision: the Mac's menu bar window and the PC's tray panel open by themselves once at the first start (on the Mac after the permissions window, when that shows) and whenever Osdrop is opened again while it runs. The Mac clicks its menu bar icon's button (`MenuOpener`), because SwiftUI's `MenuBarExtra` has no call that opens it; the PC shows its panel at the first start (`AppSettings.HasShownPanel`), and already did on a second start. Both ship in 0.1.1.
+**Alternatives:** A welcome window or a notification at the first start; building the Mac's menu bar item on `NSStatusItem` with a panel of Osdrop's own, which public API can open; opening only at the first start.
+**Why:** People who installed Osdrop did not notice that it was installed: nothing but an icon appeared, and Windows 11 puts new tray icons behind the ^ button. The menu shows where Osdrop lives and what it does. Opening it on a second start is what the PC already did.
+**Trade-offs:** The Mac's click relies on SwiftUI building the icon as an `NSStatusBarButton` in one of the app's windows; should a macOS release change that, the menu stays closed and the log says so. People upgrading see the menu open once. The app hosts its own unit tests, so it skips this there (`TestHost`).
+**Revisit if:** The log shows "The menu bar icon was clicked, but no menu opened"; then build the menu bar item on `NSStatusItem`.
