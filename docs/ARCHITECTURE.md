@@ -506,7 +506,12 @@ process").
   PhysicalPress, PhysicalScroll, PhysicalKey, LocalInput, Stats (events u64, p50, p99, max u32
   in µs), Rejected (type u16, reason u16: 1 malformed, 2 another version, 3 injection without
   control or capture, 4 PressForDrag while the left button is up), WatchedMotion (x, y, dx, dy
-  i32, ticks u64), HotkeyPressed (u8: 1 return, 2 lock) and Released (u8: 1 return chord, 2 no heartbeat). Ticks
+  i32, ticks u64), HotkeyPressed (u8: 1 return, 2 lock), Released (u8: 1 return chord, 2 no heartbeat),
+  Accepted (first on every connection OsdropInput takes) and TurnedAway (u8: 1 another session,
+  2 no identification, 3 another user, 4 unknown executable, 5 not run from OsdropInput's folder,
+  that is another copy of Osdrop; the only report before the pipe closes, which OsdropInput holds
+  open up to a second for the client to read it). An older client ignores both as unknown types; a
+  client gives an OsdropInput that says neither a second before taking the open pipe as accepted. Ticks
   are QueryPerformanceCounter values, so the engine knows how old an input is. Positions are at
   most 2^20 either way, scrolls 64 notches, and keys only scan codes in the key table.
   `InputSession` applies them: injection while the client controls this PC or captures its input
@@ -515,7 +520,9 @@ process").
   moves use SendInput's 0-65535 scale over the virtual desktop, rounded so every pixel is reached
   exactly (`absolute`).
 - **Engine** (`windows/engine/src/input`). `InputBridge` connects to the pipe (again every 2 s
-  while it cannot) and tells core this PC cannot be controlled while it is unreachable. Its thread
+  while it cannot, and after a TurnedAway from 2 s doubling up to 30 s, or at once when the shell
+  repaired the service) and tells core this PC cannot be controlled while it is unreachable or
+  turned away; the panel names a service of another copy, whose Repair points it at this one. Its thread
   is per-monitor DPI aware, so it reads and writes physical pixels as OsdropInput does. Core's
   callbacks only queue; the bridge's thread turns each injected input into requests (`Injection`:
   positions from 1/16 pixel, buttons and scrolls moving the cursor first, keys by scan code, Caps

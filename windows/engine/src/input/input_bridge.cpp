@@ -13,6 +13,14 @@ namespace protocol = win::input;
 constexpr std::uint8_t kAvailable = 0;
 constexpr std::uint8_t kCannotInject = 3;
 constexpr auto kReconnectInterval = std::chrono::seconds(2);
+/// After OsdropInput turned this Osdrop away, the next try waits this long, doubling up to the
+/// most: the refusal stands until someone repairs the service.
+constexpr auto kRefusedRetryFirst = std::chrono::seconds(2);
+constexpr auto kRefusedRetryMost = std::chrono::seconds(30);
+/// osdrop_engine_input_state.turned_away.
+constexpr std::uint8_t kNotTurnedAway = 0;
+constexpr std::uint8_t kTurnedAwayOtherCopy = 1;
+constexpr std::uint8_t kTurnedAwayOtherwise = 2;
 /// While the bridge has timers running, how often its thread looks at them.
 constexpr auto kTickInterval = std::chrono::milliseconds(100);
 /// While controlled, how often the cursor is checked for moves by something else.
@@ -146,6 +154,12 @@ void InputBridge::press_for_drag(const osdrop_input& press) {
     wake_.notify_one();
 }
 
+void InputBridge::reconnect() {
+    const std::scoped_lock lock(mutex_);
+    reconnect_ = true;
+    wake_.notify_one();
+}
+
 void InputBridge::capture_began(const std::vector<osdrop_input>& release_here) {
     capturing_ = true; // the reader thread's input is captured input from now on
     const std::scoped_lock lock(mutex_);
@@ -204,7 +218,11 @@ void InputBridge::run() {
         if (work.stopping) {
             break;
         }
-        if (!client_ || closed_) {
+        if (work.reconnect) {
+            refused_delay_ = {};
+            retry_at_ = {};
+        }
+        if ((!client_ || closed_) && Clock::now() >= retry_at_) {
             connect();
         }
         apply(work);
@@ -221,7 +239,8 @@ InputBridge::Work InputBridge::take_work() {
                : std::chrono::duration_cast<std::chrono::milliseconds>(kReconnectInterval);
     wake_.wait_for(lock, wait, [this] {
         return stopping_ || !pending_.empty() || control_change_.has_value() ||
-               !capture_changes_.empty() || watching_changed_ || chords_changed_ || release_drag_;
+               !capture_changes_.empty() || watching_changed_ || chords_changed_ || release_drag_ ||
+               reconnect_;
     });
     watching_changed_ = false;
     chords_changed_ = false;
@@ -232,6 +251,7 @@ InputBridge::Work InputBridge::take_work() {
               .chords = chords_wanted_,
               .release_drag = std::exchange(release_drag_, false),
               .drag_press = std::exchange(drag_press_, false),
+              .reconnect = std::exchange(reconnect_, false),
               .stopping = stopping_};
     pending_.clear();
     return work;
@@ -247,7 +267,7 @@ void InputBridge::connect() {
         const std::scoped_lock lock(forwarder_mutex_);
         forwarder_.reset();
     }
-    client_ = sys::InputClient::connect(
+    sys::InputConnection connection = sys::InputClient::connect(
         [this](const protocol::Report& report) { received(report); },
         [this] {
             closed_ = true;
@@ -257,12 +277,39 @@ void InputBridge::connect() {
             const std::scoped_lock lock(mutex_);
             wake_.notify_one();
         });
+    client_ = std::move(connection.client);
+    std::uint8_t turned_away = kNotTurnedAway;
+    bool settled = false; // the delay reached its most just now
+    if (connection.turned_away) {
+        turned_away = connection.reason == protocol::TurnAway::OtherCopy ? kTurnedAwayOtherCopy
+                                                                         : kTurnedAwayOtherwise;
+        const Clock::duration before = refused_delay_;
+        refused_delay_ = before == Clock::duration{}
+                             ? Clock::duration(kRefusedRetryFirst)
+                             : std::min<Clock::duration>(before * 2, kRefusedRetryMost);
+        settled = before != refused_delay_ && refused_delay_ == kRefusedRetryMost;
+        retry_at_ = Clock::now() + refused_delay_;
+    } else {
+        refused_delay_ = {};
+    }
     const bool reachable = client_ != nullptr;
     if (reachable_ != reachable) {
-        reachable_ = reachable;
         group_.set_unavailable(reachable ? kAvailable : kCannotInject);
+    }
+    // Said when it starts and again once the delay settles: the first try runs as the engine
+    // starts, before the shell may be listening.
+    if (turned_away != kNotTurnedAway && (turned_away_ != turned_away || settled) &&
+        listener_.log) {
+        listener_.log(turned_away == kTurnedAwayOtherCopy
+                          ? "OsdropInput serves the copy of Osdrop in another folder and turned "
+                            "this one away; trying again every 30 s at most"
+                          : "OsdropInput turned this Osdrop away; trying again every 30 s at most");
+    }
+    if (reachable_ != reachable || turned_away_ != turned_away) {
+        reachable_ = reachable;
+        turned_away_ = turned_away;
         if (listener_.reachable) {
-            listener_.reachable(reachable);
+            listener_.reachable(reachable, turned_away);
         }
     }
     if (reachable && controlled_) {

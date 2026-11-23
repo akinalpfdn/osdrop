@@ -105,14 +105,19 @@ private:
 };
 
 std::unique_ptr<osdrop::sys::InputClient> connect(Inbox& inbox) {
-    auto client = osdrop::sys::InputClient::connect(
+    auto connection = osdrop::sys::InputClient::connect(
         [&inbox](const protocol::Report& report) { inbox.add(report); },
         [&inbox] { inbox.close(); });
-    if (!client) {
+    if (connection.turned_away) {
+        std::cerr << "OsdropInput refused this tool"
+                  << (connection.reason == protocol::TurnAway::OtherCopy
+                          ? ": it serves the copy of Osdrop in another folder.\n"
+                          : ".\n");
+    } else if (!connection.client) {
         std::cerr << "Cannot reach OsdropInput in this session (error " << GetLastError()
                   << "). Is OsdropService installed and running?\n";
     }
-    return client;
+    return std::move(connection.client);
 }
 
 int stats() {

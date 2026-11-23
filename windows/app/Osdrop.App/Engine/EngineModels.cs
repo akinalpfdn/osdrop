@@ -75,9 +75,14 @@ internal sealed record LayoutComputer(string DeviceId, Placement? Placement, IRe
 /// </summary>
 internal sealed record CaptureNotice(byte Reason, byte Refused, string DeviceId);
 
-/// <summary>Where this PC's mouse and keyboard are, and whether other computers can control it.</summary>
+/// <summary>
+/// Where this PC's mouse and keyboard are, and whether other computers can control it.
+/// <paramref name="ServesOtherCopy"/>: OsdropInput is unreachable because it serves the copy of
+/// Osdrop in another folder.
+/// </summary>
 internal sealed record InputState(
-    bool IsReachable, bool IsLocked, string? ControllerId, string? TargetId, CaptureNotice? Notice)
+    bool IsReachable, bool IsLocked, string? ControllerId, string? TargetId, CaptureNotice? Notice,
+    bool ServesOtherCopy = false)
 {
     /// <summary>Before the engine answered: nothing to warn about yet.</summary>
     public static InputState Unknown { get; } = new(IsReachable: true, IsLocked: false, null, null, null);
@@ -138,6 +143,8 @@ internal interface IGroupEngine
     Task<CoreResult> SetDragLoopbackAsync(bool enabled);
     Task<InputState> GetInputStateAsync();
     Task DismissInputNoticeAsync();
+    /// <summary>Connects to OsdropInput again now, once the service is repaired.</summary>
+    Task ReconnectInputAsync();
     /// <summary>Stops and starts the engine with new options (a new name); every session restarts.</summary>
     Task<CoreResult> RestartAsync(EngineOptions options);
 }

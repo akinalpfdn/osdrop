@@ -156,6 +156,8 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task DismissInputNoticeAsync() => Native.Run(() => NativeMethods.DismissInputNotice(_engine));
 
+    public Task ReconnectInputAsync() => Native.Run(() => NativeMethods.ReconnectInput(_engine));
+
     /// <summary>
     /// Stops the engine and starts it again with new options, on the native queue, so no call runs in
     /// between; this host and its subscribers stay. A failed start leaves no engine: calls then fail.
@@ -284,7 +286,8 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
             state.Reachable == 1, state.Locked == 1,
             state.Controlled == 1 ? Utf8.Hex(state.ControllerId, NativeSizes.DeviceId) : null,
             state.Capturing == 1 ? Utf8.Hex(state.TargetId, NativeSizes.DeviceId) : null,
-            notice);
+            notice,
+            ServesOtherCopy: state.TurnedAway == 1);
     }
 
     private static unsafe List<LayoutComputer> ReadLayout(nint engine)

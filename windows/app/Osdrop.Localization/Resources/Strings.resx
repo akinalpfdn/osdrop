@@ -267,6 +267,9 @@
   <data name="ServiceNotAnswering" xml:space="preserve">
     <value>The Osdrop Input service is not answering, so this PC's mouse and keyboard cannot move to other computers. It usually recovers within a few seconds; if this stays, repair it.</value>
   </data>
+  <data name="ServiceOtherCopy" xml:space="preserve">
+    <value>The Osdrop Input service belongs to a copy of Osdrop in another folder, so this PC's mouse and keyboard cannot move to other computers and other computers cannot control this PC. Repair connects it to this copy; Windows asks for permission.</value>
+  </data>
   <data name="ServiceRepair" xml:space="preserve">
     <value>Repair</value>
   </data>

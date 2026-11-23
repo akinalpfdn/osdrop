@@ -60,6 +60,9 @@ TEST(InputProtocol, EveryReportRoundTrips) {
         input::Rejected{.type = 15, .reason = input::Refusal::NotHeld},
         input::HotkeyPressed{.hotkey = input::Hotkey::LockInput},
         input::Released{.reason = input::ReleaseReason::Watchdog},
+        input::Accepted{},
+        input::TurnedAway{.reason = input::TurnAway::OtherSession},
+        input::TurnedAway{.reason = input::TurnAway::OtherCopy},
     };
     for (const input::Report& report : reports) {
         const auto bytes = input::encode(report);
@@ -125,6 +128,11 @@ TEST(InputProtocol, ValuesOutOfRangeAreRefused) {
     auto watch = input::encode(input::Request(input::Watch{.on = true}));
     watch[input::kHeaderSize] = 2;
     EXPECT_EQ(request_error(watch), DecodeError::ValueOutOfRange);
+    for (const std::uint8_t code : {std::uint8_t{0}, std::uint8_t{6}}) {
+        auto turned_away = input::encode(input::Report(input::TurnedAway{}));
+        turned_away[input::kHeaderSize] = code;
+        EXPECT_FALSE(input::decode_report(turned_away).has_value()) << "turn-away " << int{code};
+    }
     for (const std::uint8_t code : {std::uint8_t{0}, std::uint8_t{3}}) {
         auto hotkey = input::encode(input::Report(input::HotkeyPressed{}));
         hotkey[input::kHeaderSize] = code;

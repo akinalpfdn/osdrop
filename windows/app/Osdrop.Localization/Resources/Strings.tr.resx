@@ -267,6 +267,9 @@
   <data name="ServiceNotAnswering" xml:space="preserve">
     <value>Osdrop Input hizmeti yanıt vermiyor; bu yüzden bu PC'nin faresi ve klavyesi diğer bilgisayarlara geçemiyor. Genellikle birkaç saniyede düzelir; bu uyarı kalırsa onarın.</value>
   </data>
+  <data name="ServiceOtherCopy" xml:space="preserve">
+    <value>Osdrop Input hizmeti başka bir klasördeki Osdrop kopyasına ait; bu yüzden bu PC'nin faresi ve klavyesi diğer bilgisayarlara geçemiyor, diğer bilgisayarlar da bu PC'yi kontrol edemiyor. Onar düğmesi hizmeti bu kopyaya bağlar; Windows izin ister.</value>
+  </data>
   <data name="ServiceRepair" xml:space="preserve">
     <value>Onar</value>
   </data>

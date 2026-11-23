@@ -159,6 +159,14 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.CompletedTask;
     }
 
+    public int InputReconnects { get; private set; }
+
+    public Task ReconnectInputAsync()
+    {
+        InputReconnects++;
+        return Task.CompletedTask;
+    }
+
     public Task<CoreResult> RestartAsync(EngineOptions options)
     {
         Restarts.Add(options);

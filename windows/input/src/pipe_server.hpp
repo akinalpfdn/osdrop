@@ -2,9 +2,10 @@
 
 // OsdropInput's end of the input pipe (DEVPLAN Phase 3): one pipe for this session, readable and
 // writable only by SYSTEM and the session's user, one client at a time. A client is accepted only
-// when it runs in this session as its user, from Osdrop's own executables next to OsdropInput.
-// Requests go to the session; this PC's input goes back as it arrives, and a capture whose client
-// stops confirming it ends here.
+// when it runs in this session as its user, from Osdrop's own executables next to OsdropInput; it
+// hears Accepted first, or TurnedAway with the reason before the pipe closes. Requests go to the
+// session; this PC's input goes back as it arrives, and a capture whose client stops confirming it
+// ends here.
 
 #include <osdrop/sys/file_log.hpp>
 #include <osdrop/sys/handles.hpp>
@@ -14,6 +15,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,7 +38,10 @@ private:
     enum class Wait : std::uint8_t { Done, Failed, Stopped };
     struct Reading;
 
-    [[nodiscard]] bool accepted(HANDLE pipe);
+    /// Why the client on the pipe may not connect; nullopt when it may.
+    [[nodiscard]] std::optional<win::input::TurnAway> refusal(HANDLE pipe);
+    /// Tells a refused client why, and waits up to kTurnAwayLinger for it to close its end.
+    void turn_away(HANDLE pipe, win::input::TurnAway reason);
     void serve(HANDLE pipe);
     /// Waits for a request, reports or the capture's deadline and handles what came; false when
     /// the client went or the server stops.

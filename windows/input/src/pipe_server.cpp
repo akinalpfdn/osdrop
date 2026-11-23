@@ -110,7 +110,9 @@ bool PipeServer::run() {
                 continue;
             }
         }
-        if (accepted(pipe.get())) {
+        if (const auto refused = refusal(pipe.get())) {
+            turn_away(pipe.get(), *refused);
+        } else if (write(pipe.get(), protocol::encode(protocol::Accepted{}))) {
             log_.info("Client connected");
             serve(pipe.get());
             session_.reset();
@@ -122,20 +124,20 @@ bool PipeServer::run() {
     return true;
 }
 
-bool PipeServer::accepted(HANDLE pipe) {
+std::optional<protocol::TurnAway> PipeServer::refusal(HANDLE pipe) {
     ULONG client_session = 0;
     if (!GetNamedPipeClientSessionId(pipe, &client_session) || client_session != session_id_) {
         log_.warning("Refused a client from another session");
-        return false;
+        return protocol::TurnAway::OtherSession;
     }
     const auto sid = client_sid(pipe);
     if (!sid) {
         log_.warning("Refused a client that did not allow identification");
-        return false;
+        return protocol::TurnAway::NotIdentified;
     }
     if (*sid != user_sid_) {
         log_.warning("Refused a client running as " + sys::log_text(*sid));
-        return false;
+        return protocol::TurnAway::OtherUser;
     }
     ULONG process_id = 0;
     const auto image = GetNamedPipeClientProcessId(pipe, &process_id)
@@ -143,15 +145,15 @@ bool PipeServer::accepted(HANDLE pipe) {
                            : std::nullopt;
     if (!image) {
         log_.warning("Refused a client whose executable is unknown");
-        return false;
+        return protocol::TurnAway::UnknownExecutable;
     }
     for (const std::wstring& allowed : clients_) {
         if (sys::same_path(*image, allowed)) {
-            return true;
+            return std::nullopt;
         }
     }
     log_.warning("Refused a client run from " + sys::log_text(*image));
-    return false;
+    return protocol::TurnAway::OtherCopy;
 }
 
 struct PipeServer::Reading {
@@ -160,6 +162,32 @@ struct PipeServer::Reading {
     OVERLAPPED overlapped{};
     bool pending = false;
 };
+
+void PipeServer::turn_away(HANDLE pipe, protocol::TurnAway reason) {
+    if (!write(pipe, protocol::encode(protocol::TurnedAway{.reason = reason}))) {
+        return;
+    }
+    // Disconnecting now would discard the answer unread. The client reads it and closes its end;
+    // what it sends meanwhile is dropped, and one that never closes is dropped at the deadline,
+    // which also keeps a client that ignores the answer from retrying in a tight loop.
+    const Clock::time_point deadline = Clock::now() + protocol::kTurnAwayLinger;
+    Reading reading;
+    while (read_next(pipe, reading)) {
+        const auto left = std::chrono::ceil<std::chrono::milliseconds>(deadline - Clock::now());
+        const std::array<HANDLE, 2> handles{reading.done.get(), stop_};
+        if (left.count() <= 0 ||
+            WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), FALSE,
+                                   static_cast<DWORD>(left.count())) != WAIT_OBJECT_0) {
+            cancel(pipe, reading.overlapped);
+            return;
+        }
+        reading.pending = false;
+        DWORD received = 0;
+        if (GetOverlappedResult(pipe, &reading.overlapped, &received, FALSE) == FALSE) {
+            return; // the client closed its end
+        }
+    }
+}
 
 void PipeServer::serve(HANDLE pipe) {
     Reading reading;

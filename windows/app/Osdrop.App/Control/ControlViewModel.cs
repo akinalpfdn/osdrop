@@ -134,6 +134,11 @@ public sealed partial class ControlViewModel : ObservableObject
             {
                 ServiceProblem = Localization.Strings.ServiceRepairFailed;
             }
+            else
+            {
+                // The engine waits longer and longer after a refusal; the repaired service is tried now.
+                await _engine.ReconnectInputAsync().ConfigureAwait(true);
+            }
             // Once OsdropInput answers, the engine reports it and the problem goes.
         }
         finally
@@ -154,10 +159,15 @@ public sealed partial class ControlViewModel : ObservableObject
 
     private async Task DescribeServiceAsync()
     {
-        InputServiceState service = await _queryService().ConfigureAwait(true);
-        if (_state.IsReachable)
+        if (_state.ServesOtherCopy)
         {
-            return; // it answered meanwhile
+            ServiceProblem = Localization.Strings.ServiceOtherCopy;
+            return;
+        }
+        InputServiceState service = await _queryService().ConfigureAwait(true);
+        if (_state.IsReachable || _state.ServesOtherCopy)
+        {
+            return; // it answered meanwhile, or the engine learned why it does not
         }
         ServiceProblem = service switch
         {
