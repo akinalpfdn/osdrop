@@ -173,7 +173,7 @@ Error encode_error(const ControlMessage& message) {
 
 TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(encode_error(protocol::Hello{.device_name = ""}), Error::InvalidString);
-    EXPECT_EQ(encode_error(protocol::Hello{.platform = static_cast<protocol::Platform>(3),
+    EXPECT_EQ(encode_error(protocol::Hello{.platform = static_cast<protocol::Platform>(4),
                                            .device_name = "PC"}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::HandshakeMessage{.step = 1, .payload = {}}),

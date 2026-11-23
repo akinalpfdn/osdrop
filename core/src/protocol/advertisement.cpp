@@ -13,9 +13,10 @@ using Parsed = Expected<Advertisement, Error>;
 
 constexpr std::string_view kHexDigits = "0123456789abcdef";
 
-constexpr std::array<std::pair<Platform, std::string_view>, 2> kPlatformTexts{{
+constexpr std::array<std::pair<Platform, std::string_view>, 3> kPlatformTexts{{
     {Platform::MacOS, "macos"},
     {Platform::Windows, "windows"},
+    {Platform::Android, "android"},
 }};
 
 std::string_view platform_text(Platform platform) {

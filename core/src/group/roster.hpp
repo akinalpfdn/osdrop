@@ -80,9 +80,12 @@ public:
     /// A roster with only the block entries, without `except`'s.
     [[nodiscard]] Roster blocks_without(const DeviceId& except) const;
 
-    /// The roster as RosterState messages, split to fit the message's limits. Empty for an empty
-    /// roster.
-    [[nodiscard]] std::vector<protocol::RosterState> to_messages(const protocol::Id& group) const;
+    /// The roster as RosterState messages for a peer speaking protocol minor `peer_minor`, split to
+    /// fit the message's limits. Members and blocks of platforms the peer does not know are left
+    /// out, so a computer before minor 1 keeps its group and never sees the phones. Empty for an
+    /// empty roster.
+    [[nodiscard]] std::vector<protocol::RosterState>
+    to_messages(const protocol::Id& group, std::uint8_t peer_minor = protocol::kMinorVersion) const;
     /// The roster in one RosterState; fails when a device ID is not the fingerprint of its key.
     [[nodiscard]] static Expected<Roster, Error> from_message(const protocol::RosterState& state);
 

@@ -27,7 +27,7 @@ Decoded decode_failure(Error error) {
 // --- Validation, shared by encoder and decoder ---------------------------------------------------
 
 Check validate(const Hello& m) {
-    if (!enum_in(m.platform, 1, 2)) {
+    if (!enum_in(m.platform, 1, kLastPlatform)) {
         return fail(Error::ValueOutOfRange);
     }
     return check_string(m.device_name);
@@ -75,7 +75,7 @@ Check validate(const RosterState& m) {
     }
     std::set<std::pair<Id, std::uint32_t>> members;
     for (const RosterMember& member : m.members) {
-        if (member.epoch == 0 || !enum_in(member.platform, 1, 2) ||
+        if (member.epoch == 0 || !enum_in(member.platform, 1, kLastPlatform) ||
             !members.emplace(member.device_id, member.epoch).second) {
             return fail(Error::ValueOutOfRange);
         }
@@ -92,7 +92,7 @@ Check validate(const RosterState& m) {
     }
     std::set<Id> blocks;
     for (const RosterBlock& block : m.blocks) {
-        if (block.version == 0 || !enum_in(block.platform, 1, 2) ||
+        if (block.version == 0 || !enum_in(block.platform, 1, kLastPlatform) ||
             !blocks.insert(block.device_id).second) {
             return fail(Error::ValueOutOfRange);
         }

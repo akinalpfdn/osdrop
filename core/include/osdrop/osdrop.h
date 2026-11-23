@@ -28,7 +28,7 @@ typedef struct osdrop_version {
 
 /* Wire protocol constants (docs/PROTOCOL.md). */
 #define OSDROP_PROTOCOL_VERSION 1
-#define OSDROP_PROTOCOL_MINOR 0
+#define OSDROP_PROTOCOL_MINOR 1
 #define OSDROP_MAX_CONTROL_MESSAGE_SIZE 65536
 #define OSDROP_MAX_TRANSFER_MESSAGE_SIZE 65536
 #define OSDROP_MAX_INPUT_PLAINTEXT_SIZE 1184
@@ -107,6 +107,7 @@ typedef enum osdrop_wire_kind {
 typedef enum osdrop_platform {
     OSDROP_PLATFORM_MACOS = 1,
     OSDROP_PLATFORM_WINDOWS = 2,
+    OSDROP_PLATFORM_ANDROID = 3,
     OSDROP_PLATFORM_MAX_ENUM = 0x7FFFFFFF
 } osdrop_platform;
 
@@ -122,8 +123,8 @@ typedef enum osdrop_log_level {
 
 /*
  * Cryptographically secure random bytes from the platform (SecRandomCopyBytes on macOS,
- * BCryptGenRandom on Windows). `fill` writes exactly `length` bytes and returns OSDROP_OK, or
- * returns any other code to report failure. It may be called from any thread.
+ * BCryptGenRandom on Windows, getrandom on Android). `fill` writes exactly `length` bytes and
+ * returns OSDROP_OK, or returns any other code to report failure. It may be called from any thread.
  */
 typedef struct osdrop_random_source {
     osdrop_result (*fill)(void* context, uint8_t* buffer, size_t length);

@@ -45,7 +45,16 @@ enum class ControlType : std::uint8_t {
     ClipboardAnnounce = 0x40,
 };
 
-enum class Platform : std::uint8_t { MacOS = 1, Windows = 2 };
+enum class Platform : std::uint8_t { MacOS = 1, Windows = 2, Android = 3 };
+/// Platforms 1 to this are known; new ones are appended. Peers before protocol minor 1 know only
+/// macOS and Windows (PROTOCOL.md "Versioning").
+inline constexpr std::uint8_t kLastPlatform = 3;
+
+/// Whether a peer speaking protocol minor `minor` knows `platform`: one that does not refuses any
+/// Hello or RosterState that names it.
+constexpr bool knows_platform(std::uint8_t minor, Platform platform) {
+    return platform == Platform::MacOS || platform == Platform::Windows || minor >= 1;
+}
 enum class PairingDecision : std::uint8_t { Accepted = 1, Rejected = 2 };
 enum class ByeReason : std::uint8_t {
     UserDisconnected = 1,

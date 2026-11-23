@@ -8,6 +8,8 @@ The protocol is not frozen before the first release. A phase that changes a mess
 document, the fixture generator and the codec in the same pull request. From the first release on,
 changes are additive and raise the minor version.
 
+Minor versions: 0 is the first release (0.1.x); 1 adds platform 3, Android (0.2.0).
+
 ## Conventions
 
 - All integers are **little-endian**, unsigned unless written `i32`/`i64`.
@@ -69,10 +71,10 @@ also accepts transfer connections. TXT record keys:
 | Key | Value |
 |-----|-------|
 | `pv` | protocol major version, decimal (`1`) |
-| `pm` | protocol minor version, decimal (`0`) |
+| `pm` | protocol minor version, decimal (`1`) |
 | `id` | device ID, 32 lowercase hex digits |
 | `name` | device name (UTF-8, as `string`) |
-| `os` | `macos` or `windows` |
+| `os` | `macos`, `windows` or `android` |
 | `grp` | group ID, 32 lowercase hex digits (never all zeros), or empty when the computer is in no group |
 
 Numbers are decimal without sign or leading zeros. A record with a different `pv` is still
@@ -123,8 +125,8 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 
 | Field | Type | Values |
 |-------|------|--------|
-| platform | u8 | 1 macOS, 2 Windows |
-| protocol_minor | u8 | minor version of the sender (0) |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
+| protocol_minor | u8 | minor version of the sender (1) |
 | reserved | u16 | 0 |
 | group_id | bytes[16] | the sender's group, all zeros when in no group |
 | device_name | string | 1–64 bytes |
@@ -225,7 +227,7 @@ member:
 | device_id | bytes[16] | |
 | public_key | bytes[32] | X25519 static public key |
 | epoch | u32 | 1 or more; each new pairing of the same device has a higher epoch |
-| platform | u8 | 1 macOS, 2 Windows |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes |
 
@@ -243,7 +245,7 @@ block:
 | device_id | bytes[16] | |
 | version | u32 | 1 or more; each block or unblock of the same device has a higher version |
 | flags | u8 | bit 0: blocked (0: unblocked); other bits reserved |
-| platform | u8 | 1 macOS, 2 Windows |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes, as the device was named when it was blocked |
 
@@ -537,6 +539,7 @@ them when another member's newer copy arrives, so requests for an older copy get
 manifest (a receiver asks for one byte more than it accepts, so it can tell a content that is too
 large). Format 5 is fetched like a dragged folder: manifest, then contents. Receivers fetch only
 from members whose clipboard permission is on, and files only when the files permission is on too.
+
 
 ## Input datagrams (UDP)
 
@@ -832,6 +835,9 @@ group, except one of itself, and brings them into the next group it joins.
 
 - A member sends its whole roster to each member whose session is established, and again to every
   connected member whenever its roster changes (except the one the change came from).
+- A member whose Hello says protocol minor 0 knows only platforms 1 and 2 and refuses a Hello or a
+  RosterState that names another. It is sent the roster without the members and blocks of other
+  platforms: it keeps its group and never sees the phones.
 - A RosterState is accepted only from a current member and only for this computer's group; the
   group ID is public, so anyone could claim it. The one exception is the computer this one has
   just paired with while in no group: its roster is adopted if it names both of them as members,

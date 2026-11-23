@@ -37,7 +37,7 @@ osdrop_txt_record record_of(const osdrop_advertisement& advertisement) {
 TEST(Discovery, TheTxtRecordUsesTheDocumentedValues) {
     const osdrop_txt_record record = record_of(grouped_pc());
     EXPECT_STREQ(record.protocol_version, "1");
-    EXPECT_STREQ(record.protocol_minor, "0");
+    EXPECT_STREQ(record.protocol_minor, "1");
     EXPECT_STREQ(record.device_id, "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf");
     EXPECT_STREQ(record.name, "Akınalp'ın PC");
     EXPECT_STREQ(record.os, "windows");
@@ -114,8 +114,8 @@ TEST(Discovery, InvalidAdvertisementsAreNotPublished) {
     };
     const osdrop_result range = OSDROP_ERROR_VALUE_OUT_OF_RANGE;
     expect([](osdrop_advertisement& a) { a.protocol_version = 0; }, range, "version 0");
-    expect([](osdrop_advertisement& a) { a.platform = static_cast<osdrop_platform>(3); }, range,
-           "platform 3");
+    expect([](osdrop_advertisement& a) { a.platform = static_cast<osdrop_platform>(4); }, range,
+           "platform 4");
     expect([](osdrop_advertisement& a) { a.has_group = 2; }, range, "has_group 2");
     expect([](osdrop_advertisement& a) { std::memset(a.group_id, 0, sizeof(a.group_id)); }, range,
            "zero group ID");

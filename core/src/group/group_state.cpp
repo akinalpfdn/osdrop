@@ -42,7 +42,7 @@ Section read_pairings(protocol::Reader& reader, GroupState& state) {
             return Section::failure(Error::Truncated);
         }
         member.platform = static_cast<protocol::Platform>(platform);
-        if (platform < 1 || platform > 2 || member.epoch == 0 ||
+        if (platform < 1 || platform > protocol::kLastPlatform || member.epoch == 0 ||
             state.roster.pairings().contains(member.device_id)) {
             return Section::failure(Error::ValueOutOfRange);
         }
@@ -92,7 +92,7 @@ Section read_blocks(protocol::Reader& reader, GroupState& state) {
         block.blocked = (flags & protocol::kBlockBlocked) != 0;
         block.platform = static_cast<protocol::Platform>(platform);
         if ((flags & static_cast<std::uint8_t>(~protocol::kBlockBlocked)) != 0 || platform < 1 ||
-            platform > 2 || state.roster.blocks().contains(device) ||
+            platform > protocol::kLastPlatform || state.roster.blocks().contains(device) ||
             !state.roster.set_block(device, block)) {
             return Section::failure(Error::ValueOutOfRange);
         }
