@@ -41,6 +41,11 @@ android {
         compose = true
     }
 
+    // Unit tests run on the JVM: android.util.Log and friends answer with defaults instead of throwing.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")

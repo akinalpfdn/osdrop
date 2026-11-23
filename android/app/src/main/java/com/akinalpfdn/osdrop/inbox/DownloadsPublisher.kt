@@ -11,7 +11,7 @@ import java.io.File
 data class Published(val uri: Uri, val name: String, val mimeType: String)
 
 /** Moves received files where the user finds them; [DownloadsPublisher] or a fake. */
-interface Publishing {
+fun interface Publishing {
     /** Copies [root] (a file, or a folder with everything in it) and returns what was created. */
     fun publish(root: File): List<Published>
 }

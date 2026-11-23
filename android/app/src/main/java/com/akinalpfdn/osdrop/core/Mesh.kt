@@ -7,7 +7,19 @@ class CoreException(val result: Int) : Exception("core error $result")
  * This phone's member of the group: one encrypted session with every member, on core's I/O thread.
  * Every call may come from any thread; [close] ends the sessions and joins the thread.
  */
-class Mesh private constructor(private var handle: Long) : AutoCloseable {
+/** The calls that take files sent to this phone; [Mesh] or a fake. */
+interface SentReceiving {
+    fun members(): List<Member>
+
+    /** Starts fetching one item into [folder]; the transfer's ID. */
+    fun receiveSent(device: DeviceId, sendId: Long, index: Int, folder: String): Long
+
+    fun answerSend(device: DeviceId, sendId: Long, outcome: SendOutcome)
+
+    fun cancelTransfer(transfer: Long)
+}
+
+class Mesh private constructor(private var handle: Long) : AutoCloseable, SentReceiving {
     val listenPort: Int get() = NativeCore.meshListenPort(live())
 
     val deviceId: DeviceId get() = DeviceId(NativeCore.meshDeviceId(live()) ?: throw CoreException(CoreResult.INVALID_STATE))
@@ -34,7 +46,7 @@ class Mesh private constructor(private var handle: Long) : AutoCloseable {
         check(NativeCore.meshConfirmPairing(live(), connection, accepted))
     }
 
-    fun members(): List<Member> {
+    override fun members(): List<Member> {
         val fields = NativeCore.meshMembers(live()) ?: return emptyList()
         return fields.toList().chunked(3).map { (id, name, flags) ->
             Member(
@@ -53,13 +65,13 @@ class Mesh private constructor(private var handle: Long) : AutoCloseable {
     }
 
     /** Fetches item [index] of a send into [folder]; the transfer's ID. */
-    fun receiveSent(device: DeviceId, sendId: Long, index: Int, folder: String): Long {
+    override fun receiveSent(device: DeviceId, sendId: Long, index: Int, folder: String): Long {
         val out = LongArray(1)
         check(NativeCore.meshReceiveSent(live(), device.bytes, sendId, index, folder.utf8Bytes(), out))
         return out[0]
     }
 
-    fun cancelTransfer(transfer: Long) {
+    override fun cancelTransfer(transfer: Long) {
         NativeCore.meshCancelTransfer(live(), transfer)
     }
 
@@ -72,7 +84,7 @@ class Mesh private constructor(private var handle: Long) : AutoCloseable {
         return out[0]
     }
 
-    fun answerSend(device: DeviceId, sendId: Long, outcome: SendOutcome) {
+    override fun answerSend(device: DeviceId, sendId: Long, outcome: SendOutcome) {
         NativeCore.meshAnswerSend(live(), device.bytes, sendId, outcome.code)
     }
 

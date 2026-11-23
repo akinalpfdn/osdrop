@@ -4,7 +4,7 @@ import android.util.Log
 import com.akinalpfdn.osdrop.app.MeshTransfers
 import com.akinalpfdn.osdrop.core.CoreResult
 import com.akinalpfdn.osdrop.core.DeviceId
-import com.akinalpfdn.osdrop.core.Mesh
+import com.akinalpfdn.osdrop.core.SentReceiving
 import com.akinalpfdn.osdrop.core.SendOutcome
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -34,7 +34,7 @@ class Inbox(
     private val scope: CoroutineScope,
 ) : MeshTransfers {
     private val lock = Any()
-    private var mesh: Mesh? = null
+    private var mesh: SentReceiving? = null
     private val sends = mutableMapOf<Long, Receiving>() // by transfer ID
     private val early = mutableMapOf<Long, Pair<Int, List<String>>>() // finished before they were recorded
     private val mutableIncoming = MutableStateFlow<List<IncomingFiles>>(emptyList())
@@ -52,10 +52,11 @@ class Inbox(
         var pending = names.size // items not finished yet, counted from the start
         var failed = false
         var completed = false
+        var cancelled = false
         val published = mutableListOf<Published>()
     }
 
-    override fun attach(mesh: Mesh) {
+    override fun attach(mesh: SentReceiving) {
         synchronized(lock) { this.mesh = mesh }
     }
 
@@ -92,11 +93,15 @@ class Inbox(
                     if (last) complete(receiving)
                     continue
                 }
-                val finishedEarly = synchronized(lock) {
+                val (finishedEarly, cancelled) = synchronized(lock) {
                     sends[transfer] = receiving
-                    early.remove(transfer)
+                    early.remove(transfer) to receiving.cancelled
                 }
-                if (finishedEarly != null) finish(transfer, finishedEarly.first, finishedEarly.second)
+                if (finishedEarly != null) {
+                    finish(transfer, finishedEarly.first, finishedEarly.second)
+                } else if (cancelled) {
+                    runCatching { current.cancelTransfer(transfer) } // the user stopped it while items were requested
+                }
             }
         }
     }
@@ -123,6 +128,16 @@ class Inbox(
         if (known) scope.launch { finish(transfer, result, paths) }
     }
 
+    /** Stops a send to this phone: its transfers are cancelled and the sender is told it failed. */
+    fun cancel(sendId: Long) {
+        val (current, transfers) = synchronized(lock) {
+            val found = sends.filterValues { it.sendId == sendId }
+            found.values.forEach { it.cancelled = true }
+            mesh to found.keys.toList()
+        }
+        transfers.forEach { transfer -> runCatching { current?.cancelTransfer(transfer) } }
+    }
+
     override fun onSendFinished(device: DeviceId, sendId: Long, outcome: Int) = Unit // sends from this phone: the share screen
 
     private fun finish(transfer: Long, result: Int, paths: List<String>) {
@@ -147,7 +162,7 @@ class Inbox(
         runCatching { current?.answerSend(receiving.device, receiving.sendId, outcome) }
         receiving.folder.deleteRecursively()
         mutableIncoming.update { list -> list.filterNot { it.sendId == receiving.sendId } }
-        arrivals.arrived(receiving.from, receiving.published.toList(), receiving.failed)
+        if (!receiving.cancelled) arrivals.arrived(receiving.from, receiving.published.toList(), receiving.failed)
     }
 
     private companion object {

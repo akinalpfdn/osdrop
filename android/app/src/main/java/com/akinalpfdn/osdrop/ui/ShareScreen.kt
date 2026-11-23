@@ -49,16 +49,20 @@ fun ShareScreen(count: Int, state: MeshState, sends: List<OutgoingSend>, onPick:
                     trailingContent = { TextButton(onClick = { onPick(member) }) { Text(stringResource(R.string.share_send)) } },
                 )
             }
-            items(sends, key = { it.id }) { send ->
-                val text = when (send.outcome) {
-                    null -> stringResource(R.string.share_sending, send.to)
-                    SendOutcome.Received -> stringResource(R.string.share_received, send.to)
-                    SendOutcome.Declined -> stringResource(R.string.share_declined, send.to)
-                    SendOutcome.Failed -> stringResource(R.string.share_failed, send.to)
-                }
-                Text(text, style = MaterialTheme.typography.bodyMedium)
-            }
+            items(sends, key = { it.id }) { send -> Outgoing(send) }
             item { TextButton(onClick = onDone) { Text(stringResource(R.string.share_done)) } }
         }
     }
+}
+
+/** How a send from this phone goes. */
+@Composable
+internal fun Outgoing(send: OutgoingSend) {
+    val text = when (send.outcome) {
+        null -> stringResource(R.string.share_sending, send.to)
+        SendOutcome.Received -> stringResource(R.string.share_received, send.to)
+        SendOutcome.Declined -> stringResource(R.string.share_declined, send.to)
+        SendOutcome.Failed -> stringResource(R.string.share_failed, send.to)
+    }
+    Text(text, style = MaterialTheme.typography.bodyMedium)
 }

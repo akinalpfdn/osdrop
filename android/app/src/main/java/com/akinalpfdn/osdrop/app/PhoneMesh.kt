@@ -7,6 +7,7 @@ import com.akinalpfdn.osdrop.core.Mesh
 import com.akinalpfdn.osdrop.core.MeshListener
 import com.akinalpfdn.osdrop.core.NativeCore
 import com.akinalpfdn.osdrop.core.Platform
+import com.akinalpfdn.osdrop.core.SentReceiving
 import com.akinalpfdn.osdrop.core.utf8
 import com.akinalpfdn.osdrop.discovery.DiscoveredDevice
 import com.akinalpfdn.osdrop.discovery.DiscoveryEvent
@@ -214,7 +215,7 @@ class PhoneMesh(
 
 /** What happens to files sent to this phone, and to sends from it; [Inbox] or a fake. */
 interface MeshTransfers {
-    fun attach(mesh: Mesh)
+    fun attach(mesh: SentReceiving)
 
     fun detach()
 

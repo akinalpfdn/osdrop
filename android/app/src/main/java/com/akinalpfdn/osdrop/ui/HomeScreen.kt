@@ -20,14 +20,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.akinalpfdn.osdrop.R
 import com.akinalpfdn.osdrop.app.MeshState
 import com.akinalpfdn.osdrop.app.PairingPrompt
+import com.akinalpfdn.osdrop.core.Member
 import com.akinalpfdn.osdrop.core.Platform
 import com.akinalpfdn.osdrop.discovery.DiscoveredDevice
 import com.akinalpfdn.osdrop.inbox.IncomingFiles
+import com.akinalpfdn.osdrop.outbox.OutgoingSend
 
 /** What the screen can ask for. */
 interface HomeActions {
@@ -36,10 +39,15 @@ interface HomeActions {
     fun answerPairing(accepted: Boolean)
 
     fun leaveGroup()
+
+    /** Picks files and sends them to a connected computer. */
+    fun sendFiles(member: Member)
+
+    fun cancelIncoming(sendId: Long)
 }
 
 @Composable
-fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, actions: HomeActions) {
+fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, sends: List<OutgoingSend>, actions: HomeActions) {
     Scaffold(modifier = Modifier.fillMaxSize()) { insets ->
         LazyColumn(
             modifier = Modifier.padding(insets).padding(Tokens.screenPadding),
@@ -65,11 +73,17 @@ fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, actions: HomeAct
                             Text(stringResource(if (member.isConnected) R.string.member_connected else R.string.member_not_connected))
                         },
                         leadingContent = { PlatformIcon(member.platform) },
+                        trailingContent = {
+                            if (member.isConnected && member.platform != Platform.Android) {
+                                TextButton(onClick = { actions.sendFiles(member) }) { Text(stringResource(R.string.member_send)) }
+                            }
+                        },
                     )
                 }
                 item { TextButton(onClick = actions::leaveGroup) { Text(stringResource(R.string.group_leave)) } }
             }
-            items(incoming, key = { it.sendId }) { files -> Incoming(files) }
+            items(incoming, key = { it.sendId }) { files -> Incoming(files) { actions.cancelIncoming(files.sendId) } }
+            items(sends.asReversed(), key = { it.id }) { send -> Outgoing(send) }
         }
     }
     state.pairing?.let { PairingDialog(it, actions) }
@@ -89,9 +103,12 @@ private fun PlatformIcon(platform: Platform?) {
 }
 
 @Composable
-private fun Incoming(files: IncomingFiles) {
+private fun Incoming(files: IncomingFiles, onCancel: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Tokens.smallGap)) {
-        Text(stringResource(R.string.incoming_from, files.from), style = MaterialTheme.typography.titleSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.incoming_from, files.from), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.incoming_cancel)) }
+        }
         Text(files.names.joinToString(", "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
         LinearProgressIndicator(
             progress = { if (files.bytesTotal > 0) files.bytesDone.toFloat() / files.bytesTotal else 0f },

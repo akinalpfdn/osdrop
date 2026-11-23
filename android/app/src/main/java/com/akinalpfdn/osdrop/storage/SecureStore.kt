@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import java.security.GeneralSecurityException
 import java.security.KeyStore as JavaKeyStore
 import javax.crypto.Cipher
@@ -36,14 +37,14 @@ class AndroidSecureStore(context: Context) : SecureStoring {
     override fun secretKey(create: () -> ByteArray): ByteArray {
         preferences.getString(IDENTITY, null)?.let { return decrypt(it) }
         val created = create()
-        preferences.edit().putString(IDENTITY, encrypt(created)).apply()
+        preferences.edit { putString(IDENTITY, encrypt(created)) }
         return created
     }
 
     override fun groupState(): ByteArray? = preferences.getString(GROUP, null)?.let(::decrypt)
 
     override fun saveGroupState(state: ByteArray) {
-        preferences.edit().putString(GROUP, encrypt(state)).apply()
+        preferences.edit { putString(GROUP, encrypt(state)) }
     }
 
     private fun encrypt(secret: ByteArray): String = guarded {
