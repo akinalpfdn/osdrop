@@ -383,6 +383,18 @@ network. Osdrop stays open on the phone unless a row says otherwise.
 | P7 | Files permission | On the Mac, turn off files for the phone; send from the phone | The send is refused at once and the phone says so |
 | P8 | Old computer | A computer on 0.1 in the group | The 0.1 computer keeps working with the others and does not list the phone |
 
+### Phone corners (Phase 21)
+
+A phone in the group with Osdrop open on it; Settings › Devices sets its box's screen and corner.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| K1 | Drop to the phone | Drag files from Finder or Explorer into the phone's corner, drop them in the box | The box shows the phone's name once the drag reaches the corner; the files arrive on the phone, the box shows their progress and closes a moment after they arrived |
+| K2 | Files from the phone | Share photos from the phone to the computer | The box opens in the corner by itself; each photo can be dragged out into a folder and a chat app; the photos are also in Downloads |
+| K3 | Screen and corner | Choose another screen and corner for the phone, drag again | The box shows at the new place |
+| K4 | Phone away | Close Osdrop on the phone, drag a file into the corner | Nothing shows and the drag is not taken |
+| K5 | Crossing | Drag a file to an edge with another computer beside it, away from the corner | The drag crosses to the other computer as before |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |

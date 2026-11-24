@@ -101,6 +101,8 @@ final class GroupController {
     /// Transfers of dragged files, for the menu.
     private(set) var transfers: TransfersController?
     private var sendInbox: SendInbox?
+    /// A phone started sending files to this Mac (its corner box opens).
+    @ObservationIgnored var onPhoneSend: ((DeviceID) -> Void)?
     private(set) var input: InputController?
     /// Every member's monitors and placement, for the arrangement editor.
     private(set) var arrangement: [LayoutComputer] = []
@@ -548,6 +550,7 @@ final class GroupController {
             }
         case .sendArrived(let device, let sendID, let items):
             sendInbox?.arrived(from: device, sendID: sendID, items: items)
+            onPhoneSend?(device)
         case .sendFinished(let device, _, let outcome):
             if outcome != .received {
                 notSent(to: device)

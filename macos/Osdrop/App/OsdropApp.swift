@@ -21,6 +21,7 @@ struct OsdropApp: App {
         // No drag can be running yet, so anything staged belongs to an earlier run.
         dependencies.staging.removeAll()
         dependencies.group.start()
+        dependencies.corners.start()
         dependencies.awdl.start()
         self.dependencies = dependencies
         pairingWindow = PairingWindowPresenter(controller: dependencies.group)

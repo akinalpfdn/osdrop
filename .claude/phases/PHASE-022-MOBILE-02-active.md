@@ -21,4 +21,5 @@ phone sends appear there to be dragged out.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- 2026-11-24 (user): each phone gets a screen and a corner of it, chosen in Settings › Devices; the default is the bottom-right corner of the main screen.
 - 2026-11-23 (user): the box sits in a corner chosen per phone, not on an edge in the arrangement; files from the phone appear in the same box.

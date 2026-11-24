@@ -59,13 +59,17 @@ final class CGScreenDescriber: ScreenDescribing {
         return displays.prefix(Int(count)).map(Self.describe)
     }
 
+    /// The display's UUID, stable across reboots and reconnections.
+    nonisolated static func identifier(of display: CGDirectDisplayID) -> String {
+        let uuid = CGDisplayCreateUUIDFromDisplayID(display)?.takeRetainedValue()
+        return uuid.flatMap { CFUUIDCreateString(kCFAllocatorDefault, $0) as String? } ?? "display-\(display)"
+    }
+
     private static func describe(_ display: CGDirectDisplayID) -> ScreenDescription {
         let frame = CGDisplayBounds(display)
         let mode = CGDisplayCopyDisplayMode(display)
-        let uuid = CGDisplayCreateUUIDFromDisplayID(display)?.takeRetainedValue()
-        let id = uuid.flatMap { CFUUIDCreateString(kCFAllocatorDefault, $0) as String? } ?? "display-\(display)"
         return ScreenDescription(
-            id: id, displayID: display, frame: frame, pixelWidth: mode?.pixelWidth ?? Int(frame.width),
+            id: identifier(of: display), displayID: display, frame: frame, pixelWidth: mode?.pixelWidth ?? Int(frame.width),
             pixelHeight: mode?.pixelHeight ?? Int(frame.height), isMain: CGDisplayIsMain(display) != 0)
     }
 }
