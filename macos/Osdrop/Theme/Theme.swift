@@ -37,6 +37,8 @@ enum Theme {
         static let pairingWindowWidth: CGFloat = 340
         /// The window showing copied files on their way from another computer.
         static let fetchWindowWidth: CGFloat = 300
+        static let transfersWindowWidth: CGFloat = 380
+        static let transfersWindowHeight: CGFloat = 440
         static let settingsWidth: CGFloat = 560
         static let settingsHeight: CGFloat = 520
         static let onboardingWidth: CGFloat = 420

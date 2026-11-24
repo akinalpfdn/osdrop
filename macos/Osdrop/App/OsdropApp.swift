@@ -70,6 +70,11 @@ struct OsdropApp: App {
             SettingsView(viewModel: settings)
         }
 
+        Window("transfers.title", id: TransfersWindowView.windowID) {
+            TransfersWindowView(group: dependencies.group)
+        }
+        .defaultSize(width: Theme.Size.transfersWindowWidth, height: Theme.Size.transfersWindowHeight)
+
         #if DEBUG
             Window("developer.title", id: DeveloperInputView.windowID) {
                 DeveloperInputView(viewModel: developer, drag: developerDrag)
