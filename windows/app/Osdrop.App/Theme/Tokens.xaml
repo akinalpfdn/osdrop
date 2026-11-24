@@ -37,6 +37,8 @@
   <sys:Double x:Key="Osdrop.Width.PairingWindow">360</sys:Double>
   <sys:Double x:Key="Osdrop.Width.FetchWindow">320</sys:Double>
   <sys:Double x:Key="Osdrop.Width.MeshWindow">520</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.TransfersWindow">400</sys:Double>
+  <sys:Double x:Key="Osdrop.Height.TransfersWindow">480</sys:Double>
   <sys:Double x:Key="Osdrop.Width.Button">96</sys:Double>
   <sys:Double x:Key="Osdrop.Width.Setting">220</sys:Double>
 

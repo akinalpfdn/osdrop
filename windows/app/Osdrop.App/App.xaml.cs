@@ -36,6 +36,7 @@ public partial class App : Application, IDisposable
     private PairingWindowPresenter? _pairingWindow;
     private ClipboardFetchWindowPresenter? _clipboardFetchWindow;
     private MeshWindow? _meshWindow;
+    private TransfersWindow? _transfersWindow;
     private bool _quitting;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -138,6 +139,7 @@ public partial class App : Application, IDisposable
         _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
         var transfers = new TransfersViewModel(
             engine, _group.NameOf, (title, message) => _trayIcon?.ShowNotification(title, message));
+        transfers.ShowAllRequested += () => OpenTransfers(transfers);
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -223,6 +225,22 @@ public partial class App : Application, IDisposable
         }
         _meshWindow.Show();
         _ = _meshWindow.Activate();
+    }
+
+    private void OpenTransfers(TransfersViewModel transfers)
+    {
+        _panel?.Hide();
+        if (_transfersWindow is null)
+        {
+            _transfersWindow = new TransfersWindow(transfers);
+            _transfersWindow.Closed += (_, _) => _transfersWindow = null;
+        }
+        if (_transfersWindow.WindowState == WindowState.Minimized)
+        {
+            _transfersWindow.WindowState = WindowState.Normal;
+        }
+        _transfersWindow.Show();
+        _ = _transfersWindow.Activate();
     }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)

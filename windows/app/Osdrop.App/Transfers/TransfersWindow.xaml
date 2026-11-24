@@ -1,0 +1,29 @@
+<ui:FluentWindow x:Class="Osdrop.App.Transfers.TransfersWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:res="clr-namespace:Osdrop.Localization;assembly=Osdrop.Localization"
+        xmlns:transfers="clr-namespace:Osdrop.App.Transfers"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=transfers:TransfersViewModel}"
+        Title="{x:Static res:Strings.TransfersWindowTitle}"
+        Width="{StaticResource Osdrop.Width.TransfersWindow}"
+        Height="{StaticResource Osdrop.Height.TransfersWindow}"
+        WindowStartupLocation="CenterScreen"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica">
+  <DockPanel>
+    <ui:TitleBar DockPanel.Dock="Top" Title="{x:Static res:Strings.TransfersWindowTitle}" ShowMaximize="False" />
+    <Grid>
+      <TextBlock Text="{x:Static res:Strings.TransfersEmpty}" Style="{StaticResource Osdrop.Text.Caption}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Visibility="{Binding HasRows, Converter={StaticResource Osdrop.Converter.Hidden}}" />
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ItemsControl Margin="{StaticResource Osdrop.Thickness.WindowPadding}" ItemsSource="{Binding Rows}"
+                      ItemTemplate="{StaticResource Osdrop.Template.TransferRow}" />
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</ui:FluentWindow>

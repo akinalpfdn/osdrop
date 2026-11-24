@@ -58,6 +58,7 @@ public sealed partial class TransferRow : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRunning))]
     [NotifyPropertyChangedFor(nameof(Status))]
+    [NotifyPropertyChangedFor(nameof(Summary))]
     [NotifyPropertyChangedFor(nameof(HasFailed))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     public partial TransferState State { get; internal set; }
@@ -82,6 +83,9 @@ public sealed partial class TransferRow : ObservableObject
         TransferState.Cancelled => Localization.Strings.TransfersCancelled,
         _ => string.Empty,
     };
+
+    /// <summary>"From Mac · Done": one line once it ended, so a finished transfer takes little room.</summary>
+    public string Summary => Format(Localization.Strings.TransfersStatus, Direction, Status);
 
     /// <summary>The links in a received item that did not arrive, known once it arrived.</summary>
     [ObservableProperty]
@@ -129,7 +133,7 @@ internal readonly record struct TransferKey(bool IsSending, ulong Id, string Dev
 /// menu has them): their progress, a way to cancel them while they run, and a notification when
 /// one ends. Explorer also shows a received copy's progress.
 /// </summary>
-public sealed class TransfersViewModel : ObservableObject
+public sealed partial class TransfersViewModel : ObservableObject
 {
     private readonly IGroupEngine _engine;
     private readonly Func<string, string> _nameOf;
@@ -152,6 +156,21 @@ public sealed class TransfersViewModel : ObservableObject
     public ObservableCollection<TransferRow> Rows { get; } = [];
 
     public bool HasRows => Rows.Count > 0;
+
+    /// <summary>The newest rows, the ones the panel shows.</summary>
+    public IReadOnlyList<TransferRow> PanelRows => [.. Rows.Take(AppTunables.TransfersPanelRows)];
+
+    /// <summary>Rows the panel leaves to the transfers window.</summary>
+    public bool HasMoreRows => Rows.Count > AppTunables.TransfersPanelRows;
+
+    /// <summary>"Show all (8)".</summary>
+    public string ShowAllText => string.Format(CultureInfo.CurrentCulture, Localization.Strings.TransfersShowAll, Rows.Count);
+
+    /// <summary>The user asked for the transfers window.</summary>
+    public event Action? ShowAllRequested;
+
+    [RelayCommand]
+    private void ShowAll() => ShowAllRequested?.Invoke();
 
     internal Task CancelAsync(TransferRow row)
     {
@@ -297,7 +316,15 @@ public sealed class TransfersViewModel : ObservableObject
             index++;
         }
         Rows.Insert(index, row);
+        RowsChanged();
+    }
+
+    private void RowsChanged()
+    {
         OnPropertyChanged(nameof(HasRows));
+        OnPropertyChanged(nameof(PanelRows));
+        OnPropertyChanged(nameof(HasMoreRows));
+        OnPropertyChanged(nameof(ShowAllText));
     }
 
     private void Update(TransferKey key, ulong bytesDone, ulong bytesTotal)
@@ -327,7 +354,7 @@ public sealed class TransfersViewModel : ObservableObject
         {
             Rows.Remove(Rows.Last(ended => !ended.IsRunning));
         }
-        OnPropertyChanged(nameof(HasRows));
+        RowsChanged();
         Notify(row);
     }
 

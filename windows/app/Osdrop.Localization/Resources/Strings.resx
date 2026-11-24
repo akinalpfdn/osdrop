@@ -576,6 +576,18 @@
   <data name="TransfersBytes" xml:space="preserve">
     <value>{0} of {1}</value>
   </data>
+  <data name="TransfersShowAll" xml:space="preserve">
+    <value>Show all ({0})</value>
+  </data>
+  <data name="TransfersEmpty" xml:space="preserve">
+    <value>No transfers yet.</value>
+  </data>
+  <data name="TransfersStatus" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="TransfersWindowTitle" xml:space="preserve">
+    <value>Transfers</value>
+  </data>
   <data name="TransfersDone" xml:space="preserve">
     <value>Done</value>
   </data>

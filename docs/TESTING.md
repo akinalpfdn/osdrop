@@ -327,6 +327,7 @@ these tests take over input on every computer they cross.
 | U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
 | U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
 | U9 | Menu opens by itself | Quit Osdrop, run `defaults delete com.akinalpfdn.osdrop shownMenu`, start it; quit and start it again; while it runs, open it again from Applications or Spotlight | The first start opens the menu under the icon, after the permissions window is closed when that shows; the second start does not; opening it while it runs opens the menu |
+| U10 | Transfers list | Send four files one after another, open the menu, press "Show all" | The menu lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Windows interface (Phase 17)
 
@@ -344,6 +345,7 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 | WU10 | Panel opens by itself | Quit Osdrop, remove `"HasShownPanel": true` from `%APPDATA%\Osdrop\settings.json` (or install for a user who never ran it) and start it, or let the installer start it; quit and start it again; while it runs, start it again from the Start menu | The first start opens the panel above the taskbar; the second start does not; a start while it runs opens it |
+| WU11 | Transfers list | Send four files one after another, open the panel, press "Show all" | The panel lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Robustness (Phase 18)
 

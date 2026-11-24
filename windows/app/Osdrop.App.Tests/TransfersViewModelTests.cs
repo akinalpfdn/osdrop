@@ -203,4 +203,49 @@ public sealed class TransfersViewModelTests
         Assert.Equal("running", transfers.Rows[0].Name);
         Assert.Equal($"{AppTunables.TransfersEndedRows + 2}", transfers.Rows[1].Name); // the newest ended
     }
+
+    [Fact]
+    public void PanelShowsOnlyTheNewestRowsAndOffersTheRest()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, _) = Make();
+        var changed = new List<string?>();
+        transfers.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        for (ulong id = 1; id <= AppTunables.TransfersPanelRows; id++)
+        {
+            engine.Raise(new EngineEvent(
+                EngineEventKind.TransferReceiving, Connection: id, DeviceId: _laptop, Name: $"{id}", BytesTotal: 1));
+        }
+        Assert.False(transfers.HasMoreRows);
+        Assert.Equal(transfers.Rows, transfers.PanelRows);
+
+        engine.Raise(new EngineEvent(
+            EngineEventKind.TransferReceiving, Connection: 100, DeviceId: _laptop, Name: "more", BytesTotal: 1));
+        Assert.True(transfers.HasMoreRows);
+        Assert.Equal(AppTunables.TransfersPanelRows, transfers.PanelRows.Count);
+        Assert.Equal(transfers.Rows.Take(AppTunables.TransfersPanelRows), transfers.PanelRows);
+        Assert.Contains(nameof(TransfersViewModel.PanelRows), changed);
+        Assert.Contains($"{AppTunables.TransfersPanelRows + 1}", transfers.ShowAllText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShowAllAsksForTheTransfersWindow()
+    {
+        (_, TransfersViewModel transfers, _) = Make();
+        int asked = 0;
+        transfers.ShowAllRequested += () => asked++;
+        transfers.ShowAllCommand.Execute(null);
+        Assert.Equal(1, asked);
+    }
+
+    [Fact]
+    public void EndedRowSaysWhereAndHowOnOneLine()
+    {
+        (FakeEngine engine, TransfersViewModel transfers, _) = Make();
+        engine.Raise(new EngineEvent(
+            EngineEventKind.TransferReceiving, Connection: 1, DeviceId: _laptop, Name: "a.jpg", BytesTotal: 1));
+        engine.Raise(new EngineEvent(EngineEventKind.TransferFinished, Connection: 1, Reason: CoreResult.Ok));
+        TransferRow row = Assert.Single(transfers.Rows);
+        Assert.Contains(row.Direction, row.Summary, StringComparison.Ordinal);
+        Assert.Contains(Localization.Strings.TransfersDone, row.Summary, StringComparison.Ordinal);
+    }
 }
