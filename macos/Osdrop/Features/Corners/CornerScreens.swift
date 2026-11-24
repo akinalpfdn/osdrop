@@ -17,12 +17,18 @@ enum CornerScreens {
         }
     }
 
-    /// The part of the chosen screen windows may use; the main screen's when that one is not
-    /// connected.
-    static func area(for screenID: String?) -> CGRect? {
+    /// The chosen screen, or the main one when that one is not connected.
+    struct Area {
+        /// The whole screen: a drag reaches its very corner, below the Dock or beside it.
+        let frame: CGRect
+        /// The part windows may use: the box shows there, clear of the menu bar and the Dock.
+        let visible: CGRect
+    }
+
+    static func area(for screenID: String?) -> Area? {
         let screens = NSScreen.screens
         let chosen = screenID.flatMap { id in screens.first { identifier(of: $0) == id } }
-        return (chosen ?? screens.first)?.visibleFrame
+        return (chosen ?? screens.first).map { Area(frame: $0.frame, visible: $0.visibleFrame) }
     }
 
     private static func identifier(of screen: NSScreen) -> String? {

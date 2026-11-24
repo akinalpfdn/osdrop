@@ -112,7 +112,8 @@ final class CornerBox {
             open()
             onDrop?(urls)
         case .failure(let error):
-            Log.drag.error("Taking files dropped in a phone's box failed: \(error.localizedDescription, privacy: .public)")
+            Log.drag.error(
+                "Taking files dropped in a phone's box failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -160,7 +161,7 @@ final class CornerBox {
         guard let area = CornerScreens.area(for: corner.screen) else { return }
         let box = PhoneCorner.frame(
             of: CGSize(width: Theme.Corner.boxWidth, height: max(contentHeight, Theme.Corner.hotZone)),
-            at: corner.corner, in: area, inset: Theme.Corner.inset)
+            at: corner.corner, in: area.visible, inset: Theme.Corner.inset)
         switch mode {
         case .hidden:
             panel.orderOut(nil)
@@ -174,14 +175,19 @@ final class CornerBox {
             target.hide()
             return
         }
-        // The corner itself while the box is closed; the whole box once it shows.
-        let zone = CGSize(width: Theme.Corner.hotZone, height: Theme.Corner.hotZone)
-        target.show(over: mode == .waiting ? PhoneCorner.frame(of: zone, at: corner.corner, in: area, inset: 0) : box)
+        // The very corner while the box is closed; the box and the corner once it shows, so a
+        // drag held in the corner (below the Dock, say) stays over it.
+        let zone = PhoneCorner.frame(
+            of: CGSize(width: Theme.Corner.hotZone, height: Theme.Corner.hotZone), at: corner.corner,
+            in: area.frame, inset: 0)
+        target.show(over: mode == .waiting ? zone : box.union(zone))
     }
 
     /// A box that only sent files closes a moment after the last one ended.
     private func watchRows() {
-        let rows = withObservationTracking { self.rows } onChange: { [weak self] in
+        let rows = withObservationTracking {
+            self.rows
+        } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.mode == .open else { return }
                 self.watchRows()
@@ -246,7 +252,11 @@ private struct CornerBoxView: View {
         .padding(Theme.Spacing.large)
         .frame(width: Theme.Corner.boxWidth, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Corner.cornerRadius))
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { box.resized(to: $0) }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+        } action: {
+            box.resized(to: $0)
+        }
     }
 }
 
