@@ -387,6 +387,7 @@ network. Osdrop stays open on the phone unless a row says otherwise.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-24 | feature/mobile-01-android (3b30686), Release, NVIDIA PC + Android phone (debug APK) | P2, P5, P7 with the PC, WU11 | Pass, as reported by the user: the panel sent a file to the phone, cancelling stopped it, with files off the phone's send was refused, the panel listed the three newest transfers and "Show all" opened every one. P8 not run |
 | 2026-11-24 | feature/mobile-01-android (ffbb2e2), Release, NVIDIA PC + Android phone (debug APK) | PC build: ctest 399/399, clang-tidy, dotnet format, build with 0 warnings, dotnet test 41/41; P1 and P4 with the PC | Pass: the phone paired with the PC and files sent from the phone landed in Downloads |
 | 2026-11-24 | feature/mobile-01-android (7e7ff28), Debug, M3 Air + Android phone (debug APK) | P7, U10 | Pass, as reported by the user: with files off the phone's send was refused; the menu listed the three newest transfers and "Show all" opened every one |
 | 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P4 from the share sheet, P5, P6 with the Mac | Pass, as reported by the user: a shared file reached the Mac, cancelling stopped the transfer, the phone reconnected without a code after the app was closed and opened |
