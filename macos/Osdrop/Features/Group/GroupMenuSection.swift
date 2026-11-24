@@ -1,3 +1,4 @@
+import AppKit
 import CoreBridge
 import SwiftUI
 
@@ -46,7 +47,8 @@ struct GroupMenuSection: View {
             ForEach(controller.members) { member in
                 MemberRow(
                     member: member, isResponsive: !controller.unresponsive.contains(member.deviceID),
-                    remove: { controller.revoke(member) }, block: { controller.block(member) })
+                    remove: { controller.revoke(member) }, block: { controller.block(member) },
+                    sendFiles: { FilePicker.choose { controller.sendFiles($0, to: member.deviceID) } })
             }
             Button("group.leave") { controller.leaveGroup() }
         }
@@ -74,6 +76,7 @@ private struct MemberRow: View {
     let isResponsive: Bool
     let remove: () -> Void
     let block: () -> Void
+    let sendFiles: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
@@ -81,7 +84,7 @@ private struct MemberRow: View {
                 .fill(statusColor)
                 .frame(width: Theme.Size.statusDot, height: Theme.Size.statusDot)
                 .accessibilityHidden(true)
-            Image(systemName: member.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+            Image(systemName: member.platform.symbol)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(member.name)
@@ -91,6 +94,14 @@ private struct MemberRow: View {
                     .foregroundStyle(Theme.Colors.secondary)
             }
             Spacer()
+            if member.platform == .android && member.isConnected {
+                Button(action: sendFiles) {
+                    Image(systemName: Theme.Symbol.sendFiles)
+                }
+                .buttonStyle(.borderless)
+                .help(Text("group.member.sendFiles"))
+                .accessibilityLabel(Text("group.member.sendFiles"))
+            }
             if !member.isSelf {
                 Menu {
                     Button("group.member.remove", action: remove)
@@ -126,7 +137,7 @@ private struct NearbyRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.medium) {
-            Image(systemName: computer.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+            Image(systemName: computer.platform.symbol)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.small) {
                 Text(computer.name)
@@ -247,6 +258,24 @@ extension GroupStartFailure {
         case .keyStore: "group.start.keyStore"
         case .newerVersion: "group.start.newerVersion"
         case .mesh: "group.start.mesh"
+        }
+    }
+}
+
+/// The open panel for files and folders to send to a phone.
+@MainActor
+enum FilePicker {
+    static func choose(_ chosen: @escaping ([URL]) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = String(localized: "group.member.sendFiles.prompt")
+        NSApp.activate()
+        panel.begin { response in
+            if response == .OK {
+                chosen(panel.urls)
+            }
         }
     }
 }

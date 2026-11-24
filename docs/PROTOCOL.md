@@ -8,6 +8,9 @@ The protocol is not frozen before the first release. A phase that changes a mess
 document, the fixture generator and the codec in the same pull request. From the first release on,
 changes are additive and raise the minor version.
 
+Minor versions: 0 is the first release (0.1.x); 1 adds platform 3, Android, and sending files
+(SendOffer, SendResult, object kind 3) (0.2.0).
+
 ## Conventions
 
 - All integers are **little-endian**, unsigned unless written `i32`/`i64`.
@@ -69,10 +72,10 @@ also accepts transfer connections. TXT record keys:
 | Key | Value |
 |-----|-------|
 | `pv` | protocol major version, decimal (`1`) |
-| `pm` | protocol minor version, decimal (`0`) |
+| `pm` | protocol minor version, decimal (`1`) |
 | `id` | device ID, 32 lowercase hex digits |
 | `name` | device name (UTF-8, as `string`) |
-| `os` | `macos` or `windows` |
+| `os` | `macos`, `windows` or `android` |
 | `grp` | group ID, 32 lowercase hex digits (never all zeros), or empty when the computer is in no group |
 
 Numbers are decimal without sign or leading zeros. A record with a different `pv` is still
@@ -118,13 +121,15 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 | 0x31 | DragOffer | reply to DragProbe, and to the drop target when the drag crosses |
 | 0x32 | DragResult | drop target → source and controller; controller → source when no target ends it |
 | 0x40 | ClipboardAnnounce | the sender's clipboard changed |
+| 0x50 | SendOffer | sender → one member: files sent to it (minor 1) |
+| 0x51 | SendResult | that member → sender: how the sent files ended (minor 1) |
 
 ### 0x01 Hello
 
 | Field | Type | Values |
 |-------|------|--------|
-| platform | u8 | 1 macOS, 2 Windows |
-| protocol_minor | u8 | minor version of the sender (0) |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
+| protocol_minor | u8 | minor version of the sender (1) |
 | reserved | u16 | 0 |
 | group_id | bytes[16] | the sender's group, all zeros when in no group |
 | device_name | string | 1–64 bytes |
@@ -225,7 +230,7 @@ member:
 | device_id | bytes[16] | |
 | public_key | bytes[32] | X25519 static public key |
 | epoch | u32 | 1 or more; each new pairing of the same device has a higher epoch |
-| platform | u8 | 1 macOS, 2 Windows |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes |
 
@@ -243,7 +248,7 @@ block:
 | device_id | bytes[16] | |
 | version | u32 | 1 or more; each block or unblock of the same device has a higher version |
 | flags | u8 | bit 0: blocked (0: unblocked); other bits reserved |
-| platform | u8 | 1 macOS, 2 Windows |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes, as the device was named when it was blocked |
 
@@ -538,6 +543,35 @@ manifest (a receiver asks for one byte more than it accepts, so it can tell a co
 large). Format 5 is fetched like a dragged folder: manifest, then contents. Receivers fetch only
 from members whose clipboard permission is on, and files only when the files permission is on too.
 
+### Sending files (minor 1)
+
+A member sends files to one other member without a drag: a phone sends what was shared to it, a
+computer what was dropped on a phone's corner. Both sides need protocol minor 1; a sender never
+sends a SendOffer to a member whose Hello says minor 0.
+
+#### 0x50 SendOffer
+
+| Field | Type | Values |
+|-------|------|--------|
+| send_id | u64 | not 0; unique per sender |
+| item_count | u16 | 1–1024; the message must still fit in 65536 bytes |
+| reserved | u16 | 0 |
+| items | item × item_count | as in DragOffer |
+
+The receiver fetches each item as object kind 3 (`object_id` = send_id, `item_index` = the item's
+place in the offer), manifest then contents, as a dragged item. It fetches only from a member whose
+files permission is on; otherwise, and when its user declines, it answers with SendResult at once.
+
+#### 0x51 SendResult
+
+| Field | Type | Values |
+|-------|------|--------|
+| send_id | u64 | not 0 |
+| outcome | u8 | 1 received (every item arrived), 2 declined, 3 failed |
+
+The sender serves the items until the SendResult arrives or the session ends, then withdraws
+them.
+
 ## Input datagrams (UDP)
 
 A datagram is at most **1200 bytes**. It consists of a header that travels in clear (it is the
@@ -601,7 +635,8 @@ first frame.
 
 Objects: `object_kind` 1 is a drag (`object_id` = drag_id, `item_index` = the item in the
 DragOffer, 0–1023), 2 is a clipboard announcement (`object_id` = clip_id, `item_index` = the
-format code, 1–5). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
+format code, 1–5), 3 is a sent item (minor 1: `object_id` = send_id, `item_index` = the item in
+the SendOffer, 0–1023). Clipboard formats 1–4 are single contents; format 5 (files) has a manifest like
 a dragged item.
 
 ### 0x81 TransferHello
@@ -616,7 +651,7 @@ a dragged item.
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | not 0 |
-| object_kind | u8 | 1 drag, 2 clipboard |
+| object_kind | u8 | 1 drag, 2 clipboard, 3 sent (minor 1) |
 | reserved | bytes[3] | 0 |
 | object_id | u64 | not 0 |
 | item_index | u32 | |
@@ -654,7 +689,7 @@ file's; receivers recreate a link only when its target names another entry of th
 | Field | Type | Values |
 |-------|------|--------|
 | request_id | u32 | not 0 |
-| object_kind | u8 | 1 drag, 2 clipboard |
+| object_kind | u8 | 1 drag, 2 clipboard, 3 sent (minor 1) |
 | reserved | bytes[3] | 0 |
 | object_id | u64 | not 0 |
 | item_index | u32 | |
@@ -832,6 +867,9 @@ group, except one of itself, and brings them into the next group it joins.
 
 - A member sends its whole roster to each member whose session is established, and again to every
   connected member whenever its roster changes (except the one the change came from).
+- A member whose Hello says protocol minor 0 knows only platforms 1 and 2 and refuses a Hello or a
+  RosterState that names another. It is sent the roster without the members and blocks of other
+  platforms: it keeps its group and never sees the phones.
 - A RosterState is accepted only from a current member and only for this computer's group; the
   group ID is public, so anyone could claim it. The one exception is the computer this one has
   just paired with while in no group: its roster is adopted if it names both of them as members,

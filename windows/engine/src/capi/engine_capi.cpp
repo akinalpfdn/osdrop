@@ -14,6 +14,7 @@
 #include <windows.h>
 
 #include <bcrypt.h>
+#include <shlobj.h>
 
 #include <algorithm>
 #include <array>
@@ -85,6 +86,17 @@ void copy_name(std::string_view name, std::span<char, OSDROP_TXT_VALUE_SIZE> out
 std::uint32_t clamped_count(std::uint64_t count) {
     return static_cast<std::uint32_t>(
         std::min<std::uint64_t>(count, std::numeric_limits<std::uint32_t>::max()));
+}
+
+/// The user's Downloads folder, where files phones send arrive; empty when Windows has none.
+std::filesystem::path downloads_folder() {
+    PWSTR path = nullptr;
+    std::filesystem::path folder;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, KF_FLAG_DEFAULT, nullptr, &path))) {
+        folder = path;
+    }
+    CoTaskMemFree(path);
+    return folder;
 }
 
 osdrop_engine_event blank_event(osdrop_engine_event_kind kind) {
@@ -261,13 +273,26 @@ public:
         send(event);
     }
     void send_progress(const win::SendUpdate& update) override {
-        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_PROGRESS);
+        osdrop_engine_event event =
+            blank_event(update.sent ? OSDROP_ENGINE_SENT_PROGRESS : OSDROP_ENGINE_SEND_PROGRESS);
         event.connection = (std::uint64_t{update.drag_id} << 32U) | update.index;
         std::ranges::copy(update.device, std::begin(event.device_id));
         copy_name(update.name, event.name);
-        event.bytes_done = update.sent;
+        event.bytes_done = update.sent_bytes;
         event.bytes_total = update.total;
         event.code = update.state;
+        send(event);
+    }
+    void sent_receiving(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                        const std::string& name, std::uint64_t size) override {
+        receiving(transfer_id, source, name, size);
+    }
+    void send_finished(const win::DeviceIdBytes& device, std::uint64_t send_id,
+                       osdrop_send_outcome outcome) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_FINISHED);
+        event.connection = send_id;
+        std::ranges::copy(device, std::begin(event.device_id));
+        event.code = static_cast<std::uint32_t>(outcome);
         send(event);
     }
     /// From the drag bridge's thread: a transfer receiving an item of a drag started.
@@ -493,7 +518,8 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
          .random = osdrop_random_source{.fill = system_random, .context = nullptr},
          .clipboard = &engine->clipboard,
          .shares_clipboard = config->shares_clipboard == 1,
-         .clipboard_limits = limits},
+         .clipboard_limits = limits,
+         .downloads = downloads_folder()},
         engine->store, engine->discovery, engine->events);
     if (!group) {
         return group.error();
@@ -715,6 +741,39 @@ osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine, uint32_t drag_i
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->group->withdraw_drag(drag_id);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_send_files(osdrop_engine* engine, const uint8_t* device_id,
+                                       const char* const* paths, size_t count,
+                                       uint64_t* out_send_id) {
+    if (engine == nullptr || device_id == nullptr || paths == nullptr || count == 0 ||
+        out_send_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<std::filesystem::path> items;
+    for (const char* path : std::span(paths, count)) {
+        if (path == nullptr) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        const std::string_view text(path);
+        items.emplace_back(std::u8string(text.begin(), text.end()));
+    }
+    win::DeviceIdBytes device{};
+    std::copy_n(device_id, device.size(), device.begin());
+    const auto sent = engine->group->send_files(device, items);
+    if (!sent) {
+        return sent.error();
+    }
+    *out_send_id = sent.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_withdraw_send(osdrop_engine* engine, uint64_t send_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->withdraw_send(send_id);
     return OSDROP_OK;
 }
 

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pair_title">Bir bilgisayarla eşleştir</string>
+    <string name="pair_hint">Bu Wi-Fi ağında Osdrop çalışan bilgisayarlar burada görünür.</string>
+    <string name="pair_action">Eşleştir</string>
+    <string name="group_title">Bilgisayarlar</string>
+    <string name="group_hint">Bu bilgisayarlardan gönderilen dosyalar, Osdrop açıkken İndirilenler › Osdrop klasörüne gelir.</string>
+    <string name="group_leave">Gruptan ayrıl</string>
+    <string name="member_connected">Bağlı</string>
+    <string name="member_not_connected">Bağlı değil</string>
+    <string name="member_send">Dosya gönder</string>
+    <string name="pairing_title">%1$s ile eşleştiriliyor</string>
+    <string name="pairing_hint">Yalnızca bilgisayar aynı kodu gösteriyorsa onayla.</string>
+    <string name="pairing_accept">Aynı kod</string>
+    <string name="pairing_reject">İptal</string>
+    <string name="incoming_from">Gönderen: %1$s</string>
+    <string name="incoming_cancel">İptal</string>
+    <string name="channel_arrivals">Alınan dosyalar</string>
+    <plurals name="arrival_received">
+        <item quantity="one">%2$s, %1$d dosya gönderdi</item>
+        <item quantity="other">%2$s, %1$d dosya gönderdi</item>
+    </plurals>
+    <string name="arrival_failed">%1$s: dosyaların hepsi gelmedi</string>
+    <string name="arrival_install">Yükle</string>
+    <string name="share_label">Bilgisayara gönder</string>
+    <plurals name="share_title">
+        <item quantity="one">%1$d dosyayı gönder</item>
+        <item quantity="other">%1$d dosyayı gönder</item>
+    </plurals>
+    <string name="share_nothing">Burada gönderilebilecek bir şey yok.</string>
+    <string name="share_no_computer">Bağlı bilgisayar yok. Aynı Wi-Fi ağındaki Mac ya da PC\'nde Osdrop\'u aç.</string>
+    <string name="share_send">Gönder</string>
+    <string name="share_sending">Gönderiliyor: %1$s…</string>
+    <string name="share_received">Alındı: %1$s</string>
+    <string name="share_declined">Alınmadı: %1$s</string>
+    <string name="share_failed">Gönderilemedi: %1$s</string>
+    <string name="share_done">Bitti</string>
+</resources>

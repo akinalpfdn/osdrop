@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Interop;
+using Osdrop.App.Services;
 using Osdrop.App.Transfers;
 
 namespace Osdrop.App.Group;
@@ -118,6 +119,38 @@ public sealed partial class GroupViewModel : ObservableObject
         }
         _ = await _engine.RevokeAsync(member.DeviceId).ConfigureAwait(true);
         await RefreshMembersAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Asks for files to send to a phone, by its name; empty when the user chose none.</summary>
+    internal Func<string, IReadOnlyList<string>> PickFiles { get; set; } = PickWithDialog;
+
+    /// <summary>Sends files the user picks to a connected phone, which saves them in its Downloads.</summary>
+    [RelayCommand]
+    private async Task SendFilesAsync(MemberItem? member)
+    {
+        if (member is not { CanSendFiles: true })
+        {
+            return;
+        }
+        IReadOnlyList<string> paths = PickFiles(member.Name);
+        if (paths.Count == 0)
+        {
+            return;
+        }
+        if (await _engine.SendFilesAsync(member.DeviceId, paths).ConfigureAwait(true) != CoreResult.Ok)
+        {
+            NotificationRequested?.Invoke(Localization.Strings.TransfersNotifyNotSent, member.Name);
+        }
+    }
+
+    private static IReadOnlyList<string> PickWithDialog(string phone)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Multiselect = true,
+            Title = LocalizedText.Format(Localization.Strings.GroupSendFilesTitle, phone),
+        };
+        return dialog.ShowDialog() == true ? dialog.FileNames : [];
     }
 
     /// <summary>Removes the member and blocks it everywhere in the group.</summary>

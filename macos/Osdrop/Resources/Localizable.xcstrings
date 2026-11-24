@@ -2092,6 +2092,40 @@
         }
       }
     },
+    "group.member.sendFiles" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send files to this phone"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu telefona dosya gönder"
+          }
+        }
+      }
+    },
+    "group.member.sendFiles.prompt" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gönder"
+          }
+        }
+      }
+    },
     "group.member.this" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4540,6 +4574,23 @@
         }
       }
     },
+    "transfers.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No transfers yet."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Henüz aktarım yok."
+          }
+        }
+      }
+    },
     "transfers.failed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4730,6 +4781,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sürüyor"
+          }
+        }
+      }
+    },
+    "transfers.showAll %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show all (%lld)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tümünü göster (%lld)"
+          }
+        }
+      }
+    },
+    "transfers.status %@ %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
           }
         }
       }

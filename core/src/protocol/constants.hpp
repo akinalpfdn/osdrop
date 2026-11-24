@@ -9,7 +9,7 @@ namespace osdrop::protocol {
 
 inline constexpr std::array<std::uint8_t, 2> kMagic{'O', 'D'};
 inline constexpr std::uint8_t kVersion = 1;
-inline constexpr std::uint8_t kMinorVersion = 0;
+inline constexpr std::uint8_t kMinorVersion = 1;
 
 inline constexpr std::size_t kHeaderSize = 4; // magic, version, type
 inline constexpr std::size_t kMaxControlMessageSize = 65536;

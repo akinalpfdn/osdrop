@@ -11,6 +11,7 @@
         <ui:ControlsDictionary />
         <ResourceDictionary Source="Theme/Tokens.xaml" />
         <ResourceDictionary Source="Theme/Styles.xaml" />
+        <ResourceDictionary Source="Transfers/TransferRows.xaml" />
         <ResourceDictionary Source="Tray/TrayIcon.xaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>

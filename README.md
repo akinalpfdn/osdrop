@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/demo.gif" width="480" alt="Photos dragged from a MacBook across the screen edge into a folder on a Windows PC's monitor">
+  <img src="docs/media/demo.webp" width="480" alt="Photos dragged from a MacBook across the screen edge into a folder on a Windows PC's monitor">
   <br><sub>Files dragged from a MacBook across the edge, straight into a folder on the PC.</sub>
 </p>
 

@@ -162,7 +162,7 @@ private struct DeviceSettings: View {
                             Label {
                                 Text(verbatim: device.name)
                             } icon: {
-                                Image(systemName: device.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+                                Image(systemName: device.platform.symbol)
                             }
                         }
                     }
@@ -199,7 +199,7 @@ private struct MemberSettings: View {
                 Label {
                     Text(verbatim: member.name)
                 } icon: {
-                    Image(systemName: member.platform == .windows ? Theme.Symbol.pc : Theme.Symbol.mac)
+                    Image(systemName: member.platform.symbol)
                 }
                 Text(member.isConnected ? "group.member.connected" : "group.member.offline")
                     .font(Theme.Typography.caption)

@@ -42,3 +42,8 @@ windows/installer/Output/
 # Claude Code local files (phase files are tracked)
 .claude/*
 !.claude/phases/
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/.cxx/

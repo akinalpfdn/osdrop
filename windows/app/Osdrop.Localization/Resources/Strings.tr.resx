@@ -192,6 +192,12 @@
   <data name="UnitGigabytes" xml:space="preserve">
     <value>{0} GB</value>
   </data>
+  <data name="GroupSendFiles" xml:space="preserve">
+    <value>Dosya gönder…</value>
+  </data>
+  <data name="GroupSendFilesTitle" xml:space="preserve">
+    <value>{0} cihazına dosya gönder</value>
+  </data>
   <data name="GroupBlock" xml:space="preserve">
     <value>Çıkar ve engelle</value>
   </data>
@@ -569,6 +575,18 @@
   </data>
   <data name="TransfersBytes" xml:space="preserve">
     <value>{0} / {1}</value>
+  </data>
+  <data name="TransfersShowAll" xml:space="preserve">
+    <value>Tümünü göster ({0})</value>
+  </data>
+  <data name="TransfersEmpty" xml:space="preserve">
+    <value>Henüz aktarım yok.</value>
+  </data>
+  <data name="TransfersStatus" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="TransfersWindowTitle" xml:space="preserve">
+    <value>Aktarımlar</value>
   </data>
   <data name="TransfersDone" xml:space="preserve">
     <value>Tamamlandı</value>

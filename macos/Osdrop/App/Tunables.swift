@@ -77,8 +77,10 @@ enum Tunables {
     }
 
     enum Transfers {
-        /// Ended transfers the menu still shows, newest first.
-        static let endedRows = 5
+        /// Ended transfers the transfers window still lists, newest first.
+        static let endedRows = 50
+        /// Transfers the menu shows; the rest are in the transfers window.
+        static let menuRows = 3
         /// This Mac's drags whose item names are kept for the transfers that fetch them.
         static let rememberedDrags = 32
         /// Ends of transfers kept until the transfer is registered.

@@ -31,6 +31,7 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 | `windows/shared/` | Windows-header-free libraries, built and tested on every host |
 | `windows/app/` | WPF shell (`Osdrop.App`) and its strings (`Osdrop.Localization`) |
 | `windows/installer/` | Inno Setup script |
+| `android/` | Kotlin phone app; `core` through JNI (`app/src/main/cpp`) |
 | `protocol/` | Binary fixtures shared by every test suite |
 | `docs/` | This documentation |
 
@@ -42,6 +43,8 @@ Event tap / hooks ─► capture ─► core: crossing engine ─┬─UDP motio
 - `windows/CMakeLists.txt` adds `core` and `windows/shared` and, on Windows, the engine, input
   process and service. On other hosts it builds the portable parts only (`portable` preset).
 - The WPF shell loads the engine DLL through P/Invoke.
+- The Android app's Gradle build runs CMake (`android/app/src/main/cpp/CMakeLists.txt`), which adds
+  `core` and the JNI bridge into `libosdrop.so` for each ABI.
 
 ## Core networking
 
@@ -198,6 +201,46 @@ the others fetch it in the background and put it on their own clipboard as real 
   as UTF-8 (CF_UNICODETEXT), HTML without the CF_HTML header, images as PNG (from "PNG", CF_DIBV5
   or CF_DIB through WIC; written as "PNG" and CF_DIB), files as CF_HDROP with "Preferred
   DropEffect" set to copy. The shell shows a notice in the Computers window.
+
+## Sending files to one member
+
+Built in Phase 20 for phones (protocol minor 1): a phone sends what was shared to it, a computer
+what was dropped on a phone's corner.
+
+- **Core** (`core/src/send`). `Sends` sits between the transfers and the clipboard in the observer
+  chain. `send` offers the items to that member alone as object kind 3 and sends a SendOffer once
+  their scan gives names and sizes; a member before minor 1 is refused before anything is offered.
+  The receiving side reports the offer (`send_arrived`), unless the sender's files permission is
+  off, which declines it at once. The app fetches each item with `receive` and answers with
+  `answer_send`; the sender withdraws the items on the answer or when the session ends, and
+  reports the end (`send_finished`) ([`PROTOCOL.md`](PROTOCOL.md), "Sending files").
+
+- **Mac and PC.** A connected phone's row has a "Send files" action (menu, panel); the items
+  are listed with the drags' transfers. Files a phone sends are fetched into Downloads at once
+  (`SendInbox` on the Mac, `SentFiles` in `windows/shared`), listed as received transfers, and
+  answered when the last item ends. Phase 21 replaces both with the phone's corner box.
+
+## Android app
+
+Built in Phase 20 (`android/`). The phone is a files-only member: its Hello announces file
+transfer only, it has no screens in the arrangement and takes no input or clipboard.
+
+- **Process.** `OsdropApplication` starts the mesh when the app comes to the foreground and closes
+  it when it leaves (`ProcessLifecycleOwner`), so the phone is reachable only while Osdrop is open.
+  `PhoneMesh` owns the mesh, NSD advertising and discovery (`discovery/`, shared with Osplay's
+  approach: Android NSD plus a multicast DNS-SD fallback), pairing and the roster.
+- **JNI.** `osdrop_jni.cpp` wraps the C API. Text crosses as UTF-8 byte arrays both ways (JNI's
+  modified UTF-8 breaks characters outside the BMP). Core calls the listener on its I/O thread,
+  which the bridge attaches to the JVM once and detaches when the thread ends.
+- **Identity.** The secret key and group state are sealed with an AES-GCM key in the Android
+  Keystore (`SecureStore`); backups and device transfers exclude them, since the key cannot leave
+  the phone.
+- **Receiving.** `Inbox` fetches each item of a send into the app's cache, then `DownloadsPublisher`
+  copies it into Download/Osdrop through MediaStore (photos and videos also show in the gallery),
+  answers the sender and posts a notification; a single APK opens the package installer from it.
+  Received names follow Windows' character rules within 255 UTF-8 bytes.
+- **Sending.** The share sheet (`ShareActivity`) and the app's picker copy the chosen items into
+  the cache (core reads paths), and `Outbox` sends them to the chosen computer.
 
 ## Cursor and keyboard across computers
 

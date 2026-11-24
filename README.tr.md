@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/demo.gif" width="480" alt="Fotoğraflar bir MacBook'tan ekran kenarı üzerinden Windows PC'nin monitöründeki bir klasöre sürükleniyor">
+  <img src="docs/media/demo.webp" width="480" alt="Fotoğraflar bir MacBook'tan ekran kenarı üzerinden Windows PC'nin monitöründeki bir klasöre sürükleniyor">
   <br><sub>MacBook'tan kenar üzerinden doğrudan PC'deki bir klasöre sürüklenen dosyalar.</sub>
 </p>
 

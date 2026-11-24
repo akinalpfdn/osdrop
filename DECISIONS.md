@@ -877,3 +877,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The tests ran inside a full Osdrop: it joined the user's group with this Mac's Keychain identity, which took the PC's session from the Osdrop already running (2026-11-23 18:09:42), emptied that Osdrop's drag staging folder in the shared temporary folder, and could open the permissions window or check for updates. Guarding each step misses the next one added; a second app target is more to build and sign.
 **Trade-offs:** The tests no longer exercise `OsdropApp`'s wiring; it is covered by the manual matrix. Should Xcode stop setting those variables, the full app runs again; a test checks the host has no menu bar icon.
 **Revisit if:** A test needs the running app; then it builds what it needs itself.
+
+---
+
+## 2026-11-23 — Phones exchange files through a corner box, Android first, in 0.2.0
+**Chosen:** User decisions, changing the plan of 2026-11-09: phones come in 0.2.0, after the 0.1.1 release, not after 1.0. A phone sends and receives files: a file dragged to the phone's corner on a Mac or PC goes to the phone, and a file the phone sends (share sheet, a computer picked there) opens a box at that corner, from which it is dragged out. The phone is reachable only while Osdrop is open on it; there is no clipboard with phones yet. Android comes first, as an APK on the GitHub release signed with the release keystore; Google Play and the iPhone come later.
+**Alternatives:** Receive-only phones (the plan of 2026-11-09); the mobile app before the 0.1.1 release; a background service on Android that keeps the phone reachable; placing the phone on an edge in the arrangement instead of a corner; clipboard now, sent from the phone with one tap; Google Play from the start, which would make the app leave received APKs to the Files app.
+**Why:** The user moves photos and APKs between the phone and the computers by hand today. 0.1.1 carries fixes the tester needs, so it ships first. A corner does not collide with crossing at an edge. Android and iOS let no app read the clipboard in the background, so phone clipboard would need a tap, and files matter more. A background service costs battery and a Play review justification.
+**Trade-offs:** With the app closed the phone's corner takes nothing. `REQUEST_INSTALL_PACKAGES` needs a declaration when the app moves to Google Play.
+**Revisit if:** Users expect the phone to be reachable with the app closed, or ask for the clipboard.

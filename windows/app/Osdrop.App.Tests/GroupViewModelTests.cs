@@ -203,4 +203,42 @@ public sealed class GroupViewModelTests
         Assert.Equal(Localization.Strings.ClipboardOtherComputer, group.NameOf(_other));
         Assert.True(group.HasConnectedOthers);
     }
+
+    [Fact]
+    public async Task FilesAreSentOnlyToAConnectedPhoneAndAFailedSendIsReported()
+    {
+        const string phone = "33333333333333333333333333333333";
+        var engine = new FakeEngine();
+        engine.Members.Add(new GroupMember(_self, "PC", Platform.Windows, IsSelf: true, IsConnected: false, FakeEngine.AllAllowed));
+        engine.Members.Add(new GroupMember(_laptop, "Laptop", Platform.MacOS, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
+        engine.Members.Add(new GroupMember(phone, "Phone", Platform.Android, IsSelf: false, IsConnected: true, FakeEngine.AllAllowed));
+        var group = new GroupViewModel(engine);
+        var asked = new List<string>();
+        group.PickFiles = name =>
+        {
+            asked.Add(name);
+            return [@"C:\Users\me\app.apk"];
+        };
+        var notes = new List<(string Title, string Body)>();
+        group.NotificationRequested += (title, body) => notes.Add((title, body));
+        await group.RefreshAsync();
+        MemberItem laptop = group.Members.Single(member => member.DeviceId == _laptop);
+        MemberItem toPhone = group.Members.Single(member => member.DeviceId == phone);
+        Assert.False(laptop.CanSendFiles);
+        Assert.True(toPhone.CanSendFiles);
+
+        await group.SendFilesCommand.ExecuteAsync(laptop);
+        Assert.Empty(asked);
+
+        await group.SendFilesCommand.ExecuteAsync(toPhone);
+        Assert.Equal(["Phone"], asked);
+        (string deviceId, IReadOnlyList<string> paths) = Assert.Single(engine.Sends);
+        Assert.Equal(phone, deviceId);
+        Assert.Equal([@"C:\Users\me\app.apk"], paths);
+        Assert.Empty(notes);
+
+        engine.SendResult = CoreResult.InvalidState;
+        await group.SendFilesCommand.ExecuteAsync(toPhone);
+        Assert.Equal((Localization.Strings.TransfersNotifyNotSent, "Phone"), Assert.Single(notes));
+    }
 }

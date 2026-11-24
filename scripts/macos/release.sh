@@ -7,7 +7,7 @@
 #   --no-publish  upload the DMG but leave the release a draft
 #
 # Run it on the commit the version tag points at, after the Release workflow attached the Windows
-# installer. Needs: Xcode, XcodeGen, a "Developer ID Application" certificate, the notarytool
+# installer and the signed APK was uploaded. Needs: Xcode, XcodeGen, a "Developer ID Application" certificate, the notarytool
 # keychain profile "mac-notary", an authenticated gh, and dmgbuild (pip3 install dmgbuild).
 set -euo pipefail
 
@@ -15,6 +15,7 @@ readonly NOTARY_PROFILE="mac-notary"
 readonly APP_NAME="Osdrop"
 readonly DMG_NAME="Osdrop.dmg"
 readonly WINDOWS_INSTALLER="Osdrop-Setup.exe"
+readonly ANDROID_APK="Osdrop.apk"
 
 publish=true
 case "${1:-}" in
@@ -71,6 +72,8 @@ assets="$(gh release view "$tag" --json assets --jq '.assets[].name')" ||
     fail "no release for $tag yet; wait for the Release workflow to finish"
 grep -qx "$WINDOWS_INSTALLER" <<<"$assets" ||
     fail "the $tag release has no $WINDOWS_INSTALLER yet; wait for the Release workflow to finish"
+grep -qx "$ANDROID_APK" <<<"$assets" ||
+    fail "the $tag release has no $ANDROID_APK yet; sign and upload it first (docs/RELEASING.md)"
 echo "Osdrop $version, team $team"
 
 rm -rf "$work"

@@ -148,6 +148,8 @@ std::vector<ControlMessage> boundary_messages() {
                         {.format = protocol::ClipboardFormat::Html, .byte_count = 2},
                         {.format = protocol::ClipboardFormat::RichText, .byte_count = 3},
                         {.format = protocol::ClipboardFormat::PlainText, .byte_count = 4}}},
+        protocol::SendOffer{.send_id = std::numeric_limits<std::uint64_t>::max(), .items = items},
+        protocol::SendResult{.send_id = 1, .outcome = protocol::SendOutcome::Failed},
     };
 }
 
@@ -173,7 +175,7 @@ Error encode_error(const ControlMessage& message) {
 
 TEST(ControlCodec, EncoderRefusesWhatTheDecoderWouldReject) {
     EXPECT_EQ(encode_error(protocol::Hello{.device_name = ""}), Error::InvalidString);
-    EXPECT_EQ(encode_error(protocol::Hello{.platform = static_cast<protocol::Platform>(3),
+    EXPECT_EQ(encode_error(protocol::Hello{.platform = static_cast<protocol::Platform>(4),
                                            .device_name = "PC"}),
               Error::ValueOutOfRange);
     EXPECT_EQ(encode_error(protocol::HandshakeMessage{.step = 1, .payload = {}}),

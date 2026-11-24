@@ -145,6 +145,24 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.CompletedTask;
     }
 
+    public List<(string DeviceId, IReadOnlyList<string> Paths)> Sends { get; } = [];
+
+    public CoreResult SendResult { get; set; } = CoreResult.Ok;
+
+    public List<ulong> WithdrawnSends { get; } = [];
+
+    public Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths)
+    {
+        Sends.Add((deviceId, paths));
+        return Task.FromResult(SendResult);
+    }
+
+    public Task WithdrawSendAsync(ulong sendId)
+    {
+        WithdrawnSends.Add(sendId);
+        return Task.CompletedTask;
+    }
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);

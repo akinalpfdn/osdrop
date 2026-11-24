@@ -98,6 +98,13 @@ struct Events {
     std::vector<Arrival> arrivals;
     std::vector<std::uint32_t> withdrawn;
     std::vector<std::pair<std::uint32_t, osdrop_drag_outcome>> drag_ends;
+    struct Send {
+        DeviceId device{};
+        std::uint64_t send_id = 0;
+        std::vector<std::pair<std::string, std::uint64_t>> items; ///< name, bytes
+    };
+    std::vector<Send> sends;
+    std::vector<std::pair<std::uint64_t, osdrop_send_outcome>> send_ends;
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex);
@@ -243,6 +250,23 @@ osdrop_mesh_callbacks callbacks_for(Events& events) {
     callbacks.drag_ended = [](void* context, uint32_t drag_id, osdrop_drag_outcome outcome) {
         auto* e = static_cast<Events*>(context);
         e->update([&] { e->drag_ends.emplace_back(drag_id, outcome); });
+    };
+    callbacks.send_arrived = [](void* context, const uint8_t* device_id, uint64_t send_id,
+                                const osdrop_drag_item* items, size_t count) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] {
+            Events::Send send{.device = {}, .send_id = send_id, .items = {}};
+            std::memcpy(send.device.data(), device_id, OSDROP_DEVICE_ID_SIZE);
+            for (const osdrop_drag_item& item : std::span(items, count)) {
+                send.items.emplace_back(item.name, item.byte_count);
+            }
+            e->sends.push_back(std::move(send));
+        });
+    };
+    callbacks.send_finished = [](void* context, const uint8_t* /*device_id*/, uint64_t send_id,
+                                 osdrop_send_outcome outcome) {
+        auto* e = static_cast<Events*>(context);
+        e->update([&] { e->send_ends.emplace_back(send_id, outcome); });
     };
     callbacks.transfer_progress = [](void* context, const osdrop_transfer_progress* progress) {
         auto* e = static_cast<Events*>(context);
@@ -741,7 +765,7 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     config.max_transfer_streams = 9;
     EXPECT_EQ(create(config), OSDROP_ERROR_VALUE_OUT_OF_RANGE);
     config = good;
-    config.platform = static_cast<osdrop_platform>(3);
+    config.platform = static_cast<osdrop_platform>(4);
     EXPECT_EQ(create(config), OSDROP_ERROR_VALUE_OUT_OF_RANGE);
     config = good;
     config.group_state_size = 4;
@@ -824,6 +848,110 @@ TEST(CapiMesh, MembersSendEachOtherFilesOverLoopback) {
               osdrop::test::read_file(source / "Project/sub/b.txt"));
     ASSERT_FALSE(pc.events.progress.empty());
     EXPECT_EQ(pc.events.progress.back().bytes_done, 3'000'005U);
+}
+
+/// `from` sends `roots` to `to` with osdrop_mesh_send; the send's ID.
+std::uint64_t send_files(CMesh& from, const CMesh& to,
+                         const std::vector<std::filesystem::path>& roots) {
+    std::vector<std::string> paths;
+    for (const auto& root : roots) {
+        paths.push_back(osdrop::transfer::utf8_of(root));
+    }
+    std::vector<osdrop_dragged_item> items;
+    for (const std::string& path : paths) {
+        items.push_back({.path = path.c_str(), .content_type = "public.data"});
+    }
+    std::uint64_t send_id = 0;
+    EXPECT_EQ(
+        osdrop_mesh_send(from.mesh, to.device_id.data(), items.data(), items.size(), &send_id),
+        OSDROP_OK);
+    return send_id;
+}
+
+TEST(CapiMesh, AMemberSendsFilesToAnotherWithoutADrag) {
+    const osdrop::test::TempFolder source;
+    const osdrop::test::TempFolder destination;
+    osdrop::test::write_file(source / "Osdrop.apk", osdrop::test::pattern(1'000'000));
+    osdrop::test::write_file(source / "Photos/1.jpg", "photo");
+    CMesh phone(1, "Phone");
+    CMesh pc(2, "PC");
+    connect_pair(phone, pc);
+
+    const std::uint64_t send_id = send_files(phone, pc, {source / "Osdrop.apk", source / "Photos"});
+    ASSERT_NE(send_id, 0U);
+    ASSERT_TRUE(pc.events.wait_for([&] { return !pc.events.sends.empty(); }));
+    const Events::Send send = pc.events.read([&] { return pc.events.sends.front(); });
+    EXPECT_EQ(send.device, phone.device_id);
+    EXPECT_EQ(send.send_id, send_id);
+    EXPECT_EQ(send.items, (std::vector<std::pair<std::string, std::uint64_t>>{
+                              {"Osdrop.apk", 1'000'000}, {"Photos", 5}}));
+
+    const std::string folder = osdrop::transfer::utf8_of(destination.path());
+    for (std::uint32_t index = 0; index < send.items.size(); ++index) {
+        const osdrop_object_ref item{
+            .kind = OSDROP_OBJECT_SENT, .object_id = send_id, .item_index = index};
+        std::uint64_t transfer = 0;
+        EXPECT_EQ(osdrop_mesh_receive(pc.mesh, phone.device_id.data(), &item, folder.c_str(),
+                                      UINT64_MAX, &transfer),
+                  OSDROP_OK);
+    }
+    ASSERT_TRUE(pc.events.wait_for([&] { return pc.events.finished.size() == 2; }));
+    EXPECT_EQ(
+        osdrop_mesh_answer_send(pc.mesh, phone.device_id.data(), send_id, OSDROP_SEND_RECEIVED),
+        OSDROP_OK);
+    ASSERT_TRUE(phone.events.wait_for([&] { return !phone.events.send_ends.empty(); }));
+    EXPECT_EQ(phone.events.read([&] { return phone.events.send_ends.front(); }),
+              std::pair(send_id, OSDROP_SEND_RECEIVED));
+    EXPECT_EQ(osdrop::test::read_file(destination / "Osdrop.apk"),
+              osdrop::test::pattern(1'000'000));
+    EXPECT_EQ(osdrop::test::read_file(destination / "Photos/1.jpg"),
+              osdrop::test::read_file(source / "Photos/1.jpg"));
+    EXPECT_EQ(
+        osdrop_mesh_answer_send(pc.mesh, phone.device_id.data(), send_id, OSDROP_SEND_RECEIVED),
+        OSDROP_ERROR_NOT_FOUND)
+        << "answered once";
+}
+
+TEST(CapiMesh, AMemberThatMayNotSendFilesIsDeclined) {
+    const osdrop::test::TempFolder source;
+    osdrop::test::write_file(source / "a.txt", "a");
+    CMesh phone(1, "Phone");
+    CMesh pc(2, "PC");
+    connect_pair(phone, pc);
+    const osdrop_permissions control_only{.control = 1, .files = 0, .clipboard = 0};
+    ASSERT_EQ(osdrop_mesh_set_permissions(pc.mesh, phone.device_id.data(), &control_only),
+              OSDROP_OK);
+
+    const std::uint64_t send_id = send_files(phone, pc, {source / "a.txt"});
+    ASSERT_TRUE(phone.events.wait_for([&] { return !phone.events.send_ends.empty(); }));
+    EXPECT_EQ(phone.events.read([&] { return phone.events.send_ends.front(); }),
+              std::pair(send_id, OSDROP_SEND_DECLINED));
+    EXPECT_TRUE(pc.events.read([&] { return pc.events.sends.empty(); }));
+}
+
+TEST(CapiMesh, SendCommandsCheckTheirArguments) {
+    const osdrop::test::TempFolder source;
+    osdrop::test::write_file(source / "a.txt", "a");
+    CMesh phone(1, "Phone");
+    const std::array<std::uint8_t, OSDROP_DEVICE_ID_SIZE> stranger{7};
+    const std::string path = osdrop::transfer::utf8_of(source / "a.txt");
+    const osdrop_dragged_item item{.path = path.c_str(), .content_type = "public.data"};
+    std::uint64_t send_id = 0;
+    EXPECT_EQ(osdrop_mesh_send(phone.mesh, stranger.data(), &item, 1, &send_id),
+              OSDROP_ERROR_INVALID_STATE)
+        << "not connected";
+    EXPECT_EQ(osdrop_mesh_send(phone.mesh, stranger.data(), &item, 0, &send_id),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    const osdrop_dragged_item relative{.path = "a.txt", .content_type = "public.data"};
+    EXPECT_EQ(osdrop_mesh_send(phone.mesh, stranger.data(), &relative, 1, &send_id),
+              OSDROP_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(osdrop_mesh_answer_send(phone.mesh, stranger.data(), 5, OSDROP_SEND_RECEIVED),
+              OSDROP_ERROR_NOT_FOUND);
+    EXPECT_EQ(osdrop_mesh_answer_send(phone.mesh, stranger.data(), 0, OSDROP_SEND_RECEIVED),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
+    EXPECT_EQ(osdrop_mesh_answer_send(phone.mesh, stranger.data(), 5,
+                                      static_cast<osdrop_send_outcome>(4)),
+              OSDROP_ERROR_VALUE_OUT_OF_RANGE);
 }
 
 TEST(CapiMesh, QuittingDuringATransferLeavesNothingBehind) {

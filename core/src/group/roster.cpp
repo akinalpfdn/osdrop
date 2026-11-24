@@ -165,10 +165,14 @@ std::uint32_t Roster::next_epoch(const DeviceId& device) const {
     return newest + 1;
 }
 
-std::vector<protocol::RosterState> Roster::to_messages(const protocol::Id& group) const {
+std::vector<protocol::RosterState> Roster::to_messages(const protocol::Id& group,
+                                                       std::uint8_t peer_minor) const {
     std::vector<protocol::RosterMember> members;
     members.reserve(pairings_.size());
     for (const auto& [device, member] : pairings_) {
+        if (!protocol::knows_platform(peer_minor, member.platform)) {
+            continue;
+        }
         members.push_back({.device_id = device,
                            .public_key = member.public_key,
                            .epoch = member.epoch,
@@ -183,6 +187,9 @@ std::vector<protocol::RosterState> Roster::to_messages(const protocol::Id& group
     std::vector<protocol::RosterBlock> blocked;
     blocked.reserve(blocks_.size());
     for (const auto& [device, block] : blocks_) {
+        if (!protocol::knows_platform(peer_minor, block.platform)) {
+            continue;
+        }
         blocked.push_back({.device_id = device,
                            .version = block.version,
                            .blocked = block.blocked,

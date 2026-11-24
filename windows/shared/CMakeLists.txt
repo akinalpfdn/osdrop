@@ -18,6 +18,7 @@ add_library(osdrop_win_shared STATIC
     src/refusal_tally.cpp
     src/report_queue.cpp
     src/screens.cpp
+    src/sent_files.cpp
     src/txt_mapping.cpp
     src/wheel.cpp)
 add_library(osdrop::win_shared ALIAS osdrop_win_shared)
@@ -45,6 +46,7 @@ if(OSDROP_CORE_BUILD_TESTS)
         tests/product_names_test.cpp
         tests/refusal_tally_test.cpp
         tests/screens_test.cpp
+        tests/sent_files_test.cpp
         tests/txt_mapping_test.cpp
         tests/wheel_test.cpp)
     target_link_libraries(osdrop_win_shared_tests PRIVATE osdrop::win_shared osdrop::warnings GTest::gtest_main)

@@ -27,7 +27,7 @@ enum class TransferType : std::uint8_t {
     TransferCancel = 0x88,
 };
 
-enum class ObjectKind : std::uint8_t { Drag = 1, Clipboard = 2 };
+enum class ObjectKind : std::uint8_t { Drag = 1, Clipboard = 2, Sent = 3 };
 enum class EntryKind : std::uint8_t { File = 1, Folder = 2, Link = 3 };
 
 inline constexpr std::uint64_t kMaxLinkTarget = 4096;

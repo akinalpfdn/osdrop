@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Interop;
+using Osdrop.App.Services;
 
 namespace Osdrop.App.Transfers;
 
@@ -58,6 +59,7 @@ public sealed partial class TransferRow : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRunning))]
     [NotifyPropertyChangedFor(nameof(Status))]
+    [NotifyPropertyChangedFor(nameof(Summary))]
     [NotifyPropertyChangedFor(nameof(HasFailed))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     public partial TransferState State { get; internal set; }
@@ -82,6 +84,9 @@ public sealed partial class TransferRow : ObservableObject
         TransferState.Cancelled => Localization.Strings.TransfersCancelled,
         _ => string.Empty,
     };
+
+    /// <summary>"From Mac · Done": one line once it ended, so a finished transfer takes little room.</summary>
+    public string Summary => Format(Localization.Strings.TransfersStatus, Direction, Status);
 
     /// <summary>The links in a received item that did not arrive, known once it arrived.</summary>
     [ObservableProperty]
@@ -108,15 +113,20 @@ public sealed partial class TransferRow : ObservableObject
         string.Format(CultureInfo.CurrentCulture, text, values);
 }
 
-/// <summary>A transfer this PC receives (by its ID), or an item of this PC's drag a member fetches.</summary>
-internal readonly record struct TransferKey(bool IsSending, ulong Id, string DeviceId)
+/// <summary>
+/// A transfer this PC receives (by its ID), or an item a member fetches: of this PC's drag, or of
+/// files this PC sent a phone (<see cref="ToPhone"/>).
+/// </summary>
+internal readonly record struct TransferKey(bool IsSending, ulong Id, string DeviceId, bool ToPhone = false)
 {
     public static TransferKey Receive(ulong transferId) => new(false, transferId, string.Empty);
 
-    /// <summary><paramref name="item"/>: the drag's ID in the high 32 bits, the item's index in the low.</summary>
-    public static TransferKey Send(ulong item, string deviceId) => new(true, item, deviceId);
+    /// <summary><paramref name="item"/>: the drag's or the send's ID in the high 32 bits, the item's index in the low.</summary>
+    public static TransferKey Send(ulong item, string deviceId, bool toPhone = false) => new(true, item, deviceId, toPhone);
 
     public uint DragId => (uint)(Id >> 32);
+
+    public ulong SendId => Id >> 32;
 }
 
 /// <summary>
@@ -124,12 +134,14 @@ internal readonly record struct TransferKey(bool IsSending, ulong Id, string Dev
 /// menu has them): their progress, a way to cancel them while they run, and a notification when
 /// one ends. Explorer also shows a received copy's progress.
 /// </summary>
-public sealed class TransfersViewModel : ObservableObject
+public sealed partial class TransfersViewModel : ObservableObject
 {
     private readonly IGroupEngine _engine;
     private readonly Func<string, string> _nameOf;
     private readonly Action<string, string> _notify;
     private readonly HashSet<TransferKey> _cancelled = [];
+    /// <summary>Sends to phones the user withdrew: their end needs no notification of its own.</summary>
+    private readonly HashSet<ulong> _withdrawnSends = [];
     /// <summary>Ends of transfers reported before they were listed (clipboard ones never are).</summary>
     private readonly Dictionary<ulong, (CoreResult Result, ulong LinksLeftOut)> _early = [];
 
@@ -146,6 +158,21 @@ public sealed class TransfersViewModel : ObservableObject
 
     public bool HasRows => Rows.Count > 0;
 
+    /// <summary>The newest rows, the ones the panel shows.</summary>
+    public IReadOnlyList<TransferRow> PanelRows => [.. Rows.Take(AppTunables.TransfersPanelRows)];
+
+    /// <summary>Rows the panel leaves to the transfers window.</summary>
+    public bool HasMoreRows => Rows.Count > AppTunables.TransfersPanelRows;
+
+    /// <summary>"Show all (8)".</summary>
+    public string ShowAllText => LocalizedText.Format(Localization.Strings.TransfersShowAll, Rows.Count);
+
+    /// <summary>The user asked for the transfers window.</summary>
+    public event Action? ShowAllRequested;
+
+    [RelayCommand]
+    private void ShowAll() => ShowAllRequested?.Invoke();
+
     internal Task CancelAsync(TransferRow row)
     {
         if (!row.IsRunning)
@@ -153,7 +180,18 @@ public sealed class TransfersViewModel : ObservableObject
             return Task.CompletedTask;
         }
         _cancelled.Add(row.Key);
-        return row.IsSending ? _engine.WithdrawDragAsync(row.Key.DragId) : _engine.CancelTransferAsync(row.Key.Id);
+        return row.Key switch
+        {
+            { ToPhone: true } key => WithdrawSendAsync(key.SendId),
+            { IsSending: true } key => _engine.WithdrawDragAsync(key.DragId),
+            var key => _engine.CancelTransferAsync(key.Id),
+        };
+    }
+
+    private Task WithdrawSendAsync(ulong sendId)
+    {
+        _ = _withdrawnSends.Add(sendId);
+        return _engine.WithdrawSendAsync(sendId);
     }
 
     private void OnEvent(EngineEvent received)
@@ -170,7 +208,13 @@ public sealed class TransfersViewModel : ObservableObject
                 Finished(received.Connection, received.Reason, received.Code);
                 break;
             case EngineEventKind.SendProgress:
-                Sent(received);
+                Sent(received, toPhone: false);
+                break;
+            case EngineEventKind.SentProgress:
+                Sent(received, toPhone: true);
+                break;
+            case EngineEventKind.SendFinished:
+                SendFinished(received);
                 break;
             default:
                 break;
@@ -212,11 +256,11 @@ public sealed class TransfersViewModel : ObservableObject
         End(key, state);
     }
 
-    private void Sent(EngineEvent received)
+    private void Sent(EngineEvent received, bool toPhone)
     {
         const uint sending = 1;
         const uint done = 2;
-        var key = TransferKey.Send(received.Connection, received.DeviceId);
+        var key = TransferKey.Send(received.Connection, received.DeviceId, toPhone);
         if (Find(key) is null)
         {
             if (received.Code != sending)
@@ -237,6 +281,31 @@ public sealed class TransfersViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// A phone answered a send, or it ended: when the phone did not take it, its rows still running
+    /// fail, and a send that listed none is reported on its own.
+    /// </summary>
+    private void SendFinished(EngineEvent received)
+    {
+        const uint receivedByPhone = 1;
+        bool withdrawn = _withdrawnSends.Remove(received.Connection);
+        if (received.Code == receivedByPhone)
+        {
+            return; // its rows end as their items arrive
+        }
+        TransferKey[] running = [.. Rows
+            .Where(row => row.IsRunning && row.Key.ToPhone && row.Key.SendId == received.Connection)
+            .Select(row => row.Key)];
+        foreach (TransferKey key in running)
+        {
+            End(key, _cancelled.Contains(key) ? TransferState.Cancelled : TransferState.Failed);
+        }
+        if (running.Length == 0 && !withdrawn)
+        {
+            _notify(Localization.Strings.TransfersNotifyNotSent, _nameOf(received.DeviceId));
+        }
+    }
+
     private TransferRow? Find(TransferKey key) => Rows.FirstOrDefault(row => row.Key == key);
 
     /// <summary>Above the rows that ended.</summary>
@@ -248,7 +317,15 @@ public sealed class TransfersViewModel : ObservableObject
             index++;
         }
         Rows.Insert(index, row);
+        RowsChanged();
+    }
+
+    private void RowsChanged()
+    {
         OnPropertyChanged(nameof(HasRows));
+        OnPropertyChanged(nameof(PanelRows));
+        OnPropertyChanged(nameof(HasMoreRows));
+        OnPropertyChanged(nameof(ShowAllText));
     }
 
     private void Update(TransferKey key, ulong bytesDone, ulong bytesTotal)
@@ -278,7 +355,7 @@ public sealed class TransfersViewModel : ObservableObject
         {
             Rows.Remove(Rows.Last(ended => !ended.IsRunning));
         }
-        OnPropertyChanged(nameof(HasRows));
+        RowsChanged();
         Notify(row);
     }
 

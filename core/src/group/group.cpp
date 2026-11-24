@@ -189,7 +189,10 @@ void Group::send_roster(const DeviceId& device) {
     if (mesh_ == nullptr || !state_.in_group()) {
         return;
     }
-    for (protocol::RosterState& message : state_.roster.to_messages(state_.group_id)) {
+    const auto session = sessions_.find(device);
+    const std::uint8_t minor =
+        session != sessions_.end() ? session->second.hello.protocol_minor : protocol::kMinorVersion;
+    for (protocol::RosterState& message : state_.roster.to_messages(state_.group_id, minor)) {
         mesh_->defer([device, message = std::move(message)](mesh::Mesh& mesh, TimePoint now) {
             static_cast<void>(mesh.send_message(device, message, now)); // gone peers sync later
         });

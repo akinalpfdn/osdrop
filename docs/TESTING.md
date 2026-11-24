@@ -327,6 +327,7 @@ these tests take over input on every computer they cross.
 | U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
 | U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
 | U9 | Menu opens by itself | Quit Osdrop, run `defaults delete com.akinalpfdn.osdrop shownMenu`, start it; quit and start it again; while it runs, open it again from Applications or Spotlight | The first start opens the menu under the icon, after the permissions window is closed when that shows; the second start does not; opening it while it runs opens the menu |
+| U10 | Transfers list | Send four files one after another, open the menu, press "Show all" | The menu lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Windows interface (Phase 17)
 
@@ -344,6 +345,7 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 | WU10 | Panel opens by itself | Quit Osdrop, remove `"HasShownPanel": true` from `%APPDATA%\Osdrop\settings.json` (or install for a user who never ran it) and start it, or let the installer start it; quit and start it again; while it runs, start it again from the Start menu | The first start opens the panel above the taskbar; the second start does not; a start while it runs opens it |
+| WU11 | Transfers list | Send four files one after another, open the panel, press "Show all" | The panel lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Robustness (Phase 18)
 
@@ -365,10 +367,35 @@ the members are connected again and the cursor crosses, without restarting Osdro
 | R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
 | R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
 
+### Phones (Phase 20)
+
+Run with an Android phone (Android 12 or later) and the 0.2 apps on a Mac and a PC, on one Wi-Fi
+network. Osdrop stays open on the phone unless a row says otherwise.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| P1 | Pairing | On the phone, **Pair** next to the Mac; accept the code on both. Then pair the PC from the Mac's group | The phone lists both computers as connected; the Mac's menu and the PC's panel show it with a phone icon |
+| P2 | Computer → phone | Mac: the phone's row › **Send files to this phone**, pick a photo, a 2 GB file and a folder of photos. PC: the same from the panel's "…" menu | Progress on the computer and on the phone; everything arrives intact in Download › Osdrop, the photos also in the gallery; a notification on the phone |
+| P3 | APK | Send an APK from a computer | The phone's notification opens the installer |
+| P4 | Phone → computer | Share a photo and a 2 GB video from the gallery to Osdrop, pick the Mac; again from the app's **Send files** to the PC | They arrive in the computer's Downloads, listed with progress and a notification |
+| P5 | Cancel | During P2 and P4, cancel on the receiving side, then on the sending side | Both sides stop; no partial file stays in Downloads; the sender says the sending stopped |
+| P6 | App closed | Close Osdrop on the phone (swipe it away), then open it again | The computers show the phone as not connected, and connected again without a code |
+| P7 | Files permission | On the Mac, turn off files for the phone; send from the phone | The send is refused at once and the phone says so |
+| P8 | Old computer | A computer on 0.1 in the group | The 0.1 computer keeps working with the others and does not list the phone |
+
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-24 | feature/mobile-01-android (3b30686), Release, NVIDIA PC + Android phone (debug APK) | P2, P5, P7 with the PC, WU11 | Pass, as reported by the user: the panel sent a file to the phone, cancelling stopped it, with files off the phone's send was refused, the panel listed the three newest transfers and "Show all" opened every one. P8 not run |
+| 2026-11-24 | feature/mobile-01-android (ffbb2e2), Release, NVIDIA PC + Android phone (debug APK) | PC build: ctest 399/399, clang-tidy, dotnet format, build with 0 warnings, dotnet test 41/41; P1 and P4 with the PC | Pass: the phone paired with the PC and files sent from the phone landed in Downloads |
+| 2026-11-24 | feature/mobile-01-android (7e7ff28), Debug, M3 Air + Android phone (debug APK) | P7, U10 | Pass, as reported by the user: with files off the phone's send was refused; the menu listed the three newest transfers and "Show all" opened every one |
+| 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P4 from the share sheet, P5, P6 with the Mac | Pass, as reported by the user: a shared file reached the Mac, cancelling stopped the transfer, the phone reconnected without a code after the app was closed and opened |
+| 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P3 with the Mac; the phone stayed connected through the run | Pass, as reported by the user: the APK arrived and the notification opened the installer |
+| 2026-11-24 | feature/mobile-01-android (2f61031), Debug, M3 Air + Android phone (debug APK) | P4 with the Mac, from the app's **Send files** | Pass after 2f61031: before it the picker sent Osdrop to the background, the phone dropped its connection and the send failed |
+| 2026-11-24 | feature/mobile-01-android (37a1b53), Debug, M3 Air + Android phone (debug APK) | P1 with the Mac, P2 with one MP4 from the Mac | Pass, as reported by the user: the phone paired and the video arrived. P3–P8 and the PC not run yet |
+| 2026-11-23 | dev (a8bf2b5 and the branches before it), Debug, M3 Air on macOS 27.2 + PC | U9, WU10, I11 with the Mac's trackpad | Pass: the menu opened by itself at the first start (after the permissions window) and when Osdrop was opened again, not at a second start; the PC's panel the same; coming home with the trackpad no longer waits at the edge (8a1db77). The click alone had not opened the menu on macOS 27 |
+| 2026-11-23 | 0.1.1 candidates on the PC and the M3 Air | WU5, I10, I11 with the PC's mouse, installer upgrade from 0.1.0 | Pass (maintainer) |
 | 2026-11-23 | dev (ee4e13a), Debug, M3 Air + PC | Mac → PC in daily use | Fail: the cursor crossed and came back about a hundred times a second (797 captures in 40 minutes); keys reached the PC, the mouse never stayed. The warp that parked the Mac's cursor added its distance to the next mouse delta (b2bafc2); parking removed |
 | 2026-11-22 | dev (6a78f6b) on the PC (debug engine and shell) and the M3 Air | PC → Mac crossings with the new crossing log | Pass: 18 of 18 crossings with the PC's mouse in 26 minutes, each logged by core, and OsdropInput's capture lines within 1–3 ms of each. WU5 and I10 not run yet |
 | 2026-11-21 | dev (21a3a93), Debug, M3 Air connected to the PC | R12, replaced by a look at the running app (user decision) | Mac: after 2 h 45 min of the day's use, footprint 52.3 MB with a lifetime peak of 52.5 MB; over the next 10 minutes 52.1–52.3 MB, 61 open files, 9–11 threads, Mach ports 313 then 299, one TCP connection. No growth. PC: numbers to come |
