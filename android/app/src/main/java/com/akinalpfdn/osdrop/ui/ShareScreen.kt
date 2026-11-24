@@ -49,7 +49,7 @@ fun ShareScreen(count: Int, state: MeshState, sends: List<OutgoingSend>, onPick:
                     trailingContent = { TextButton(onClick = { onPick(member) }) { Text(stringResource(R.string.share_send)) } },
                 )
             }
-            items(sends, key = { it.id }) { send -> Outgoing(send) }
+            items(sends, key = { it.listKey }) { send -> Outgoing(send) }
             item { TextButton(onClick = onDone) { Text(stringResource(R.string.share_done)) } }
         }
     }

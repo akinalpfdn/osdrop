@@ -14,8 +14,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Files on their way to this phone, for the screen. */
-data class IncomingFiles(val sendId: Long, val from: String, val names: List<String>, val bytesDone: Long, val bytesTotal: Long)
+/** Files on their way to this phone, for the screen. Each computer numbers its own sends. */
+data class IncomingFiles(
+    val device: DeviceId,
+    val sendId: Long,
+    val from: String,
+    val names: List<String>,
+    val bytesDone: Long,
+    val bytesTotal: Long,
+) {
+    /** Unique in the home screen's list, beside this phone's own sends. */
+    val listKey: String get() = "in-$device-$sendId"
+
+    fun isOf(device: DeviceId, sendId: Long) = this.device == device && this.sendId == sendId
+}
 
 /** What arrived, for a notification: the sender's name and the files as published. */
 fun interface Arrivals {
@@ -79,7 +91,7 @@ class Inbox(
                 mkdirs()
             }
             val receiving = Receiving(device, sendId, from, names, sizes.sum(), folder)
-            mutableIncoming.update { it + IncomingFiles(sendId, from, names, 0, receiving.total) }
+            mutableIncoming.update { it + IncomingFiles(device, sendId, from, names, 0, receiving.total) }
             for (index in names.indices) {
                 val transfer = runCatching { current.receiveSent(device, sendId, index, folder.absolutePath) }
                     .onFailure { Log.w(TAG, "An item could not be fetched", it) }
@@ -113,7 +125,9 @@ class Inbox(
             found
         }
         val done = synchronized(lock) { receiving.done.values.sum() }
-        mutableIncoming.update { list -> list.map { if (it.sendId == receiving.sendId) it.copy(bytesDone = done) else it } }
+        mutableIncoming.update { list ->
+            list.map { if (it.isOf(receiving.device, receiving.sendId)) it.copy(bytesDone = done) else it }
+        }
     }
 
     override fun onTransferFinished(transfer: Long, result: Int, paths: List<String>) {
@@ -129,9 +143,9 @@ class Inbox(
     }
 
     /** Stops a send to this phone: its transfers are cancelled and the sender is told it failed. */
-    fun cancel(sendId: Long) {
+    fun cancel(device: DeviceId, sendId: Long) {
         val (current, transfers) = synchronized(lock) {
-            val found = sends.filterValues { it.sendId == sendId }
+            val found = sends.filterValues { it.device == device && it.sendId == sendId }
             found.values.forEach { it.cancelled = true }
             mesh to found.keys.toList()
         }
@@ -161,7 +175,7 @@ class Inbox(
         val outcome = if (receiving.failed) SendOutcome.Failed else SendOutcome.Received
         runCatching { current?.answerSend(receiving.device, receiving.sendId, outcome) }
         receiving.folder.deleteRecursively()
-        mutableIncoming.update { list -> list.filterNot { it.sendId == receiving.sendId } }
+        mutableIncoming.update { list -> list.filterNot { it.isOf(receiving.device, receiving.sendId) } }
         if (!receiving.cancelled) arrivals.arrived(receiving.from, receiving.published.toList(), receiving.failed)
     }
 

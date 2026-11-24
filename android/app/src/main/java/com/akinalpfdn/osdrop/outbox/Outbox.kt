@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /** A send from this phone: on its way while [outcome] is null. */
-data class OutgoingSend(val id: Long, val to: String, val count: Int, val outcome: SendOutcome? = null)
+data class OutgoingSend(val id: Long, val to: String, val count: Int, val outcome: SendOutcome? = null) {
+    /** Unique in the home screen's list, beside the sends arriving from computers. */
+    val listKey: String get() = "out-$id"
+}
 
 /**
  * Sends what was shared to Osdrop: core reads files from paths, so each shared item is copied into
