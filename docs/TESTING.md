@@ -399,6 +399,7 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | feature/mobile-02-corner-box (0db9936), Debug, M3 Air + Android phone (debug APK) | K1, rest of K2 with the Mac; the crash scenario | Pass, as reported by the user: a file dragged to the very corner opened the box and reached the phone; a photo dragged out of the box was copied; the phone app no longer crashed when the Mac sent after the phone had sent |
 | 2026-11-24 | feature/mobile-02-corner-box (caeaadf), Debug, M3 Air + Android phone (debug APK) | K1, K2 with the Mac | K2: the box opened by itself when the phone sent files. K1 failed: the corner sat above the Dock, fixed in 327f825. The phone app crashed when the Mac sent after the phone had sent (two list rows with the same key), fixed in 0db9936 |
 | 2026-11-24 | feature/mobile-01-android (3b30686), Release, NVIDIA PC + Android phone (debug APK) | P2, P5, P7 with the PC, WU11 | Pass, as reported by the user: the panel sent a file to the phone, cancelling stopped it, with files off the phone's send was refused, the panel listed the three newest transfers and "Show all" opened every one. P8 not run |
 | 2026-11-24 | feature/mobile-01-android (ffbb2e2), Release, NVIDIA PC + Android phone (debug APK) | PC build: ctest 399/399, clang-tidy, dotnet format, build with 0 warnings, dotnet test 41/41; P1 and P4 with the PC | Pass: the phone paired with the PC and files sent from the phone landed in Downloads |
