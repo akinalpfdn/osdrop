@@ -385,6 +385,7 @@ network. Osdrop stays open on the phone unless a row says otherwise.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-24 | feature/mobile-01-android (2f61031), Debug, M3 Air + Android phone (debug APK) | P4 with the Mac, from the app's **Send files** | Pass after 2f61031: before it the picker sent Osdrop to the background, the phone dropped its connection and the send failed |
 | 2026-11-24 | feature/mobile-01-android (37a1b53), Debug, M3 Air + Android phone (debug APK) | P1 with the Mac, P2 with one MP4 from the Mac | Pass, as reported by the user: the phone paired and the video arrived. P3–P8 and the PC not run yet |
 | 2026-11-23 | dev (a8bf2b5 and the branches before it), Debug, M3 Air on macOS 27.2 + PC | U9, WU10, I11 with the Mac's trackpad | Pass: the menu opened by itself at the first start (after the permissions window) and when Osdrop was opened again, not at a second start; the PC's panel the same; coming home with the trackpad no longer waits at the edge (8a1db77). The click alone had not opened the menu on macOS 27 |
 | 2026-11-23 | 0.1.1 candidates on the PC and the M3 Air | WU5, I10, I11 with the PC's mouse, installer upgrade from 0.1.0 | Pass (maintainer) |
