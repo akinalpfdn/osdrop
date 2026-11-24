@@ -387,6 +387,7 @@ network. Osdrop stays open on the phone unless a row says otherwise.
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-24 | feature/mobile-01-android (7e7ff28), Debug, M3 Air + Android phone (debug APK) | P7, U10 | Pass, as reported by the user: with files off the phone's send was refused; the menu listed the three newest transfers and "Show all" opened every one |
 | 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P4 from the share sheet, P5, P6 with the Mac | Pass, as reported by the user: a shared file reached the Mac, cancelling stopped the transfer, the phone reconnected without a code after the app was closed and opened |
 | 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P3 with the Mac; the phone stayed connected through the run | Pass, as reported by the user: the APK arrived and the notification opened the installer |
 | 2026-11-24 | feature/mobile-01-android (2f61031), Debug, M3 Air + Android phone (debug APK) | P4 with the Mac, from the app's **Send files** | Pass after 2f61031: before it the picker sent Osdrop to the background, the phone dropped its connection and the send failed |
