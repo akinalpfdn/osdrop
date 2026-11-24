@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Group;
 using Osdrop.App.Interop;
+using Osdrop.App.Services;
 
 namespace Osdrop.App.Transfers;
 
@@ -164,7 +165,7 @@ public sealed partial class TransfersViewModel : ObservableObject
     public bool HasMoreRows => Rows.Count > AppTunables.TransfersPanelRows;
 
     /// <summary>"Show all (8)".</summary>
-    public string ShowAllText => string.Format(CultureInfo.CurrentCulture, Localization.Strings.TransfersShowAll, Rows.Count);
+    public string ShowAllText => LocalizedText.Format(Localization.Strings.TransfersShowAll, Rows.Count);
 
     /// <summary>The user asked for the transfers window.</summary>
     public event Action? ShowAllRequested;

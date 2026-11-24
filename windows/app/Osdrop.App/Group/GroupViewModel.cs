@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Osdrop.App.Engine;
 using Osdrop.App.Interop;
+using Osdrop.App.Services;
 using Osdrop.App.Transfers;
 
 namespace Osdrop.App.Group;
@@ -147,7 +148,7 @@ public sealed partial class GroupViewModel : ObservableObject
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Multiselect = true,
-            Title = string.Format(CultureInfo.CurrentCulture, Localization.Strings.GroupSendFilesTitle, phone),
+            Title = LocalizedText.Format(Localization.Strings.GroupSendFilesTitle, phone),
         };
         return dialog.ShowDialog() == true ? dialog.FileNames : [];
     }
