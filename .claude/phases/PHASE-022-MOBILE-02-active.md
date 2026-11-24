@@ -1,5 +1,5 @@
 # Phase 022 (MOBILE-02) — Phone corners on the computers
-Status: PENDING — 0.2.0 (user decisions 2026-11-09 and 2026-11-23)
+Status: ACTIVE — 0.2.0 (user decisions 2026-11-09 and 2026-11-23)
 
 DEVPLAN reference: Phase 21. Depends on: Phases 14, 021
 
