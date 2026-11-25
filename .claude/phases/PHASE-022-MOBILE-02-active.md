@@ -17,7 +17,7 @@ phone sends appear there to be dragged out.
 - [x] Files dragged from Finder and Explorer to the phone's corner arrive on the phone.
 - [x] Photos shared from the phone appear in the box on the chosen computer and can be dragged into Finder, Explorer and a chat app.
 - [x] With the app closed on the phone, the corner shows nothing and takes nothing.
-- [ ] Crossing to other computers through the same edge is unaffected away from the corner.
+- [x] Crossing to other computers through the same edge is unaffected away from the corner.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
