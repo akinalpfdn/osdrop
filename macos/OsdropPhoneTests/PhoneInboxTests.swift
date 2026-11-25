@@ -8,7 +8,7 @@ import Testing
 @MainActor
 @Suite("Phone inbox")
 struct PhoneInboxTests {
-    private let mac = DeviceID(bytes: Array(repeating: 2, count: 16))!
+    private let mac = phoneTestDeviceID(2)
 
     private func items(_ count: Int) -> [ArrivingItem] {
         (0..<count).map { ArrivingItem(name: "f\($0)", isFolder: false, byteCount: 1, contentType: "public.data") }

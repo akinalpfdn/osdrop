@@ -1,3 +1,4 @@
+import CoreBridge
 import Foundation
 import Testing
 
@@ -44,4 +45,12 @@ struct HandoffTests {
         handoff.removeUnsealed(olderThan: 60, now: .now.addingTimeInterval(120))
         #expect(!FileManager.default.fileExists(atPath: unsealed.path()))
     }
+}
+
+/// A device ID made of one repeated byte.
+func phoneTestDeviceID(_ byte: UInt8) -> DeviceID {
+    guard let id = DeviceID(bytes: [UInt8](repeating: byte, count: 16)) else {
+        preconditionFailure("16 bytes make a device ID")
+    }
+    return id
 }

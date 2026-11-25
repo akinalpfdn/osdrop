@@ -8,7 +8,7 @@ import Testing
 @MainActor
 @Suite("Phone transfers")
 struct PhoneTransfersTests {
-    private let mac = DeviceID(bytes: Array(repeating: 1, count: 16))!
+    private let mac = phoneTestDeviceID(1)
 
     @Test("A received file shows its progress, then ends done with its file")
     func receivedFile() {
