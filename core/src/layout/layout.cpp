@@ -103,8 +103,18 @@ Status<Error> Layout::set_screens(Screens screens, TimePoint now) {
     }
     Screens& own = state_.screens[self_];
     if (own != screens) {
+        const Screens before = own;
         own = std::move(screens);
         persist();
+        // The others keep their place beside this computer: out of the way of monitors that
+        // appeared, back again once they are gone.
+        if (state_.document.placements.contains(self_)) {
+            Placements followed =
+                follow_screens(state_.document.placements, state_.screens, self_, before, own);
+            if (followed != state_.document.placements) {
+                publish(std::move(followed));
+            }
+        }
     }
     reported_ = true;
     for (const DeviceId& device : connected_) {

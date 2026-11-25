@@ -1,6 +1,8 @@
 #include "layout/document.hpp"
 
+#include <array>
 #include <cstdlib>
+#include <optional>
 #include <tuple>
 
 namespace osdrop::layout {
@@ -190,6 +192,75 @@ Point place_beside(const Placements& placements, const ScreenMap& screens, const
         return {};
     }
     return {.x = rightmost->right() - leftmost->frame.x, .y = rightmost->top() - leftmost->frame.y};
+}
+
+namespace {
+
+enum Side : std::uint8_t { kRight, kLeft, kBelow, kAbove };
+
+/// How far a placed computer's monitors reach toward `side`, counting only those across from the
+/// span [from, to) on the other axis; all of them when none is.
+std::int64_t reach(const Screens& screens, Point offset, Side side, std::int64_t from,
+                   std::int64_t to) {
+    const bool horizontal = side == kRight || side == kLeft;
+    std::optional<std::int64_t> facing;
+    std::optional<std::int64_t> any;
+    for (const Monitor& monitor : screens.monitors()) {
+        const Rect frame = monitor.frame.moved(offset);
+        const std::int64_t edge = side == kRight   ? frame.right()
+                                  : side == kLeft  ? frame.left()
+                                  : side == kBelow ? frame.bottom()
+                                                   : frame.top();
+        const bool outward = side == kRight || side == kBelow;
+        const auto further = [&](const std::optional<std::int64_t>& best) {
+            return !best || (outward ? edge > *best : edge < *best);
+        };
+        if (further(any)) {
+            any = edge;
+        }
+        const bool across = horizontal ? shared_length(frame.top(), frame.bottom(), from, to) > 0
+                                       : shared_length(frame.left(), frame.right(), from, to) > 0;
+        if (across && further(facing)) {
+            facing = edge;
+        }
+    }
+    return facing.value_or(any.value_or(0));
+}
+
+} // namespace
+
+Placements follow_screens(const Placements& placements, const ScreenMap& screens,
+                          const DeviceId& device, const Screens& before, const Screens& after) {
+    const auto self = placements.find(device);
+    if (self == placements.end() || before.empty() || after.empty()) {
+        return placements;
+    }
+    const Point origin = self->second.offset;
+    const Rect was = before.logical_bounds().moved(origin);
+    Placements moved = placements;
+    for (auto& [other, placement] : moved) {
+        const auto known = screens.find(other);
+        if (other == device || known == screens.end() || known->second.empty()) {
+            continue;
+        }
+        const Rect bounds = known->second.logical_bounds().moved(placement.offset);
+        // How far apart they were on each side of the computer; negative: no gap.
+        const std::array<std::int64_t, 4> gaps{
+            bounds.left() - was.right(), was.left() - bounds.right(), bounds.top() - was.bottom(),
+            was.top() - bounds.bottom()};
+        const auto side = static_cast<Side>(std::ranges::max_element(gaps) - gaps.begin());
+        if (gaps.at(side) < 0) {
+            continue; // they overlapped: nothing to keep
+        }
+        const bool horizontal = side == kRight || side == kLeft;
+        const std::int64_t from = horizontal ? bounds.top() : bounds.left();
+        const std::int64_t to = horizontal ? bounds.bottom() : bounds.right();
+        const std::int64_t shift =
+            reach(after, origin, side, from, to) - reach(before, origin, side, from, to);
+        placement.offset =
+            placement.offset + (horizontal ? Point{.x = shift, .y = 0} : Point{.x = 0, .y = shift});
+    }
+    return moved;
 }
 
 } // namespace osdrop::layout

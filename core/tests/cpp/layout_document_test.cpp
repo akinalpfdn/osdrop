@@ -13,6 +13,7 @@ namespace {
 
 using osdrop::layout::check;
 using osdrop::layout::DeviceId;
+using osdrop::layout::follow_screens;
 using osdrop::layout::kUnit;
 using osdrop::layout::LayoutDocument;
 using osdrop::layout::Monitor;
@@ -161,6 +162,90 @@ TEST(LayoutDocument, ANewComputerGoesToTheRightTouchingTheArrangement) {
     all[kLaptop] = laptop;
     EXPECT_TRUE(check(with_laptop, all).empty());
     EXPECT_EQ(osdrop::layout::place_beside({}, {}, laptop), Point{}) << "the first one";
+}
+
+/// A MacBook with `extra` virtual displays of 2560 × 1440 to its right, tops at -183 (as Osplay
+/// adds them).
+Screens mac_with_virtual(int extra) {
+    std::vector<Monitor> monitors{Monitor{.key = {1},
+                                          .frame = units(0, 0, 1710, 1107),
+                                          .native = units(0, 0, 1710, 1107),
+                                          .pixel_width = 3420,
+                                          .pixel_height = 2214,
+                                          .primary = true}};
+    for (int i = 0; i < extra; ++i) {
+        const Rect frame = units(1710 + (i * 2560), -183, 2560, 1440);
+        monitors.push_back(Monitor{.key = {static_cast<std::uint8_t>(10 + i)},
+                                   .frame = frame,
+                                   .native = frame,
+                                   .pixel_width = 2560,
+                                   .pixel_height = 1440,
+                                   .primary = false});
+    }
+    return Screens(std::move(monitors));
+}
+
+TEST(LayoutDocument, ComputersBesideMonitorsThatAppearMoveOutOfTheWayAndComeBack) {
+    // The PC sits right of the MacBook and the laptop right of the PC; one sits below.
+    const ScreenMap screens{{kMac, mac_with_virtual(0)},
+                            {kPc, one_monitor(1920, 1080)},
+                            {kLaptop, one_monitor(1470, 956)}};
+    const DeviceId below{4};
+    ScreenMap with_below = screens;
+    with_below[below] = one_monitor(1000, 800);
+    const Placements placements{{kMac, {.offset = at(0, 0)}},
+                                {kPc, {.offset = at(1710, 0)}},
+                                {kLaptop, {.offset = at(3630, 0)}},
+                                {below, {.offset = at(0, 1107)}}};
+    const Placements grown =
+        follow_screens(placements, with_below, kMac, mac_with_virtual(0), mac_with_virtual(2));
+    EXPECT_EQ(grown.at(kPc).offset, at(1710 + 5120, 0)) << "pushed by the two displays";
+    EXPECT_EQ(grown.at(kLaptop).offset, at(3630 + 5120, 0)) << "and what lies beyond it";
+    EXPECT_EQ(grown.at(below).offset, at(0, 1107)) << "the bottom edge did not move";
+    EXPECT_EQ(grown.at(kMac).offset, at(0, 0));
+    ScreenMap grown_screens = with_below;
+    grown_screens[kMac] = mac_with_virtual(2);
+    EXPECT_TRUE(check(grown, grown_screens).empty()) << "nothing overlaps";
+
+    const Placements back =
+        follow_screens(grown, grown_screens, kMac, mac_with_virtual(2), mac_with_virtual(0));
+    EXPECT_EQ(back, placements) << "the displays went: everyone is back";
+}
+
+TEST(LayoutDocument, MonitorsAppearingOnTheLeftOrAboveMoveThoseComputersAway) {
+    const Screens small = one_monitor(1000, 800);
+    const auto monitor = [](std::uint8_t key, Rect frame) {
+        return Monitor{.key = {key},
+                       .frame = frame,
+                       .native = frame,
+                       .pixel_width = 500,
+                       .pixel_height = 400,
+                       .primary = false};
+    };
+    std::vector<Monitor> monitors = small.monitors();
+    monitors.push_back(monitor(2, units(-500, 0, 500, 400)));    // left, across from the PC
+    monitors.push_back(monitor(3, units(0, -400, 500, 400)));    // above, across from the laptop
+    monitors.push_back(monitor(4, units(-900, -900, 400, 400))); // diagonal: across from nobody
+    const Screens grown{std::move(monitors)};
+    const ScreenMap screens{
+        {kMac, small}, {kPc, one_monitor(300, 300)}, {kLaptop, one_monitor(300, 300)}};
+    const Placements placements{{kMac, {.offset = at(0, 0)}},
+                                {kPc, {.offset = at(-300, 0)}},
+                                {kLaptop, {.offset = at(0, -300)}}};
+    const Placements moved = follow_screens(placements, screens, kMac, small, grown);
+    EXPECT_EQ(moved.at(kPc).offset, at(-800, 0)) << "left";
+    EXPECT_EQ(moved.at(kLaptop).offset, at(0, -700)) << "above";
+}
+
+TEST(LayoutDocument, AComputerThatOverlappedStaysWhereItIs) {
+    const ScreenMap screens{{kMac, mac_with_virtual(0)}, {kPc, one_monitor(1920, 1080)}};
+    const Placements placements{{kMac, {.offset = at(0, 0)}}, {kPc, {.offset = at(100, 100)}}};
+    EXPECT_EQ(follow_screens(placements, screens, kMac, mac_with_virtual(0), mac_with_virtual(1)),
+              placements);
+    EXPECT_EQ(
+        follow_screens(placements, screens, kPc, one_monitor(1920, 1080), one_monitor(2000, 1080)),
+        placements)
+        << "and so does the computer whose screens changed";
 }
 
 } // namespace

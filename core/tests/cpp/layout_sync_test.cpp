@@ -110,6 +110,51 @@ TEST(LayoutSync, AnEditReachesEveryoneIncludingAMemberThatWasOffline) {
     EXPECT_EQ(layout_of(network, 1).document.placements, edit);
 }
 
+TEST(LayoutSync, MonitorsThatAppearPushTheNeighboursAndEveryoneSeesIt) {
+    SimulatedMeshNetwork network;
+    form_group(network, 2);
+    report_screens(network);
+    const layout::Placements before = layout_of(network, 0).document.placements;
+    // Computers place themselves in a row: the one on the left gets a monitor on its right.
+    const std::size_t left =
+        before.at(id_of(network, 0)).offset.x < before.at(id_of(network, 1)).offset.x ? 0 : 1;
+    const layout::DeviceId right = id_of(network, 1 - left);
+    const auto key = static_cast<std::uint8_t>(left + 1);
+    const std::int64_t width = 1200 + (static_cast<std::int64_t>(left) * 300);
+
+    // A virtual display appears right of its screen (Osplay).
+    const layout::Rect own{.x = 0, .y = 0, .width = width * kUnit, .height = 900 * kUnit};
+    const layout::Rect added{
+        .x = width * kUnit, .y = 0, .width = 1920 * kUnit, .height = 1080 * kUnit};
+    const layout::Screens grown({layout::Monitor{.key = {key},
+                                                 .frame = own,
+                                                 .native = own,
+                                                 .pixel_width = 1,
+                                                 .pixel_height = 1,
+                                                 .primary = true},
+                                 layout::Monitor{.key = {9},
+                                                 .frame = added,
+                                                 .native = added,
+                                                 .pixel_width = 1,
+                                                 .pixel_height = 1,
+                                                 .primary = false}});
+    ASSERT_TRUE(network.node(left).layout->set_screens(grown, network.now).has_value());
+    network.run_for(milliseconds(200));
+    expect_one_arrangement(network);
+    const layout::LayoutState& shared = layout_of(network, 1 - left);
+    EXPECT_EQ(shared.document.placements.at(right).offset.x,
+              before.at(right).offset.x + (1920 * kUnit));
+    EXPECT_TRUE(layout::check(shared.document.placements, shared.screens).empty());
+
+    // It goes again: the other computer is back.
+    ASSERT_TRUE(network.node(left)
+                    .layout->set_screens(one_monitor(key, width, 900), network.now)
+                    .has_value());
+    network.run_for(milliseconds(200));
+    expect_one_arrangement(network);
+    EXPECT_EQ(layout_of(network, 1 - left).document.placements.at(right), before.at(right));
+}
+
 TEST(LayoutSync, ConcurrentEditsConvergeToTheNewest) {
     SimulatedMeshNetwork network;
     form_group(network, 3);
