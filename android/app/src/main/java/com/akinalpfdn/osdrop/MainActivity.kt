@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -25,6 +26,9 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private val notifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments(), ::picked)
+
+    /** The system photo picker: the newest photos and videos first, picked with a tap. */
+    private val photoPicker = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(), ::picked)
 
     /** The computer the picker chooses files for; kept while the picker covers this activity. */
     private var pickingFor: Pair<DeviceId, String>? = null
@@ -50,6 +54,12 @@ class MainActivity : ComponentActivity() {
                 pickingFor = member.deviceId to member.name
                 app.hold() // the picker is another app: stay connected to the computer meanwhile
                 picker.launch(arrayOf("*/*"))
+            }
+
+            override fun sendPhotos(member: Member) {
+                pickingFor = member.deviceId to member.name
+                app.hold()
+                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             }
 
             override fun cancelIncoming(files: IncomingFiles) = app.inbox.cancel(files.device, files.sendId)

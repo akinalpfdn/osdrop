@@ -9,7 +9,8 @@
     <string name="group_leave">Leave the group</string>
     <string name="member_connected">Connected</string>
     <string name="member_not_connected">Not connected</string>
-    <string name="member_send">Send files</string>
+    <string name="member_send">Files</string>
+    <string name="member_send_photos">Photos</string>
     <string name="pairing_title">Pairing with %1$s</string>
     <string name="pairing_hint">Accept only if the computer shows the same code.</string>
     <string name="pairing_accept">Same code</string>
