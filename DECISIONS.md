@@ -886,3 +886,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The user moves photos and APKs between the phone and the computers by hand today. 0.1.1 carries fixes the tester needs, so it ships first. A corner does not collide with crossing at an edge. Android and iOS let no app read the clipboard in the background, so phone clipboard would need a tap, and files matter more. A background service costs battery and a Play review justification.
 **Trade-offs:** With the app closed the phone's corner takes nothing. `REQUEST_INSTALL_PACKAGES` needs a declaration when the app moves to Google Play.
 **Revisit if:** Users expect the phone to be reachable with the app closed, or ask for the clipboard.
+
+---
+
+## 2026-11-25 — On the PC, the engine owns a phone's corner and places the WPF box
+**Chosen:** A phone's corner is a target window of the engine's `EdgeTargets`, above the edge strips and shown with them while the left button is held; it reports drags reaching and leaving it and sends a drop to the phone itself. The shell's box is a WPF window whose handle the shell passes with the corner; the engine places it in the chosen corner in physical pixels and grows the corner's target over it. While a drag hovers, the box is click-through, so the target under it keeps the drag; dragging a file out of the box clears the corners until the drag ends.
+**Alternatives:** A WPF drop target in the corner and a box placed by WPF.
+**Why:** The WPF shell is system-DPI aware, so its coordinates are scaled on a monitor of another DPI, while the engine's targets thread works in physical pixels. The engine's targets already read virtual files (Outlook attachments, zip folders), refuse Osdrop's own drags and keep a fixed order above the edge strips; a second target in WPF would repeat that and race the strips for the top.
+**Trade-offs:** The box's place is decided on another thread than the one that owns it (`SWP_ASYNCWINDOWPOS`): it can show for a frame where WPF guessed before the engine moves it. Files read from a dropped virtual file stay in the temporary folder.
+**Revisit if:** The shell becomes per-monitor DPI aware.

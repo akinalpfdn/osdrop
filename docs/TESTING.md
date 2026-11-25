@@ -389,18 +389,19 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
-| K1 | Drop to the phone | Drag files from Finder or Explorer into the phone's corner, drop them in the box | The box shows the phone's name once the drag reaches the corner; the files arrive on the phone, the box shows their progress and closes a moment after they arrived |
-| K2 | Files from the phone | Share photos from the phone to the computer | The box opens in the corner by itself; each photo can be dragged out into a folder and a chat app; the photos are also in Downloads |
-| K3 | Screen and corner | Choose another screen and corner for the phone, drag again | The box shows at the new place |
-| K4 | Phone away | Close Osdrop on the phone, drag a file into the corner | Nothing shows and the drag is not taken |
-| K5 | Crossing | Drag a file to an edge with another computer beside it, away from the corner | The drag crosses to the other computer as before |
+| PB1 | Drop to the phone | Drag files from Finder or Explorer into the phone's corner, drop them in the box | The box shows the phone's name once the drag reaches the corner; the files arrive on the phone, the box shows their progress and closes a moment after they arrived |
+| PB2 | Files from the phone | Share photos from the phone to the computer | The box opens in the corner by itself; each photo can be dragged out into a folder and a chat app; the photos are also in Downloads |
+| PB3 | Screen and corner | Choose another screen and corner for the phone, drag again | The box shows at the new place |
+| PB4 | Phone away | Close Osdrop on the phone, drag a file into the corner | Nothing shows and the drag is not taken |
+| PB5 | Crossing | Drag a file to an edge with another computer beside it, away from the corner | The drag crosses to the other computer as before |
+| PB6 | Two screens of different scale (PC) | Put the phone's corner on a monitor at another scale than the main one, drag into it and share a photo from the phone | The box sits in that monitor's corner, inside the taskbar's edge, and the drop reaches the phone |
 
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
-| 2026-11-25 | feature/mobile-02-corner-box (0db9936), Debug, M3 Air + Android phone (debug APK) | K1, rest of K2 with the Mac; the crash scenario | Pass, as reported by the user: a file dragged to the very corner opened the box and reached the phone; a photo dragged out of the box was copied; the phone app no longer crashed when the Mac sent after the phone had sent |
-| 2026-11-24 | feature/mobile-02-corner-box (caeaadf), Debug, M3 Air + Android phone (debug APK) | K1, K2 with the Mac | K2: the box opened by itself when the phone sent files. K1 failed: the corner sat above the Dock, fixed in 327f825. The phone app crashed when the Mac sent after the phone had sent (two list rows with the same key), fixed in 0db9936 |
+| 2026-11-25 | feature/mobile-02-corner-box (0db9936), Debug, M3 Air + Android phone (debug APK) | PB1, rest of PB2 with the Mac; the crash scenario | Pass, as reported by the user: a file dragged to the very corner opened the box and reached the phone; a photo dragged out of the box was copied; the phone app no longer crashed when the Mac sent after the phone had sent |
+| 2026-11-24 | feature/mobile-02-corner-box (caeaadf), Debug, M3 Air + Android phone (debug APK) | PB1, PB2 with the Mac | PB2: the box opened by itself when the phone sent files. PB1 failed: the corner sat above the Dock, fixed in 327f825. The phone app crashed when the Mac sent after the phone had sent (two list rows with the same key), fixed in 0db9936 |
 | 2026-11-24 | feature/mobile-01-android (3b30686), Release, NVIDIA PC + Android phone (debug APK) | P2, P5, P7 with the PC, WU11 | Pass, as reported by the user: the panel sent a file to the phone, cancelling stopped it, with files off the phone's send was refused, the panel listed the three newest transfers and "Show all" opened every one. P8 not run |
 | 2026-11-24 | feature/mobile-01-android (ffbb2e2), Release, NVIDIA PC + Android phone (debug APK) | PC build: ctest 399/399, clang-tidy, dotnet format, build with 0 warnings, dotnet test 41/41; P1 and P4 with the PC | Pass: the phone paired with the PC and files sent from the phone landed in Downloads |
 | 2026-11-24 | feature/mobile-01-android (7e7ff28), Debug, M3 Air + Android phone (debug APK) | P7, U10 | Pass, as reported by the user: with files off the phone's send was refused; the menu listed the three newest transfers and "Show all" opened every one |
