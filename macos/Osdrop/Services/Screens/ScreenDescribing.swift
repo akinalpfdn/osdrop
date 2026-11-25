@@ -69,7 +69,8 @@ final class CGScreenDescriber: ScreenDescribing {
         let frame = CGDisplayBounds(display)
         let mode = CGDisplayCopyDisplayMode(display)
         return ScreenDescription(
-            id: identifier(of: display), displayID: display, frame: frame, pixelWidth: mode?.pixelWidth ?? Int(frame.width),
+            id: identifier(of: display), displayID: display, frame: frame,
+            pixelWidth: mode?.pixelWidth ?? Int(frame.width),
             pixelHeight: mode?.pixelHeight ?? Int(frame.height), isMain: CGDisplayIsMain(display) != 0)
     }
 }

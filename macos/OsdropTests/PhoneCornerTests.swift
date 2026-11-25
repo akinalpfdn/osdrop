@@ -14,10 +14,18 @@ struct PhoneCornerTests {
 
     @Test("The box sits in each corner of the area, inset from both sides")
     func framesInEachCorner() {
-        #expect(PhoneCorner.frame(of: size, at: .bottomRight, in: area, inset: 8) == CGRect(x: 792, y: 58, width: 300, height: 120))
-        #expect(PhoneCorner.frame(of: size, at: .bottomLeft, in: area, inset: 8) == CGRect(x: 108, y: 58, width: 300, height: 120))
-        #expect(PhoneCorner.frame(of: size, at: .topRight, in: area, inset: 8) == CGRect(x: 792, y: 722, width: 300, height: 120))
-        #expect(PhoneCorner.frame(of: size, at: .topLeft, in: area, inset: 0) == CGRect(x: 100, y: 730, width: 300, height: 120))
+        #expect(
+            PhoneCorner.frame(of: size, at: .bottomRight, in: area, inset: 8)
+                == CGRect(x: 792, y: 58, width: 300, height: 120))
+        #expect(
+            PhoneCorner.frame(of: size, at: .bottomLeft, in: area, inset: 8)
+                == CGRect(x: 108, y: 58, width: 300, height: 120))
+        #expect(
+            PhoneCorner.frame(of: size, at: .topRight, in: area, inset: 8)
+                == CGRect(x: 792, y: 722, width: 300, height: 120))
+        #expect(
+            PhoneCorner.frame(of: size, at: .topLeft, in: area, inset: 0)
+                == CGRect(x: 100, y: 730, width: 300, height: 120))
     }
 
     @Test("A phone without a choice gets the main screen's bottom right corner; a choice is kept")

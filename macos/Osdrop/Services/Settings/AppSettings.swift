@@ -84,7 +84,10 @@ final class AppSettings: InputPreferencesStoring {
 
     /// Each phone's box on this Mac; a phone without one gets the default corner.
     var phoneCorners: [DeviceID: PhoneCorner] {
-        didSet { save(Dictionary(uniqueKeysWithValues: phoneCorners.map { ($0.key.hex, $0.value) }), forKey: Key.phoneCorners) }
+        didSet {
+            save(
+                Dictionary(uniqueKeysWithValues: phoneCorners.map { ($0.key.hex, $0.value) }), forKey: Key.phoneCorners)
+        }
     }
 
     func corner(of phone: DeviceID) -> PhoneCorner {
