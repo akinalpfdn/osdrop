@@ -400,6 +400,7 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), Release, NVIDIA PC | PC build: ctest 405/405, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass, as reported by the PC; no fix needed |
 | 2026-11-25 | feature/mobile-02-corner-box (da1f6ab), M3 Air (Debug) + NVIDIA PC (Release) + Android phone (debug APK) | PB5 both ways; PB3, PB4 with the Mac | Pass, as reported by the user: files dragged to the facing edge away from the corner crossed Mac → PC and PC → Mac with no box; the Mac box followed a new corner; with the phone app closed the Mac corner took nothing |
 | 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC + Android phone (debug APK) | PB1, PB2, PB3, PB4, PB6 with the PC | Pass, as reported by the user: a file dragged to the corner reached the phone, a shared photo opened the box and was dragged out to the desktop, the box followed a new corner and screen, with the phone app closed the corner took nothing |
 | 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC | PC build: ctest 404/404, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass after two fixes on the PC: a local shadowing a member in report_screens (MSVC C4458, 3667b76) and display config headers built without their type (clang-tidy, ed0ad51) |
