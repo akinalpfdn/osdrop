@@ -43,6 +43,8 @@ interface HomeActions {
     /** Picks files and sends them to a connected computer. */
     fun sendFiles(member: Member)
 
+    fun sendPhotos(member: Member)
+
     fun cancelIncoming(files: IncomingFiles)
 }
 
@@ -76,7 +78,10 @@ fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, sends: List<Outg
                         leadingContent = { PlatformIcon(member.platform) },
                         trailingContent = {
                             if (member.isConnected) {
-                                TextButton(onClick = { actions.sendFiles(member) }) { Text(stringResource(R.string.member_send)) }
+                                Row {
+                                    TextButton(onClick = { actions.sendPhotos(member) }) { Text(stringResource(R.string.member_send_photos)) }
+                                    TextButton(onClick = { actions.sendFiles(member) }) { Text(stringResource(R.string.member_send)) }
+                                }
                             }
                         },
                     )
