@@ -9,13 +9,15 @@
 
 <p align="center">
   <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.dmg"><img src="docs/media/download-macos.tr.svg" height="48" alt="macOS için indir"></a>&nbsp;&nbsp;
-  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop-Setup.exe"><img src="docs/media/download-windows.tr.svg" height="48" alt="Windows için indir"></a>
+  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop-Setup.exe"><img src="docs/media/download-windows.tr.svg" height="48" alt="Windows için indir"></a>&nbsp;&nbsp;
+  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.apk"><img src="docs/media/download-android.tr.svg" height="48" alt="Android için indir"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/akinalpfdn/osdrop/releases/latest"><img src="https://img.shields.io/github/v/release/akinalpfdn/osdrop?label=s%C3%BCr%C3%BCm&color=1e8e5a" alt="Son sürüm"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-111111" alt="macOS 14 ya da sonrası">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0067c0" alt="Windows 10 ya da 11">
+  <img src="https://img.shields.io/badge/Android-12%2B-0b7a43" alt="Android 12 ya da sonrası">
   <a href="LICENSE"><img src="https://img.shields.io/badge/lisans-MIT-2ea44f" alt="MIT lisansı"></a>
 </p>
 
@@ -33,6 +35,9 @@
   ekleri de çalışır.
 - **Ortak pano.** Bir bilgisayarda metin, görüntü ya da dosya kopyala, başka birinde yapıştır.
 - **Her yönde.** Mac ⇄ Windows, Mac ⇄ Mac ve Windows ⇄ Windows; tek düzende en çok sekiz bilgisayar.
+- **Telefonun da.** Telefona göndermek için dosyaları ekranda telefonun köşesine sürükle; telefondan
+  paylaşılan dosyalar o köşede bir kutu açar, oradan istediğin yere sürüklersin. Şimdilik Android;
+  telefon, Osdrop onda açıkken erişilebilir.
 - **Kısayollar yerinde kalır.** Mac'teki ⌘C, PC'de Ctrl+C olur; tersi de öyle.
 - **Yerel ve gizli.** Bulut yok, hesap yok. Bilgisayarlar bir kez 6 haneli kodla eşleşir, her
   bağlantı uçtan uca şifrelidir ve her bilgisayar diğerlerinin ne yapabileceğine kendisi karar verir.
@@ -123,12 +128,22 @@ protokolü tek bir ortak C++ çekirdeği yürütür; bkz. [`docs/ARCHITECTURE.md
 3. Kurulum; uygulamayı, Osdrop Input hizmetini (imleci oynatır ve diğer bilgisayarlar için yazar) ve
    bir güvenlik duvarı kuralını ekler. Osdrop bildirim alanında durur.
 
+### Android
+
+1. [`Osdrop.apk`](https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.apk) dosyasını telefonda indir ve aç; Android sorarsa tarayıcıdan yüklemeye
+   izin ver.
+2. Telefonda Osdrop'u aç, bir bilgisayarın yanındaki **Eşleş**'e dokun ve iki ekranda da aynı 6 haneli
+   kodu onayla.
+3. Bilgisayarda dosyaları telefonun köşesine sürükle (ana ekranın sağ altı; Ayarlar › Cihazlar'dan
+   değişir) ya da telefondan dosyaları Osdrop'a paylaş.
+
 ### Gereksinimler
 
 | | |
 |---|---|
 | **Mac** | macOS 14 Sonoma ya da sonrası |
 | **Windows** | Windows 10 22H2 ya da Windows 11, x64 |
+| **Android** | Android 12 ya da sonrası; dosyalar gidip gelirken Osdrop açık olmalı |
 | **Ağ** | Tüm bilgisayarlar aynı yerel ağda, kablolu ya da Wi-Fi |
 
 ## Klavye kısayolları
@@ -167,7 +182,7 @@ bilgisayarda kalır.
 <summary><b>Windows için bir Universal Control alternatifi mi?</b></summary>
 
 Mac'ler ile Windows PC'ler arasında aynı işi yapar: tek klavye ve fare, kenardan sürüklenen dosyalar
-ve ortak pano. iPad'leri desteklemez.
+ve ortak pano. iPad'leri yönetmez; telefonlar onunla dosya alışverişi yapar.
 </details>
 
 <details>
@@ -203,6 +218,14 @@ Sidecar'ın kullandığı AWDL'yi kapalı tutar; bkz.
 
 Hayır. Osdrop hiçbir ekranın görüntüsünü göndermez; her bilgisayar kendi monitörlerini göstermeye
 devam eder. Bir bilgisayarı diğerine ek ekran yapmak için [Osplay](https://github.com/akinalpfdn/osplay)'e bak.
+</details>
+
+<details>
+<summary><b>Telefonumla bilgisayarım arasında dosya gönderebilir miyim?</b></summary>
+
+Evet, Android uygulamasıyla: Mac'te ya da PC'de dosyaları telefonun köşesine sürükle, ya da
+telefondan fotoğraf ve dosyaları Osdrop'a paylaşıp bilgisayarı seç. Osdrop telefonda açık olmalı;
+arka planda çalışmaz.
 </details>
 
 <details>
