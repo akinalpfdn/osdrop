@@ -70,6 +70,14 @@ struct Problem {
 [[nodiscard]] Point place_beside(const Placements& placements, const ScreenMap& screens,
                                  const Screens& own);
 
+/// The placements after `device`'s screens changed from `before` to `after`: every other placed
+/// computer keeps its distance to the side of `device` it sat on (the side it faces from furthest
+/// away, touching or apart), so computers move out of the way of monitors that appear and come
+/// back when they go (Osplay's virtual displays). Computers that overlapped `device` stay.
+[[nodiscard]] Placements follow_screens(const Placements& placements, const ScreenMap& screens,
+                                        const DeviceId& device, const Screens& before,
+                                        const Screens& after);
+
 /// The global frame of every monitor of a placed computer.
 [[nodiscard]] std::vector<Rect> global_frames(const Screens& screens, const Placement& placement);
 

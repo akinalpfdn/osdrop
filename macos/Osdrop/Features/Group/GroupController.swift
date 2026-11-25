@@ -124,6 +124,7 @@ final class GroupController {
     private var tasks: [Task<Void, Never>] = []
     /// The latest report of this Mac's displays; each one waits for the one before.
     private var screenReport: Task<Void, Never>?
+    private var screenObservation: ScreenObservation?
     private var browsing: Task<Void, Never>?
 
     let settings: AppSettings
@@ -170,7 +171,7 @@ final class GroupController {
                 }
             })
         browse()
-        screens.onChange = { [weak self] in self?.screensChanged() }
+        screenObservation = screens.observe { [weak self] in self?.screensChanged() }
         reportScreens()
         tasks.append(
             Task { [weak self] in
@@ -214,7 +215,10 @@ final class GroupController {
         browsing = nil
         advertisement?.cancel()
         advertisement = nil
-        screens.onChange = nil
+        if let screenObservation {
+            screens.stopObserving(screenObservation)
+        }
+        screenObservation = nil
         screenReport?.cancel()
         screenReport = nil
     }

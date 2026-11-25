@@ -363,7 +363,7 @@ the members are connected again and the cursor crosses, without restarting Osdro
 | R7 | Locked screen | Lock the PC (Win+L) and push the Mac's cursor against its edge; unlock and push again. Then lock the Mac (⌃⌘Q) and push from the PC | Locked: the edge is a wall and the controlling computer says the other one is locked; unlocked: it crosses |
 | R8 | Locked while controlled | While the Mac controls the PC, press Win+L on the PC's own keyboard | The cursor comes back to the Mac; the PC is refused until it is unlocked |
 | R9 | Another user | Switch to another user on the Mac (Fast User Switching) and on the PC (Switch user), then back | While the other user is in front, crossing in is refused; back to the first user, it crosses again |
-| R10 | Osplay displays | With Osplay showing the Mac's virtual displays on the PC, open Osdrop's arrangement on both | The virtual displays are ordinary monitors in the arrangement; the cursor crosses through them as through any monitor |
+| R10 | Osplay displays | Start Osplay's Mac → PC display while Osdrop runs, open the arrangement, move the cursor right; stop Osplay and do it again | With Osplay on, the virtual displays are in the Mac's part of the arrangement, the PC moved past them and the cursor reaches the virtual displays, then the PC; with Osplay off, the PC is back beside the MacBook and the cursor crosses there |
 | R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
 | R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
 
@@ -414,6 +414,7 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | feature/phase-19-osplay-displays (3ee7e8d), M3 Air (Debug) + NVIDIA PC (feature/mobile-03-iphone, Release) | R10 Mac → PC | Pass, as reported by the user after the fix: Osplay started and stopped twice; the virtual displays came and went in the arrangement, the PC moved past them and back, the cursor crossed right both ways. Before it, debug builds never reported display changes after start (the developer window took the handler, fixed in 3ee7e8d) |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + iPad A16 (Debug) | IP4, IP5, IP6 | Pass, as reported by the user: photos shared to Osdrop went once it was opened, a received photo and video were saved to Photos after one permission prompt, the iPad left and rejoined the group with the app |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + NVIDIA PC (Release) + iPad A16 (Debug) | IP1, IP2, IP3 with the Mac and the PC | Pass, as reported by the user: the iPad paired with both, files dropped in its corner arrived, photos sent from the app ended done and opened the computers' boxes |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), Release, NVIDIA PC | PC build: ctest 405/405, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass, as reported by the PC; no fix needed |

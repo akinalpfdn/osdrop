@@ -19,6 +19,7 @@ Osdrop behaves predictably through everyday disruptions.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
+- 2026-11-25 (user): Osplay's virtual displays push the computers they overlap outward when they appear and the computers go back when they end (option A); Osdrop must also notice displays Osplay adds while it runs (missed until a restart).
 - User decision (2026-11-20): a locked PC refuses control like a locked Mac; no typing a PC's
   password from the Mac. Another user's session in front counts as locked on both.
 - Audit (2026-11-20): sleep/wake, display changes and Copy diagnostics existed on both; Windows did

@@ -36,8 +36,9 @@ leaves the channel.
 ## Osdrop and Osplay together
 
 Osplay's virtual displays are ordinary monitors to Osdrop: they appear in the arrangement in
-Settings › Arrangement and the cursor crosses through them like through any other monitor. When
-Osplay ends them, Osdrop drops them from the arrangement within a second. Osplay shows a Mac's
+Settings › Arrangement and the cursor crosses through them like through any other monitor. The
+computers beside the side where they appear move out of their way, and come back when Osplay ends
+them; Osdrop notices within a few seconds. Osplay shows a Mac's
 virtual display on a PC as a picture of it, so a click on that picture does nothing: move to the
 PC's own monitors to control the PC, or to the virtual display on the Mac to work there.
 

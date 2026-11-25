@@ -33,14 +33,28 @@ struct GroupControllerTests {
         let before = fixture.mesh.calls.count
         // Osplay's four virtual displays go away in several steps.
         fixture.screens.extra = 4
-        fixture.screens.onChange?()
+        fixture.screens.notify()
         fixture.screens.extra = 2
-        fixture.screens.onChange?()
+        fixture.screens.notify()
         fixture.screens.extra = 0
-        fixture.screens.onChange?()
+        fixture.screens.notify()
         try await waitUntil { fixture.mesh.calls.count > before }
         try await Task.sleep(for: .milliseconds(400))
         #expect(Array(fixture.mesh.calls.dropFirst(before)) == [.setScreens(1)])
+        #expect(controller.isRunning)
+    }
+
+    @Test("Another part of the app following the displays does not take their changes away")
+    func displaysReachTheMeshWithOtherObservers() async throws {
+        let controller = fixture.start()
+        try await waitUntil { fixture.mesh.calls.contains(.setScreens(1)) }
+        // The developer window follows the displays too (debug builds), after the mesh started.
+        var heard = 0
+        _ = fixture.screens.observe { heard += 1 }
+        fixture.screens.extra = 2
+        fixture.screens.notify()
+        try await waitUntil { fixture.mesh.calls.contains(.setScreens(3)) }
+        #expect(heard == 1)
         #expect(controller.isRunning)
     }
 
@@ -470,7 +484,21 @@ struct FakeLocalNetwork: LocalNetworkChecking {
 
 @MainActor
 final class FakeScreens: ScreenDescribing {
-    var onChange: (() -> Void)?
+    private var observers = ScreenObservers()
+
+    func observe(_ handler: @escaping @MainActor () -> Void) -> ScreenObservation {
+        observers.add(handler)
+    }
+
+    func stopObserving(_ observation: ScreenObservation) {
+        observers.remove(observation)
+    }
+
+    /// The displays changed.
+    func notify() {
+        observers.notify()
+    }
+
     /// The built-in display, then this many more beside it.
     var extra = 0
 
