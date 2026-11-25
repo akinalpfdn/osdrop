@@ -70,16 +70,16 @@ std::map<std::wstring, std::string> monitor_names() {
     paths.resize(path_count);
     std::map<std::wstring, std::string> names;
     for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
-        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
-        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-        source.header.size = sizeof(source);
-        source.header.adapterId = path.sourceInfo.adapterId;
-        source.header.id = path.sourceInfo.id;
-        DISPLAYCONFIG_TARGET_DEVICE_NAME target{};
-        target.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
-        target.header.size = sizeof(target);
-        target.header.adapterId = path.targetInfo.adapterId;
-        target.header.id = path.targetInfo.id;
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{
+            .header = {.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                       .size = sizeof(DISPLAYCONFIG_SOURCE_DEVICE_NAME),
+                       .adapterId = path.sourceInfo.adapterId,
+                       .id = path.sourceInfo.id}};
+        DISPLAYCONFIG_TARGET_DEVICE_NAME target{
+            .header = {.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+                       .size = sizeof(DISPLAYCONFIG_TARGET_DEVICE_NAME),
+                       .adapterId = path.targetInfo.adapterId,
+                       .id = path.targetInfo.id}};
         if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS &&
             DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS &&
             target.monitorFriendlyDeviceName[0] != L'\0') {
