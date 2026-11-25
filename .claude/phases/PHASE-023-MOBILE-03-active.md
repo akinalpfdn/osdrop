@@ -19,3 +19,4 @@ An iPhone sends and receives files as the Android app does, while Osdrop is in t
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)
 - 2026-11-09 (user): the app must be open; iOS allows nothing else anyway.
+- 2026-11-25: iOS is platform 4 in protocol minor 1; the app is an iOS target of the Mac project; the share extension leaves files in the App Group for the app to send (DECISIONS.md).

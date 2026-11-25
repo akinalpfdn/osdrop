@@ -895,3 +895,12 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The WPF shell is system-DPI aware, so its coordinates are scaled on a monitor of another DPI, while the engine's targets thread works in physical pixels. The engine's targets already read virtual files (Outlook attachments, zip folders), refuse Osdrop's own drags and keep a fixed order above the edge strips; a second target in WPF would repeat that and race the strips for the top.
 **Trade-offs:** The box's place is decided on another thread than the one that owns it (`SWP_ASYNCWINDOWPOS`): it can show for a frame where WPF guessed before the engine moves it.
 **Revisit if:** The shell becomes per-monitor DPI aware.
+
+---
+
+## 2026-11-25 — The iPhone app: platform 4, in the Mac project, sharing through the App Group
+**Chosen:** iOS is platform 4 in protocol minor 1, which is not released yet, so Android and iOS arrive together; every client treats both as phones, and phones list and pair with computers only. The iPhone app is an iOS target of the Mac's XcodeGen project (`macos/OsdropPhone`, bundle `com.akinalpfdn.osdrop.ios`), as Osplay builds its iPad app, and compiles the Mac's Bonjour and Keychain sources unchanged. The share extension never touches the network: it copies the shared files into the App Group (`group.com.akinalpfdn.osdrop`) with the computer they go to, and the app sends them while it is open. Received files land in the app's Documents folder, which the Files app shows; photos and videos go to Photos when the user asks.
+**Alternatives:** A protocol minor 2 for iOS; a separate Xcode project for the phone; a share extension that runs its own mesh and sends at once; saving every received photo to Photos by itself.
+**Why:** Minor 1 has not shipped, so a second minor only adds a compatibility rule nobody needs. One project keeps one core package build and one set of signing settings. An extension has a tight memory limit and is ended when the sheet closes, while a send lasts as long as the computer fetches; it would also need the identity and group state shared with it. Writing to Photos needs a permission the user grants for a reason they can see.
+**Trade-offs:** A file shared while Osdrop is closed waits until the app is opened. The Mac's sources the phone builds must stay free of AppKit.
+**Revisit if:** iOS gives share extensions longer network time, or users expect files to leave without opening the app.
