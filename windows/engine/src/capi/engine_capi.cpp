@@ -503,15 +503,15 @@ struct osdrop_engine {
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
     [[nodiscard]] osdrop_result report_screens() const {
-        const auto monitors = osdrop::engine::physical_monitors();
+        const auto found = osdrop::engine::physical_monitors();
         {
             const std::scoped_lock lock(monitors_mutex);
-            this->monitors = monitors;
+            monitors = found;
         }
-        input->set_monitors(monitors);
-        loopback->set_monitors(monitors);
-        drag->set_monitors(monitors);
-        const auto report = win::screen_report(monitors);
+        input->set_monitors(found);
+        loopback->set_monitors(found);
+        drag->set_monitors(found);
+        const auto report = win::screen_report(found);
         if (!report) {
             return report.error();
         }
