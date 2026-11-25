@@ -187,6 +187,9 @@ DragBridge::DragBridge(win::GroupEngine& group, InputBridge& input, fs::path sta
               }})),
       thread_([this] { run(); }) {
     remove_folder(staging_); // what the last run left
+    if (const fs::path drops = drop_staging_root(); !drops.empty()) {
+        remove_folder(drops); // virtual files saved from drops in the last run
+    }
 }
 
 DragBridge::~DragBridge() {

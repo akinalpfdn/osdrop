@@ -141,12 +141,16 @@ bool write_storage(IStorage* storage, const std::filesystem::path& path) {
            SUCCEEDED(copy->Commit(STGC_DEFAULT));
 }
 
-/// A new, empty folder under %TEMP%\Osdrop\drags for one drop's virtual files.
+/// A new, empty folder under the drop staging root for one drop's virtual files.
 std::filesystem::path staging_folder() {
     static std::atomic<unsigned> counter{0};
+    const std::filesystem::path root = drop_staging_root();
+    if (root.empty()) {
+        return {};
+    }
     std::error_code error;
-    const auto folder = std::filesystem::temp_directory_path(error) / L"Osdrop" / L"drags" /
-                        (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(++counter));
+    const auto folder =
+        root / (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(++counter));
     std::filesystem::create_directories(folder, error);
     return error ? std::filesystem::path() : folder;
 }
@@ -403,6 +407,12 @@ HWND target_window(const win::PixelRect& rect) {
 // NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
 } // namespace
+
+std::filesystem::path drop_staging_root() {
+    std::error_code error;
+    const std::filesystem::path temp = std::filesystem::temp_directory_path(error);
+    return error ? std::filesystem::path() : temp / L"Osdrop" / L"drags";
+}
 
 EdgeTargets::EdgeTargets(Handler handler)
     : handler_(std::move(handler)), thread_([this] { run(); }) {}

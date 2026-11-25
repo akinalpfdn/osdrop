@@ -51,6 +51,10 @@ struct CornerTarget {
     HWND box = nullptr;     ///< the phone's box while it shows
 };
 
+/// Where the virtual files of drops are saved (%TEMP%\Osdrop\drags), one folder per drop; what
+/// is there when Osdrop starts is left over from an earlier run.
+[[nodiscard]] std::filesystem::path drop_staging_root();
+
 class EdgeTargets {
 public:
     /// Called on the targets' thread (`taken` also on a thread of its own); they must return
