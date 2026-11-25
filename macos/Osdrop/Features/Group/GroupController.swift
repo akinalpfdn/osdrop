@@ -124,6 +124,8 @@ final class GroupController {
     private var tasks: [Task<Void, Never>] = []
     /// The latest report of this Mac's displays; each one waits for the one before.
     private var screenReport: Task<Void, Never>?
+    /// What the mesh last took; a list read again unchanged is not sent again.
+    private var reportedScreens: [ScreenMonitor]?
     private var browsing: Task<Void, Never>?
 
     let settings: AppSettings
@@ -171,6 +173,7 @@ final class GroupController {
             })
         browse()
         screens.onChange = { [weak self] in self?.screensChanged() }
+        reportedScreens = nil  // a new mesh has none
         reportScreens()
         tasks.append(
             Task { [weak self] in
@@ -687,14 +690,18 @@ final class GroupController {
     /// macOS reports one change in several steps, the display list catching up between them: the
     /// displays are read once the steps settle, and reports reach core in order, so an older list
     /// never lands last (Osplay's virtual displays stayed in the arrangement after they were gone).
+    /// macOS can also send its last step before the list caught up, and then nothing: the displays
+    /// are read again a little later, and a list that changed meanwhile is reported then.
     private func screensChanged() {
         let previous = screenReport
         previous?.cancel()
         screenReport = Task { [weak self] in
             await previous?.value
-            try? await Task.sleep(for: Tunables.Screens.settle)
-            guard !Task.isCancelled else { return }
-            await self?.reportScreens()?.value
+            for delay in [Tunables.Screens.settle] + Tunables.Screens.rereads {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                await self?.reportScreens()?.value
+            }
         }
     }
 
@@ -702,10 +709,12 @@ final class GroupController {
     private func reportScreens() -> Task<Void, Never>? {
         guard let mesh else { return nil }
         let monitors = screens.screens().map(\.monitor)
-        guard !monitors.isEmpty else { return nil }
-        return Task { [mesh, monitors] in
+        guard !monitors.isEmpty, monitors != reportedScreens else { return nil }
+        Log.screens.info("Reporting \(monitors.count, privacy: .public) displays")
+        return Task { [weak self, mesh, monitors] in
             do throws(CoreError) {
                 try await mesh.setScreens(monitors)
+                self?.reportedScreens = monitors
             } catch {
                 Log.screens.error("Reporting screens failed: \(String(describing: error), privacy: .public)")
             }
