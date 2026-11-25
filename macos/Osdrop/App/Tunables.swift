@@ -136,9 +136,6 @@ enum Tunables {
     enum Screens {
         /// After the last display change macOS reports, before the displays are read.
         static let settle: Duration = .milliseconds(300)
-        /// The displays are read again this long after each read: macOS can send its last change
-        /// before its display list caught up (Osplay's virtual displays going away), then nothing.
-        static let rereads: [Duration] = [.seconds(1), .seconds(3)]
     }
 
     enum Network {

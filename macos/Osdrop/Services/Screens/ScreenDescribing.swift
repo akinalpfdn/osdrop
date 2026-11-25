@@ -33,9 +33,6 @@ final class CGScreenDescriber: ScreenDescribing {
     nonisolated(unsafe) private var observer: NSObjectProtocol?
 
     init() {
-        // Core Graphics reports every display added, removed or moved, also when AppKit's
-        // notification comes too early or not at all (virtual displays).
-        CGDisplayRegisterReconfigurationCallback(Self.reconfigured, Unmanaged.passUnretained(self).toOpaque())
         observer = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -47,19 +44,8 @@ final class CGScreenDescriber: ScreenDescribing {
     }
 
     deinit {
-        CGDisplayRemoveReconfigurationCallback(Self.reconfigured, Unmanaged.passUnretained(self).toOpaque())
         if let observer {
             NotificationCenter.default.removeObserver(observer)
-        }
-    }
-
-    /// Called before a change (ignored) and once for each display after it. The describer lives as
-    /// long as the app; the change is handed to the main actor whatever thread this runs on.
-    nonisolated private static let reconfigured: CGDisplayReconfigurationCallBack = { _, flags, context in
-        guard !flags.contains(.beginConfigurationFlag), let context else { return }
-        let describer = Unmanaged<CGScreenDescriber>.fromOpaque(context).takeUnretainedValue()
-        Task { @MainActor in
-            describer.onChange?()
         }
     }
 

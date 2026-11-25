@@ -28,36 +28,19 @@ struct GroupControllerTests {
 
     @Test("Displays are reported once a burst of changes settles, the last list last")
     func reportsDisplaysAfterTheyChange() async throws {
-        fixture.screens.extra = 4
         let controller = fixture.start()
-        try await waitUntil { fixture.mesh.calls.contains(.setScreens(5)) }
+        try await waitUntil { fixture.mesh.calls.contains(.setScreens(1)) }
         let before = fixture.mesh.calls.count
         // Osplay's four virtual displays go away in several steps.
-        fixture.screens.extra = 2
+        fixture.screens.extra = 4
         fixture.screens.onChange?()
-        fixture.screens.extra = 1
+        fixture.screens.extra = 2
         fixture.screens.onChange?()
         fixture.screens.extra = 0
         fixture.screens.onChange?()
         try await waitUntil { fixture.mesh.calls.count > before }
         try await Task.sleep(for: .milliseconds(400))
         #expect(Array(fixture.mesh.calls.dropFirst(before)) == [.setScreens(1)])
-        #expect(controller.isRunning)
-    }
-
-    @Test("A list that catches up after the last change is reported when it is read again")
-    func reportsDisplaysThatCatchUpLate() async throws {
-        let controller = fixture.start()
-        try await waitUntil { fixture.mesh.calls.contains(.setScreens(1)) }
-        let before = fixture.mesh.calls.count
-        // macOS says the displays changed while its list still shows the old ones; Osplay's two
-        // virtual displays show in it only later, with no change reported.
-        fixture.screens.onChange?()
-        try await Task.sleep(for: .milliseconds(500))
-        #expect(fixture.mesh.calls.count == before, "the same list is not sent again")
-        fixture.screens.extra = 2
-        try await waitUntil { fixture.mesh.calls.contains(.setScreens(3)) }
-        #expect(Array(fixture.mesh.calls.dropFirst(before)) == [.setScreens(3)])
         #expect(controller.isRunning)
     }
 
