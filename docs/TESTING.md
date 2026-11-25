@@ -383,6 +383,20 @@ network. Osdrop stays open on the phone unless a row says otherwise.
 | P7 | Files permission | On the Mac, turn off files for the phone; send from the phone | The send is refused at once and the phone says so |
 | P8 | Old computer | A computer on 0.1 in the group | The 0.1 computer keeps working with the others and does not list the phone |
 
+### iPhone and iPad (Phase 22)
+
+Osdrop open in the foreground on an iPhone or iPad (the iPad stands in for the iPhone), on the
+same network as the Mac and the PC.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| IP1 | Pairing | Open Osdrop on the device, allow local network access, pair with the Mac, then with the PC | Each computer lists the device as a phone; the device lists both as connected |
+| IP2 | Drop to the device | Drag a file into the device's corner on the Mac and on the PC | The box shows the device's name; the file appears in the transfers and in Files › Osdrop |
+| IP3 | Send from the app | Send a photo and a file to the Mac and to the PC from the computer's row | The rows end done on the device; the computer's box opens and the files are in Downloads |
+| IP4 | Share sheet | Share photos from Photos to Osdrop, pick a computer, then open Osdrop | The photos go once Osdrop is open |
+| IP5 | Save to Photos | Save a received photo and a video to Photos | Asks once for permission, then both are in Photos |
+| IP6 | Background | Send Osdrop to the background, then open it again | The computers show the device as not connected, then connected again; a transfer under way finishes first |
+
 ### Phone corners (Phase 21)
 
 A phone in the group with Osdrop open on it; Settings › Devices sets its box's screen and corner.
@@ -400,6 +414,9 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + iPad A16 (Debug) | IP4, IP5, IP6 | Pass, as reported by the user: photos shared to Osdrop went once it was opened, a received photo and video were saved to Photos after one permission prompt, the iPad left and rejoined the group with the app |
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + NVIDIA PC (Release) + iPad A16 (Debug) | IP1, IP2, IP3 with the Mac and the PC | Pass, as reported by the user: the iPad paired with both, files dropped in its corner arrived, photos sent from the app ended done and opened the computers' boxes |
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), Release, NVIDIA PC | PC build: ctest 405/405, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass, as reported by the PC; no fix needed |
 | 2026-11-25 | feature/mobile-02-corner-box (da1f6ab), M3 Air (Debug) + NVIDIA PC (Release) + Android phone (debug APK) | PB5 both ways; PB3, PB4 with the Mac | Pass, as reported by the user: files dragged to the facing edge away from the corner crossed Mac → PC and PC → Mac with no box; the Mac box followed a new corner; with the phone app closed the Mac corner took nothing |
 | 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC + Android phone (debug APK) | PB1, PB2, PB3, PB4, PB6 with the PC | Pass, as reported by the user: a file dragged to the corner reached the phone, a shared photo opened the box and was dragged out to the desktop, the box followed a new corner and screen, with the phone app closed the corner took nothing |
 | 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC | PC build: ctest 404/404, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass after two fixes on the PC: a local shadowing a member in report_screens (MSVC C4458, 3667b76) and display config headers built without their type (clang-tidy, ed0ad51) |

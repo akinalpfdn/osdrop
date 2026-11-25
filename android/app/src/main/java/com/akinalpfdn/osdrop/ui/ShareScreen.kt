@@ -28,7 +28,7 @@ import com.akinalpfdn.osdrop.outbox.OutgoingSend
 /** Picks the computer that gets what was shared, then shows how the send goes. */
 @Composable
 fun ShareScreen(count: Int, state: MeshState, sends: List<OutgoingSend>, onPick: (Member) -> Unit, onDone: () -> Unit) {
-    val computers = state.members.filter { !it.isSelf && it.isConnected && it.platform != Platform.Android }
+    val computers = state.members.filter { !it.isSelf && it.isConnected && it.platform?.isPhone == false }
     Scaffold(modifier = Modifier.fillMaxSize()) { insets ->
         LazyColumn(
             modifier = Modifier.padding(insets).padding(Tokens.screenPadding),

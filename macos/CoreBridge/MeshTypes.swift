@@ -5,14 +5,25 @@ public enum PeerPlatform: Sendable, Equatable {
     case macOS
     case windows
     case android
+    case iOS
 
     /// The platform this app runs on.
-    public static var current: PeerPlatform { .macOS }
+    public static var current: PeerPlatform {
+        #if os(iOS)
+            .iOS
+        #else
+            .macOS
+        #endif
+    }
+
+    /// A phone: it sends and receives files, and takes no control.
+    public var isPhone: Bool { self == .android || self == .iOS }
 
     init(_ raw: osdrop_platform) {
         switch raw {
         case OSDROP_PLATFORM_WINDOWS: self = .windows
         case OSDROP_PLATFORM_ANDROID: self = .android
+        case OSDROP_PLATFORM_IOS: self = .iOS
         default: self = .macOS
         }
     }
@@ -22,6 +33,7 @@ public enum PeerPlatform: Sendable, Equatable {
         case .macOS: OSDROP_PLATFORM_MACOS
         case .windows: OSDROP_PLATFORM_WINDOWS
         case .android: OSDROP_PLATFORM_ANDROID
+        case .iOS: OSDROP_PLATFORM_IOS
         }
     }
 }

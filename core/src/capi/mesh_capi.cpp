@@ -615,7 +615,7 @@ private:
 };
 
 bool valid_platform(osdrop_platform platform) {
-    return platform >= OSDROP_PLATFORM_MACOS && platform <= OSDROP_PLATFORM_ANDROID;
+    return platform >= OSDROP_PLATFORM_MACOS && platform <= OSDROP_PLATFORM_IOS;
 }
 
 /// At most one byte past the longest valid name is read; longer names then fail the check.

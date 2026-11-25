@@ -126,7 +126,7 @@ class PhoneMesh(
         when (event) {
             is DiscoveryEvent.Found -> {
                 val device = event.device
-                if (device.advertisement.platform == Platform.Android) return // phones do not pair with phones
+                if (device.advertisement.platform?.isPhone == true) return // phones do not pair with phones
                 synchronized(discovered) { discovered[device.label] = device }
                 current.peerDiscovered(device.advertisement.deviceId, device.advertisement.groupId, device.host, device.port)
             }

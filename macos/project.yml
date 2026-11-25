@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: com.akinalpfdn
   deploymentTarget:
     macOS: "14.0"
+    iOS: "17.0"
   developmentLanguage: en
   createIntermediateGroups: true
   generateEmptyDirectories: false
@@ -88,6 +89,62 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.network-helper
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
+  # The iPhone app (DEVPLAN Phase 22). It builds the Mac's Bonjour and key store sources as they
+  # are; its own Log and Tunables give them the names they use.
+  OsdropPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: OsdropPhone
+      - path: OsdropPhoneShared
+      - path: Osdrop/Services/Discovery
+      - path: Osdrop/Services/KeyStore
+    dependencies:
+      - package: OsdropCore
+        product: CoreBridge
+      - target: OsdropPhoneShare
+        embed: true
+        codeSign: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.ios
+        PRODUCT_NAME: Osdrop
+        INFOPLIST_FILE: OsdropPhone/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OsdropPhone/Resources/OsdropPhone.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  # The share sheet's Osdrop: it leaves the shared files in the App Group for the app to send.
+  OsdropPhoneShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: OsdropPhoneShare
+        excludes:
+          - "*.entitlements"
+      - path: OsdropPhoneShared
+      - path: OsdropPhone/Theme
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.ios.share
+        PRODUCT_NAME: OsdropShare
+        INFOPLIST_FILE: OsdropPhoneShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OsdropPhoneShare/OsdropPhoneShare.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+  OsdropPhoneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: OsdropPhoneTests
+    dependencies:
+      - target: OsdropPhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.akinalpfdn.osdrop.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Osdrop.app/Osdrop
   OsdropTests:
     type: bundle.unit-test
     platform: macOS
@@ -125,6 +182,15 @@ schemes:
       gatherCoverageData: true
       targets:
         - OsdropTests
+  OsdropPhone:
+    build:
+      targets:
+        OsdropPhone: all
+        OsdropPhoneTests: [test]
+    test:
+      config: Debug
+      targets:
+        - OsdropPhoneTests
   # Moves the real cursor and captures input on the machine running it; not part of CI.
   OsdropHardware:
     build:

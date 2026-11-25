@@ -44,6 +44,9 @@ TEST(Roster, PeersBeforeMinorOneAreSentTheComputersOnly) {
     ASSERT_TRUE(roster.add(mac));
     ASSERT_TRUE(roster.add(phone));
     roster.block(member(3).device_id, protocol::Platform::Android, "Other phone");
+    Member iphone = member(4, 1, "iPhone");
+    iphone.platform = protocol::Platform::IOS;
+    ASSERT_TRUE(roster.add(iphone));
 
     const auto legacy = roster.to_messages(protocol::Id{7}, 0);
     ASSERT_EQ(legacy.size(), 1U);
@@ -53,10 +56,10 @@ TEST(Roster, PeersBeforeMinorOneAreSentTheComputersOnly) {
 
     const auto current = roster.to_messages(protocol::Id{7}, 1);
     ASSERT_EQ(current.size(), 1U);
-    EXPECT_EQ(current.front().members.size(), 2U);
+    EXPECT_EQ(current.front().members.size(), 3U);
     EXPECT_EQ(current.front().blocks.size(), 1U);
     ASSERT_TRUE(protocol::encode_control(current.front()).has_value())
-        << "Android is a valid platform";
+        << "Android and iOS are valid platforms";
 }
 
 TEST(Roster, PairingRevokingAndPairingAgain) {

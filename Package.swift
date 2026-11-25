@@ -5,7 +5,7 @@ import PackageDescription
 // the CMake build in core/ is the reference build and must list the same sources.
 let package = Package(
     name: "OsdropCore",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "CoreBridge", targets: ["CoreBridge"])
     ],

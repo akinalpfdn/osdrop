@@ -21,7 +21,11 @@ enum class Platform(val code: Int) {
     MacOS(1),
     Windows(2),
     Android(3),
+    IOS(4),
     ;
+
+    /** A phone: it sends and receives files, and pairs only with computers. */
+    val isPhone: Boolean get() = this == Android || this == IOS
 
     companion object {
         fun of(code: Int): Platform? = entries.firstOrNull { it.code == code }

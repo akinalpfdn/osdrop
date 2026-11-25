@@ -208,7 +208,7 @@ private struct MemberSettings: View {
                 Button("settings.devices.remove", role: .destructive, action: revoke)
                 Button("settings.devices.block", role: .destructive, action: block)
             }
-            if member.platform == .android {
+            if member.platform.isPhone {
                 permission(.files, "settings.devices.allowFiles")
                 PhoneCornerPicker(viewModel: viewModel, member: member)
             } else {

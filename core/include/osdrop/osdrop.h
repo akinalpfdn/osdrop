@@ -108,6 +108,7 @@ typedef enum osdrop_platform {
     OSDROP_PLATFORM_MACOS = 1,
     OSDROP_PLATFORM_WINDOWS = 2,
     OSDROP_PLATFORM_ANDROID = 3,
+    OSDROP_PLATFORM_IOS = 4,
     OSDROP_PLATFORM_MAX_ENUM = 0x7FFFFFFF
 } osdrop_platform;
 

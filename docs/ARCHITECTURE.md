@@ -242,6 +242,23 @@ transfer only, it has no screens in the arrangement and takes no input or clipbo
 - **Sending.** The share sheet (`ShareActivity`) and the app's picker copy the chosen items into
   the cache (core reads paths), and `Outbox` sends them to the chosen computer.
 
+## iPhone and iPad app
+
+Built in Phase 22 (`macos/OsdropPhone`), a files-only member like the Android app, platform 4.
+
+- **Process.** The app starts the mesh when its scene becomes active and ends every session when it
+  goes to the background (iOS suspends its sockets); a transfer under way gets the background time
+  iOS gives before the sessions end. `PhoneMesh` owns the mesh, Bonjour (the Mac's
+  `DNSServiceDiscovery`, built unchanged), pairing and the roster.
+- **Identity.** The Mac's `KeychainKeyStore`, built unchanged, keeps the secret key and group state
+  in the device's Keychain.
+- **Receiving.** `PhoneInbox` fetches each item of a send into the app's Documents folder, which the
+  Files app shows, and answers the sender; the user can save a photo or video to Photos.
+- **Sending.** Picked photos and files are copied into a staging folder (core reads paths after the
+  picker let go) and sent; their rows show at once. The share extension cannot keep the network
+  up, so it copies the shared files into the App Group with the computer they go to; the app sends
+  them while it is open (`Handoff`).
+
 ## Cursor and keyboard across computers
 
 Built in Phase 11 for `core` and the Mac; on Windows, both halves came with Phase 3 (see

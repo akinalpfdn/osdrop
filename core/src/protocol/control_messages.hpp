@@ -47,10 +47,10 @@ enum class ControlType : std::uint8_t {
     SendResult = 0x51,
 };
 
-enum class Platform : std::uint8_t { MacOS = 1, Windows = 2, Android = 3 };
+enum class Platform : std::uint8_t { MacOS = 1, Windows = 2, Android = 3, IOS = 4 };
 /// Platforms 1 to this are known; new ones are appended. Peers before protocol minor 1 know only
-/// macOS and Windows (PROTOCOL.md "Versioning").
-inline constexpr std::uint8_t kLastPlatform = 3;
+/// macOS and Windows; minor 1 adds Android and iOS (PROTOCOL.md "Versioning").
+inline constexpr std::uint8_t kLastPlatform = 4;
 
 /// Whether a peer speaking protocol minor `minor` knows `platform`: one that does not refuses any
 /// Hello or RosterState that names it.

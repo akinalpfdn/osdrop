@@ -765,7 +765,7 @@ TEST(CapiMesh, InvalidConfigurationsAreRefused) {
     config.max_transfer_streams = 9;
     EXPECT_EQ(create(config), OSDROP_ERROR_VALUE_OUT_OF_RANGE);
     config = good;
-    config.platform = static_cast<osdrop_platform>(4);
+    config.platform = static_cast<osdrop_platform>(5);
     EXPECT_EQ(create(config), OSDROP_ERROR_VALUE_OUT_OF_RANGE);
     config = good;
     config.group_state_size = 4;

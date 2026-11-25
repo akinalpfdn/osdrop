@@ -6,7 +6,7 @@ clone, that is a bug — please open an issue.
 | Part | Built on | Toolchain |
 |------|----------|-----------|
 | `core/`, `windows/shared/` | macOS and Windows | CMake ≥ 3.28, Ninja, Clang or MSVC (C++20) |
-| `macos/` | macOS | Xcode 16 or later (Swift 6), XcodeGen |
+| `macos/` (Mac, iPhone and iPad apps) | macOS | Xcode 16 or later (Swift 6), XcodeGen |
 | `windows/engine`, `windows/input`, `windows/service` | Windows | Visual Studio 2022 or later (MSVC), CMake, Ninja |
 | `windows/app` | Windows | .NET 10 SDK |
 | `android/` | macOS, Windows or Linux | JDK 17–21, Android SDK 36, NDK 28.2, CMake 3.31 |
@@ -210,6 +210,29 @@ that has to be paired again.
 `dotnet format` covers C#. C++ and Swift formatting is checked by the macOS CI job; on Windows,
 format a C++ file with the pinned version from `scripts/lint.sh`, for example
 `uvx clang-format@23.1.3 -i windows\engine\src\capi\engine_capi.cpp`.
+
+## iPhone and iPad
+
+The iOS app is a target of the Mac's project (`macos/OsdropPhone`, with its share extension in
+`macos/OsdropPhoneShare`); it builds `core` from the same Swift package. In a terminal, after
+`xcodegen generate` in `macos/`:
+
+```sh
+cd macos
+xcodebuild -project Osdrop.xcodeproj -scheme OsdropPhone \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
+```
+
+To run it on a device, add to `macos/Config/Signing.local.xcconfig`:
+
+```
+CODE_SIGN_STYLE[sdk=iphoneos*] = Automatic
+CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Development
+```
+
+then build for the device with `-allowProvisioningUpdates`, so Xcode registers the App Group
+`group.com.akinalpfdn.osdrop` and creates the development profiles. The app runs on iOS 17 or later,
+on iPhone and iPad, and talks to Osdrop 0.2 or later on the computers.
 
 ## Android
 

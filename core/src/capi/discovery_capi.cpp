@@ -17,7 +17,8 @@ static_assert(OSDROP_TXT_VALUE_SIZE == protocol::kMaxStringBytes + 1);
 static_assert(OSDROP_PLATFORM_MACOS == static_cast<int>(protocol::Platform::MacOS) &&
               OSDROP_PLATFORM_WINDOWS == static_cast<int>(protocol::Platform::Windows) &&
               OSDROP_PLATFORM_ANDROID == static_cast<int>(protocol::Platform::Android) &&
-              OSDROP_PLATFORM_ANDROID == protocol::kLastPlatform);
+              OSDROP_PLATFORM_IOS == static_cast<int>(protocol::Platform::IOS) &&
+              OSDROP_PLATFORM_IOS == protocol::kLastPlatform);
 
 /// A NUL-terminated value of at most OSDROP_TXT_VALUE_SIZE - 1 bytes; one without a NUL is read
 /// whole and then fails the checks as too long.
@@ -47,7 +48,7 @@ osdrop_result osdrop_advertisement_to_txt(const osdrop_advertisement* advertisem
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     if (advertisement->platform < OSDROP_PLATFORM_MACOS ||
-        advertisement->platform > OSDROP_PLATFORM_ANDROID || advertisement->has_group > 1) {
+        advertisement->platform > OSDROP_PLATFORM_IOS || advertisement->has_group > 1) {
         return OSDROP_ERROR_VALUE_OUT_OF_RANGE;
     }
     protocol::Advertisement source{

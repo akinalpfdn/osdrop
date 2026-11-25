@@ -3,6 +3,7 @@
 control/hello_macos.bin	control	valid	1	Hello from a Mac in no group
 control/hello_windows_group.bin	control	valid	1	Hello from a PC in a group, UTF-8 name
 control/hello_android.bin	control	valid	1	Hello from an Android phone, protocol minor 1
+control/hello_ios.bin	control	valid	1	Hello from an iPhone, protocol minor 1
 control/hello_name_64_bytes.bin	control	valid	1	64-byte device name
 control/handshake_step1.bin	control	valid	2	Noise XX message 1
 control/handshake_max_payload.bin	control	valid	2	message 2 with a 1024-byte payload
@@ -64,7 +65,7 @@ malformed/control_type_7f.bin	control	error	6	type 0x7F
 malformed/control_transfer_type.bin	control	error	6	type 0x88, a transfer type
 malformed/control_too_large.bin	control	error	10	65537-byte message
 malformed/hello_trailing_byte.bin	control	error	7	one extra byte
-malformed/hello_platform_4.bin	control	error	8	platform 4
+malformed/hello_platform_5.bin	control	error	8	platform 5
 malformed/hello_reserved_set.bin	control	error	8	reserved is 0x0100
 malformed/hello_empty_name.bin	control	error	9	empty device name
 malformed/hello_name_65_bytes.bin	control	error	9	65-byte name
@@ -110,7 +111,7 @@ malformed/roster_duplicate_revocation.bin	control	error	8	same revocation twice
 malformed/roster_revocation_cut.bin	control	error	3	revocation epoch cut short
 malformed/roster_block_version_0.bin	control	error	8	block version 0
 malformed/roster_block_flags.bin	control	error	8	block flags with a reserved bit set
-malformed/roster_block_platform_4.bin	control	error	8	block platform 4
+malformed/roster_block_platform_5.bin	control	error	8	block platform 5
 malformed/roster_block_reserved.bin	control	error	8	block reserved byte is 1
 malformed/roster_block_empty_name.bin	control	error	9	block name empty
 malformed/roster_duplicate_block.bin	control	error	8	two blocks for the same device

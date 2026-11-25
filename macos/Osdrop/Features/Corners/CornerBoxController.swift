@@ -31,7 +31,7 @@ final class CornerBoxController {
     /// Drags are watched only while a phone is connected.
     private func watchMembers() {
         let phones = withObservationTracking {
-            group.members.filter { $0.platform == .android && $0.isConnected }.map(\.deviceID)
+            group.members.filter { $0.platform.isPhone && $0.isConnected }.map(\.deviceID)
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchMembers() }
         }
@@ -54,7 +54,7 @@ final class CornerBoxController {
             return
         }
         guard !draggingOut else { return }
-        for member in group.members where member.platform == .android && member.isConnected {
+        for member in group.members where member.platform.isPhone && member.isConnected {
             box(for: member.deviceID)?.dragStarted()
         }
     }
