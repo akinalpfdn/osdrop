@@ -8,15 +8,15 @@ Each phone has a corner on each Mac and PC: files dragged into it go to the phon
 phone sends appear there to be dragged out.
 
 ## Tasks
-- [ ] A corner per phone in Settings › Devices on each computer.
-- [ ] While the phone is connected, a drag reaching the corner shows a small box there with the phone's name; files dropped in go to the phone with progress and cancel.
-- [ ] Files the phone sends open the box at its corner by themselves; each can be dragged out (Mac file promises, PC OLE drag source); closing the box moves the rest to Downloads.
-- [ ] Mac (`EdgeDropTarget`) and PC (`EdgeTargets`) both; English and Turkish.
+- [x] A corner per phone in Settings › Devices on each computer.
+- [x] While the phone is connected, a drag reaching the corner shows a small box there with the phone's name; files dropped in go to the phone with progress and cancel.
+- [x] Files the phone sends open the box at its corner by themselves; each can be dragged out (Mac file promises, PC OLE drag source); closing the box moves the rest to Downloads. (Received files land in Downloads from the start; the box drags out copies.)
+- [x] Mac (`EdgeDropTarget`) and PC (`EdgeTargets`) both; English and Turkish.
 
 ## Acceptance Criteria
-- [ ] Files dragged from Finder and Explorer to the phone's corner arrive on the phone.
-- [ ] Photos shared from the phone appear in the box on the chosen computer and can be dragged into Finder, Explorer and a chat app.
-- [ ] With the app closed on the phone, the corner shows nothing and takes nothing.
+- [x] Files dragged from Finder and Explorer to the phone's corner arrive on the phone.
+- [x] Photos shared from the phone appear in the box on the chosen computer and can be dragged into Finder, Explorer and a chat app.
+- [x] With the app closed on the phone, the corner shows nothing and takes nothing.
 - [ ] Crossing to other computers through the same edge is unaffected away from the corner.
 
 ## Decisions Made This Phase
