@@ -28,7 +28,7 @@ public sealed partial class MemberItem : ObservableObject
         IsSelf = member.IsSelf;
         IsConnected = member.IsConnected;
         IsWindows = member.Platform == Platform.Windows;
-        IsPhone = member.Platform == Platform.Android;
+        IsPhone = member.Platform is Platform.Android or Platform.IOS;
         AllowsControl = member.Permissions.Control;
         AllowsFiles = member.Permissions.Files;
         AllowsClipboard = member.Permissions.Clipboard;
@@ -101,7 +101,7 @@ public sealed class NearbyItem
         DeviceId = computer.DeviceId;
         Name = computer.Name;
         IsWindows = computer.Platform == Platform.Windows;
-        IsPhone = computer.Platform == Platform.Android;
+        IsPhone = computer.Platform is Platform.Android or Platform.IOS;
         Note = computer.NeedsUpdate ? Localization.Strings.GroupNeedsUpdate
             : computer.InAnotherGroup ? Localization.Strings.GroupInAnotherGroup
             : string.Empty;
@@ -125,7 +125,7 @@ public sealed class BlockedItem
         DeviceId = computer.DeviceId;
         Name = computer.Name;
         IsWindows = computer.Platform == Platform.Windows;
-        IsPhone = computer.Platform == Platform.Android;
+        IsPhone = computer.Platform is Platform.Android or Platform.IOS;
     }
 
     public string DeviceId { get; }

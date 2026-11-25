@@ -6,7 +6,7 @@ extension PeerPlatform {
         switch self {
         case .macOS: Theme.Symbol.mac
         case .windows: Theme.Symbol.pc
-        case .android: Theme.Symbol.phone
+        case .android, .iOS: Theme.Symbol.phone
         }
     }
 }

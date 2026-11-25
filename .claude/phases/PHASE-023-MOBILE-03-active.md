@@ -1,5 +1,5 @@
 # Phase 023 (MOBILE-03) — iPhone app
-Status: PENDING — after the Android app (user decisions 2026-11-09 and 2026-11-23)
+Status: ACTIVE (2026-11-25, user "başlayalım") — after the Android app (user decisions 2026-11-09 and 2026-11-23)
 
 DEVPLAN reference: Phase 22. Depends on: Phase 022
 

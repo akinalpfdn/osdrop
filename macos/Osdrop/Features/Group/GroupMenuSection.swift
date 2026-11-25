@@ -94,7 +94,7 @@ private struct MemberRow: View {
                     .foregroundStyle(Theme.Colors.secondary)
             }
             Spacer()
-            if member.platform == .android && member.isConnected {
+            if member.platform.isPhone && member.isConnected {
                 Button(action: sendFiles) {
                     Image(systemName: Theme.Symbol.sendFiles)
                 }

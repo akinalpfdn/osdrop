@@ -54,7 +54,8 @@ fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, sends: List<Outg
             verticalArrangement = Arrangement.spacedBy(Tokens.gap),
         ) {
             item { Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium) }
-            val computers = state.members.filterNot { it.isSelf }
+            // Other phones in the group are not listed: phones exchange files with computers only.
+            val computers = state.members.filterNot { it.isSelf || it.platform?.isPhone == true }
             if (computers.isEmpty()) {
                 item { Section(stringResource(R.string.pair_title), stringResource(R.string.pair_hint)) }
                 items(state.nearby, key = { it.advertisement.deviceId.toString() }) { device ->
@@ -74,7 +75,7 @@ fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, sends: List<Outg
                         },
                         leadingContent = { PlatformIcon(member.platform) },
                         trailingContent = {
-                            if (member.isConnected && member.platform != Platform.Android) {
+                            if (member.isConnected) {
                                 TextButton(onClick = { actions.sendFiles(member) }) { Text(stringResource(R.string.member_send)) }
                             }
                         },

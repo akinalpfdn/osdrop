@@ -8,7 +8,7 @@ The protocol is not frozen before the first release. A phase that changes a mess
 document, the fixture generator and the codec in the same pull request. From the first release on,
 changes are additive and raise the minor version.
 
-Minor versions: 0 is the first release (0.1.x); 1 adds platform 3, Android, and sending files
+Minor versions: 0 is the first release (0.1.x); 1 adds platforms 3, Android, and 4, iOS, and sending files
 (SendOffer, SendResult, object kind 3) (0.2.0).
 
 ## Conventions
@@ -75,7 +75,7 @@ also accepts transfer connections. TXT record keys:
 | `pm` | protocol minor version, decimal (`1`) |
 | `id` | device ID, 32 lowercase hex digits |
 | `name` | device name (UTF-8, as `string`) |
-| `os` | `macos`, `windows` or `android` |
+| `os` | `macos`, `windows`, `android` or `ios` |
 | `grp` | group ID, 32 lowercase hex digits (never all zeros), or empty when the computer is in no group |
 
 Numbers are decimal without sign or leading zeros. A record with a different `pv` is still
@@ -128,7 +128,7 @@ plaintext messages (65552 with the 16-byte AEAD tag). A control message is:
 
 | Field | Type | Values |
 |-------|------|--------|
-| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android, 4 iOS (from minor 1) |
 | protocol_minor | u8 | minor version of the sender (1) |
 | reserved | u16 | 0 |
 | group_id | bytes[16] | the sender's group, all zeros when in no group |
@@ -230,7 +230,7 @@ member:
 | device_id | bytes[16] | |
 | public_key | bytes[32] | X25519 static public key |
 | epoch | u32 | 1 or more; each new pairing of the same device has a higher epoch |
-| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android, 4 iOS (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes |
 
@@ -248,7 +248,7 @@ block:
 | device_id | bytes[16] | |
 | version | u32 | 1 or more; each block or unblock of the same device has a higher version |
 | flags | u8 | bit 0: blocked (0: unblocked); other bits reserved |
-| platform | u8 | 1 macOS, 2 Windows, 3 Android (from minor 1) |
+| platform | u8 | 1 macOS, 2 Windows, 3 Android, 4 iOS (from minor 1) |
 | reserved | u8 | 0 |
 | name | string | 1–64 bytes, as the device was named when it was blocked |
 
