@@ -5,6 +5,7 @@ add_library(osdrop_win_shared STATIC
     src/chords.cpp
     src/clipboard_sync.cpp
     src/clipboard_text.cpp
+    src/corners.cpp
     src/drag_files.cpp
     src/forwarder.cpp
     src/group_engine.cpp
@@ -34,6 +35,7 @@ if(OSDROP_CORE_BUILD_TESTS)
         tests/chords_test.cpp
         tests/clipboard_sync_test.cpp
         tests/clipboard_text_test.cpp
+        tests/corners_test.cpp
         tests/drag_files_test.cpp
         tests/forwarder_test.cpp
         tests/group_engine_test.cpp

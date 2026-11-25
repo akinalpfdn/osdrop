@@ -265,11 +265,33 @@ public:
         send(event);
     }
     void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
-                           std::uint64_t links_left_out) override {
+                           std::uint64_t links_left_out,
+                           std::span<const std::filesystem::path> items) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_FINISHED);
         event.connection = transfer_id;
         event.reason = result;
         event.code = clamped_count(links_left_out);
+        std::string first;
+        if (result == OSDROP_OK && !items.empty()) {
+            const std::u8string text = items.front().u8string();
+            first.assign(text.begin(), text.end());
+            event.message = first.c_str();
+        }
+        send(event);
+    }
+    /// From the drag bridge's thread: a drag reached a phone's corner, or left it.
+    void corner(osdrop_engine_event_kind kind, const win::DeviceIdBytes& phone) const {
+        osdrop_engine_event event = blank_event(kind);
+        std::ranges::copy(phone, std::begin(event.device_id));
+        send(event);
+    }
+    /// From the drag bridge's thread: a drop in a phone's corner.
+    void corner_dropped(const win::DeviceIdBytes& phone, std::uint64_t send_id,
+                        osdrop_result result) const {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_CORNER_DROPPED);
+        std::ranges::copy(phone, std::begin(event.device_id));
+        event.connection = send_id;
+        event.reason = result;
         send(event);
     }
     void send_progress(const win::SendUpdate& update) override {
@@ -476,10 +498,16 @@ struct osdrop_engine {
     std::unique_ptr<osdrop::engine::drag::Loopback> loopback;
     std::unique_ptr<DragBridge> drag;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
+    mutable std::mutex monitors_mutex;
+    mutable std::vector<win::PhysicalMonitor> monitors; ///< as last read; under monitors_mutex
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
     [[nodiscard]] osdrop_result report_screens() const {
         const auto monitors = osdrop::engine::physical_monitors();
+        {
+            const std::scoped_lock lock(monitors_mutex);
+            this->monitors = monitors;
+        }
         input->set_monitors(monitors);
         loopback->set_monitors(monitors);
         drag->set_monitors(monitors);
@@ -560,6 +588,19 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
                 [events](std::uint64_t transfer_id, const win::DeviceIdBytes& source,
                          const std::string& name, std::uint64_t size) {
                     events->receiving(transfer_id, source, name, size);
+                },
+            .corner_entered =
+                [events](const win::DeviceIdBytes& phone) {
+                    events->corner(OSDROP_ENGINE_CORNER_ENTERED, phone);
+                },
+            .corner_left =
+                [events](const win::DeviceIdBytes& phone) {
+                    events->corner(OSDROP_ENGINE_CORNER_LEFT, phone);
+                },
+            .corner_dropped =
+                [events](const win::DeviceIdBytes& phone, std::uint64_t send_id,
+                         osdrop_result result) {
+                    events->corner_dropped(phone, send_id, result);
                 }});
     engine->events.set_drag(engine->drag.get());
     engine->clipboard.listen(
@@ -702,6 +743,59 @@ osdrop_result osdrop_engine_screens_changed(osdrop_engine* engine) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     return engine->report_screens();
+}
+
+osdrop_result osdrop_engine_screens(osdrop_engine* engine, osdrop_engine_screen* out,
+                                    size_t capacity, size_t* out_count) {
+    if (engine == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<win::PhysicalMonitor> monitors;
+    {
+        const std::scoped_lock lock(engine->monitors_mutex);
+        monitors = engine->monitors;
+    }
+    *out_count = monitors.size();
+    if (monitors.size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    for (std::size_t i = 0; i < monitors.size(); ++i) {
+        const win::PhysicalMonitor& monitor = monitors[i];
+        osdrop_engine_screen& screen = std::span(out, capacity)[i];
+        screen = osdrop_engine_screen{.key = {},
+                                      .primary = static_cast<std::uint8_t>(monitor.primary),
+                                      .left = monitor.left,
+                                      .top = monitor.top,
+                                      .name = {}};
+        std::ranges::copy(monitor.key, std::begin(screen.key));
+        copy_name(monitor.name, screen.name);
+    }
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_set_corners(osdrop_engine* engine, const osdrop_engine_corner* corners,
+                                        size_t count) {
+    if (engine == nullptr || (corners == nullptr && count != 0)) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<osdrop::engine::drag::PhoneCorner> chosen;
+    for (const osdrop_engine_corner& corner : std::span(corners, count)) {
+        if (corner.corner > static_cast<std::uint8_t>(win::ScreenCorner::BottomRight)) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        osdrop::engine::drag::PhoneCorner phone{
+            .device = read_id(std::data(corner.device_id)),
+            .screen = {},
+            .corner = static_cast<win::ScreenCorner>(corner.corner),
+            .zone = corner.zone,
+            .inset = corner.inset,
+            // NOLINTNEXTLINE(performance-no-int-to-ptr): the shell passes its window's handle
+            .box = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(corner.box_window))};
+        std::copy_n(std::data(corner.screen_key), phone.screen.size(), phone.screen.begin());
+        chosen.push_back(phone);
+    }
+    engine->drag->set_corners(std::move(chosen));
+    return OSDROP_OK;
 }
 
 osdrop_result osdrop_engine_close_all(osdrop_engine* engine, uint8_t sleeping) {

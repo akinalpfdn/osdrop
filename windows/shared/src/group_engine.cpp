@@ -356,7 +356,7 @@ osdrop_mesh_callbacks GroupEngine::callbacks() {
         engine->transfers_.finished(id, outcome, created); // a drag's, or nobody's
         engine->sent_->finished(id, outcome);              // a sent item's, or nobody's
         // Only a drag's transfers are listed, and a drop on this PC leaves every link out.
-        engine->events_.transfer_finished(id, outcome, engine->take_planned_links(id));
+        engine->events_.transfer_finished(id, outcome, engine->take_planned_links(id), created);
         if (engine->clipboard_) {
             std::vector<std::string> paths;
             for (const char* item : std::span(items, count)) {

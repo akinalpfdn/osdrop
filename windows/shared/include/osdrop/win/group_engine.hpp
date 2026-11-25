@@ -183,9 +183,11 @@ public:
     /// A transfer this PC receives moved on, or ended (clipboard ones included).
     virtual void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
                                    std::uint64_t total) = 0;
-    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold.
+    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold;
+    /// `items`: its top-level files and folders as created, when it succeeded.
     virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
-                                   std::uint64_t links_left_out) = 0;
+                                   std::uint64_t links_left_out,
+                                   std::span<const std::filesystem::path> items) = 0;
     /// A member fetches an item of this PC's drag, or of files this PC sent it.
     virtual void send_progress(const SendUpdate& update) = 0;
     /// A transfer fetching an item a member sent this PC started (a phone; DEVPLAN Phase 20).

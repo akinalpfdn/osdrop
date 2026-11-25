@@ -172,7 +172,8 @@ public:
     void transfer_progress(std::uint64_t /*transfer_id*/, std::uint64_t /*done*/,
                            std::uint64_t /*total*/) override {}
     void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/,
-                           std::uint64_t /*links_left_out*/) override {}
+                           std::uint64_t /*links_left_out*/,
+                           std::span<const std::filesystem::path> /*items*/) override {}
     void send_progress(const osdrop::win::SendUpdate& /*update*/) override {}
     void sent_receiving(std::uint64_t /*transfer_id*/, const DeviceIdBytes& /*source*/,
                         const std::string& /*name*/, std::uint64_t /*size*/) override {}
