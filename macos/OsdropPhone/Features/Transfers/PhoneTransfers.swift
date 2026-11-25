@@ -38,8 +38,6 @@ final class PhoneTransfers {
     }
 
     private(set) var rows: [Row] = []
-    /// Item names of this phone's sends, until their rows are listed.
-    @ObservationIgnored private var sendNames: [UInt64: (peer: DeviceID, names: [String])] = [:]
     /// Ends of incoming transfers reported before they were listed.
     @ObservationIgnored private var early: [UInt64: Result<ReceivedItem, CoreError>] = [:]
     /// Rows the user cancelled: they end as cancelled, not failed.
@@ -80,21 +78,28 @@ final class PhoneTransfers {
 
     // MARK: - Outgoing
 
-    /// A send of this phone began; its rows show as its items are fetched.
-    func offered(_ sendID: UInt64, to peer: DeviceID, names: [String]) {
-        sendNames[sendID] = (peer, names)
+    /// One item of a send of this phone: its name and size.
+    struct SentFile: Equatable {
+        let name: String
+        let bytes: UInt64
+    }
+
+    /// A send of this phone began: its items are listed at once, waiting for the computer to fetch
+    /// them. A small file can be fetched before any progress is reported, so its row cannot wait
+    /// for one.
+    func offered(_ sendID: UInt64, to peer: DeviceID, files: [SentFile]) {
+        for (index, file) in files.enumerated() {
+            insert(
+                Row(
+                    id: .outgoing(sendID: sendID, index: UInt32(index)), name: file.name, peer: peer,
+                    bytesTotal: file.bytes))
+        }
     }
 
     func sent(_ progress: SendProgress) {
         guard progress.item.kind == .sent else { return }
         let key = Row.Key.outgoing(sendID: progress.item.objectID, index: progress.item.index)
-        if !rows.contains(where: { $0.id == key }) {
-            guard progress.state == .sending else { return }  // ended before it was listed
-            let names = sendNames[progress.item.objectID]?.names ?? []
-            let index = Int(progress.item.index)
-            let name = names.indices.contains(index) ? names[index] : ""
-            insert(Row(id: key, name: name, peer: progress.device, bytesTotal: progress.bytesTotal))
-        }
+        guard rows.contains(where: { $0.id == key }) else { return }  // not a send of this run
         update(key) {
             $0.bytesDone = progress.bytesSent
             $0.bytesTotal = progress.bytesTotal
@@ -106,14 +111,13 @@ final class PhoneTransfers {
         }
     }
 
-    /// A send ended: when the computer did not take it, its rows still running fail.
+    /// A send ended: its rows still running end with it, done when the computer took every item.
     func sendFinished(_ sendID: UInt64, _ outcome: SendOutcome) {
-        sendNames[sendID] = nil
-        guard outcome != .received else { return }
         for row in rows where row.state == .running {
-            if case .outgoing(let id, _) = row.id, id == sendID {
-                end(row.id, cancelled.contains(row.id) ? .cancelled : .failed)
-            }
+            guard case .outgoing(let id, _) = row.id, id == sendID else { continue }
+            let state: Row.State =
+                cancelled.contains(row.id) ? .cancelled : outcome == .received ? .done : .failed
+            end(row.id, state)
         }
     }
 

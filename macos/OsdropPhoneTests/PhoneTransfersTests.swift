@@ -39,16 +39,32 @@ struct PhoneTransfersTests {
         #expect(transfers.rows.first?.state == .cancelled)
     }
 
-    @Test("Sent items are listed by name as the computer fetches them, and fail when it declines")
+    private func offer(_ transfers: PhoneTransfers, _ sendID: UInt64) {
+        transfers.offered(sendID, to: mac, files: [.init(name: "a.jpg", bytes: 8), .init(name: "b.jpg", bytes: 8)])
+    }
+
+    @Test("Sent items are listed as soon as the send begins, and fail when the computer declines")
     func sentItems() {
         let transfers = PhoneTransfers()
-        transfers.offered(5, to: mac, names: ["a.jpg", "b.jpg"])
+        offer(transfers, 5)
+        #expect(transfers.rows.map(\.name).sorted() == ["a.jpg", "b.jpg"])
+        #expect(transfers.rows.allSatisfy { $0.isSending && $0.state == .running })
         let item = TransferItem(kind: .sent, objectID: 5, index: 1)
         transfers.sent(SendProgress(device: mac, item: item, bytesSent: 2, bytesTotal: 8, state: .sending))
-        #expect(transfers.rows.first?.name == "b.jpg")
-        #expect(transfers.rows.first?.isSending == true)
+        #expect(transfers.rows.first { $0.name == "b.jpg" }?.bytesDone == 2)
         transfers.sendFinished(5, .declined)
-        #expect(transfers.rows.first?.state == .failed)
+        #expect(transfers.rows.allSatisfy { $0.state == .failed })
+    }
+
+    @Test("A small file fetched before any progress still ends done")
+    func fetchedAtOnce() {
+        let transfers = PhoneTransfers()
+        offer(transfers, 6)
+        let item = TransferItem(kind: .sent, objectID: 6, index: 0)
+        transfers.sent(SendProgress(device: mac, item: item, bytesSent: 8, bytesTotal: 8, state: .done))
+        #expect(transfers.rows.first { $0.name == "a.jpg" }?.state == .done)
+        transfers.sendFinished(6, .received)
+        #expect(transfers.rows.allSatisfy { $0.state == .done })
     }
 
     @Test("Running rows stay above the ones that ended")

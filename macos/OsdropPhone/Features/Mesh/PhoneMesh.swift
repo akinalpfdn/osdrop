@@ -204,7 +204,12 @@ final class PhoneMesh {
         }
         do throws(CoreError) {
             let sendID = try mesh.send(items, to: computer)
-            transfers.offered(sendID, to: computer, names: files.map(\.lastPathComponent))
+            transfers.offered(
+                sendID, to: computer,
+                files: files.map { url in
+                    let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    return PhoneTransfers.SentFile(name: url.lastPathComponent, bytes: UInt64(size))
+                })
             return sendID
         } catch {
             Log.files.error("Sending files failed: \(String(describing: error), privacy: .public)")
