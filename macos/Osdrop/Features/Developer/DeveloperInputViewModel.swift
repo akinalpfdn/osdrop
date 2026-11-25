@@ -67,7 +67,8 @@
             screenDescriber = dependencies.screens
             layout = KeyboardPhysicalLayout.current()
             screens = screenDescriber.screens()
-            screenDescriber.onChange = { [weak self] in
+            // Lives as long as the app: the observation is never stopped.
+            _ = screenDescriber.observe { [weak self] in
                 guard let self else { return }
                 screens = screenDescriber.screens()
             }
