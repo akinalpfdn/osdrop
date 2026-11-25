@@ -196,22 +196,34 @@ Point place_beside(const Placements& placements, const ScreenMap& screens, const
 
 namespace {
 
-enum Side : std::uint8_t { kRight, kLeft, kBelow, kAbove };
+enum class Side : std::uint8_t { Right, Left, Below, Above };
+
+/// The edge of `frame` that faces `side`.
+std::int64_t edge_toward(const Rect& frame, Side side) {
+    switch (side) {
+    case Side::Right:
+        return frame.right();
+    case Side::Left:
+        return frame.left();
+    case Side::Below:
+        return frame.bottom();
+    case Side::Above:
+        return frame.top();
+    }
+    return frame.top();
+}
 
 /// How far a placed computer's monitors reach toward `side`, counting only those across from the
 /// span [from, to) on the other axis; all of them when none is.
 std::int64_t reach(const Screens& screens, Point offset, Side side, std::int64_t from,
                    std::int64_t to) {
-    const bool horizontal = side == kRight || side == kLeft;
+    const bool horizontal = side == Side::Right || side == Side::Left;
+    const bool outward = side == Side::Right || side == Side::Below;
     std::optional<std::int64_t> facing;
     std::optional<std::int64_t> any;
     for (const Monitor& monitor : screens.monitors()) {
         const Rect frame = monitor.frame.moved(offset);
-        const std::int64_t edge = side == kRight   ? frame.right()
-                                  : side == kLeft  ? frame.left()
-                                  : side == kBelow ? frame.bottom()
-                                                   : frame.top();
-        const bool outward = side == kRight || side == kBelow;
+        const std::int64_t edge = edge_toward(frame, side);
         const auto further = [&](const std::optional<std::int64_t>& best) {
             return !best || (outward ? edge > *best : edge < *best);
         };
@@ -248,11 +260,12 @@ Placements follow_screens(const Placements& placements, const ScreenMap& screens
         const std::array<std::int64_t, 4> gaps{
             bounds.left() - was.right(), was.left() - bounds.right(), bounds.top() - was.bottom(),
             was.top() - bounds.bottom()};
-        const auto side = static_cast<Side>(std::ranges::max_element(gaps) - gaps.begin());
-        if (gaps.at(side) < 0) {
+        const auto widest = static_cast<std::size_t>(std::ranges::max_element(gaps) - gaps.begin());
+        if (gaps.at(widest) < 0) {
             continue; // they overlapped: nothing to keep
         }
-        const bool horizontal = side == kRight || side == kLeft;
+        const auto side = static_cast<Side>(widest);
+        const bool horizontal = side == Side::Right || side == Side::Left;
         const std::int64_t from = horizontal ? bounds.top() : bounds.left();
         const std::int64_t to = horizontal ? bounds.bottom() : bounds.right();
         const std::int64_t shift =
