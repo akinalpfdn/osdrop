@@ -163,6 +163,19 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.CompletedTask;
     }
 
+    public List<ScreenInfo> Screens { get; } = [];
+
+    /// <summary>Every list of corners the shell set, the latest last.</summary>
+    public List<IReadOnlyList<CornerPlacement>> CornerLists { get; } = [];
+
+    public Task<IReadOnlyList<ScreenInfo>> GetScreensAsync() => Task.FromResult<IReadOnlyList<ScreenInfo>>([.. Screens]);
+
+    public Task SetCornersAsync(IReadOnlyList<CornerPlacement> corners)
+    {
+        CornerLists.Add(corners);
+        return Task.CompletedTask;
+    }
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);

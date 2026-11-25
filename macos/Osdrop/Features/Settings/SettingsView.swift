@@ -208,9 +208,14 @@ private struct MemberSettings: View {
                 Button("settings.devices.remove", role: .destructive, action: revoke)
                 Button("settings.devices.block", role: .destructive, action: block)
             }
-            permission(.control, "settings.devices.allowControl")
-            permission(.files, "settings.devices.allowFiles")
-            permission(.clipboard, "settings.devices.allowClipboard")
+            if member.platform == .android {
+                permission(.files, "settings.devices.allowFiles")
+                PhoneCornerPicker(viewModel: viewModel, member: member)
+            } else {
+                permission(.control, "settings.devices.allowControl")
+                permission(.files, "settings.devices.allowFiles")
+                permission(.clipboard, "settings.devices.allowClipboard")
+            }
         }
     }
 
@@ -220,6 +225,54 @@ private struct MemberSettings: View {
             isOn: Binding(
                 get: { viewModel.permission(kind, of: member) },
                 set: { viewModel.setPermission(kind, of: member, to: $0) }))
+    }
+}
+
+/// The screen and the corner of a phone's box.
+private struct PhoneCornerPicker: View {
+    let viewModel: SettingsViewModel
+    let member: GroupMember
+
+    var body: some View {
+        let choices = CornerScreens.choices()
+        let corner = viewModel.corner(of: member)
+        // A screen that is not connected shows as the main one, where the box then sits.
+        let screen = choices.contains { $0.id == corner.screen } ? corner.screen : choices.first?.id
+        if choices.count > 1 {
+            Picker(
+                "settings.devices.cornerScreen",
+                selection: Binding(
+                    get: { screen },
+                    set: { viewModel.setCorner(PhoneCorner(screen: $0, corner: corner.corner), of: member) })
+            ) {
+                ForEach(choices) { choice in
+                    (choice.isMain ? Text("settings.devices.mainScreen \(choice.name)") : Text(verbatim: choice.name))
+                        .tag(Optional(choice.id))
+                }
+            }
+        }
+        Picker(
+            "settings.devices.corner",
+            selection: Binding(
+                get: { corner.corner },
+                set: { viewModel.setCorner(PhoneCorner(screen: corner.screen, corner: $0), of: member) })
+        ) {
+            ForEach(ScreenCorner.allCases, id: \.self) { corner in
+                Text(corner.title).tag(corner)
+            }
+        }
+        Note("settings.devices.corner.description")
+    }
+}
+
+extension ScreenCorner {
+    var title: LocalizedStringKey {
+        switch self {
+        case .topLeft: "corner.topLeft"
+        case .topRight: "corner.topRight"
+        case .bottomLeft: "corner.bottomLeft"
+        case .bottomRight: "corner.bottomRight"
+        }
     }
 }
 

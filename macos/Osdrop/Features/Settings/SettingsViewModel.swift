@@ -136,6 +136,15 @@ final class SettingsViewModel {
         }
     }
 
+    /// Where a phone's box sits on this Mac.
+    func corner(of member: GroupMember) -> PhoneCorner {
+        settings.corner(of: member.deviceID)
+    }
+
+    func setCorner(_ corner: PhoneCorner, of member: GroupMember) {
+        settings.phoneCorners[member.deviceID] = corner
+    }
+
     func setPermission(_ kind: PermissionKind, of member: GroupMember, to allowed: Bool) {
         var permissions = member.permissions
         switch kind {

@@ -42,6 +42,16 @@
   <sys:Double x:Key="Osdrop.Width.Button">96</sys:Double>
   <sys:Double x:Key="Osdrop.Width.Setting">220</sys:Double>
 
+  <!-- A phone's box in its corner (DEVPLAN Phase 21): the corner that takes a drag, the box's
+       distance from the screen's sides, its size and the icon of a received file. -->
+  <sys:Double x:Key="Osdrop.Corner.HotZone">64</sys:Double>
+  <sys:Double x:Key="Osdrop.Corner.Inset">8</sys:Double>
+  <sys:Double x:Key="Osdrop.Width.CornerBox">300</sys:Double>
+  <sys:Double x:Key="Osdrop.Height.CornerList">320</sys:Double>
+  <CornerRadius x:Key="Osdrop.Corner.Radius">12</CornerRadius>
+  <Thickness x:Key="Osdrop.Thickness.CornerBorder">1</Thickness>
+  <sys:Double x:Key="Osdrop.Size.CornerRowIcon">28</sys:Double>
+
   <!-- Arrangement editor: every member's monitors to scale. -->
   <sys:Double x:Key="Osdrop.Arrangement.Height">280</sys:Double>
   <!-- Room around the computers to drag into, as a share of the larger side. -->

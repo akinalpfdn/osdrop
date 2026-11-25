@@ -82,6 +82,18 @@ final class AppSettings: InputPreferencesStoring {
         didSet { defaults.set(marksReceivedFiles, forKey: Key.marksReceivedFiles) }
     }
 
+    /// Each phone's box on this Mac; a phone without one gets the default corner.
+    var phoneCorners: [DeviceID: PhoneCorner] {
+        didSet {
+            save(
+                Dictionary(uniqueKeysWithValues: phoneCorners.map { ($0.key.hex, $0.value) }), forKey: Key.phoneCorners)
+        }
+    }
+
+    func corner(of phone: DeviceID) -> PhoneCorner {
+        phoneCorners[phone] ?? PhoneCorner()
+    }
+
     // MARK: Network
 
     /// AWDL is kept off while Osdrop runs (off by default: AirDrop, AirPlay and Sidecar stop).
@@ -112,6 +124,7 @@ final class AppSettings: InputPreferencesStoring {
             ? UInt64(limit) : Tunables.Clipboard.filesLimit
         marksReceivedFiles = defaults.bool(forKey: Key.marksReceivedFiles)
         keepsAWDLOff = defaults.bool(forKey: Key.keepsAWDLOff)
+        phoneCorners = Self.loadCorners(from: defaults)
     }
 
     private func save(_ input: InputSettings) {
@@ -168,6 +181,17 @@ final class AppSettings: InputPreferencesStoring {
         return speeds
     }
 
+    private static func loadCorners(from defaults: UserDefaults) -> [DeviceID: PhoneCorner] {
+        let stored = load([String: PhoneCorner].self, from: defaults, forKey: Key.phoneCorners) ?? [:]
+        var corners: [DeviceID: PhoneCorner] = [:]
+        for (hex, corner) in stored {
+            if let device = DeviceID(hex: hex) {
+                corners[device] = corner
+            }
+        }
+        return corners
+    }
+
     private enum Key {
         static let checksForUpdates = "checkForUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
@@ -178,6 +202,8 @@ final class AppSettings: InputPreferencesStoring {
         static let clipboardFilesLimit = "clipboardFilesLimit"
         static let marksReceivedFiles = "markReceivedFiles"
         static let keepsAWDLOff = "keepAWDLOff"
+        /// Device ID in hex → `PhoneCorner`.
+        static let phoneCorners = "phoneCorners"
 
         enum Input {
             /// "shortcuts" (the default) or "positions".

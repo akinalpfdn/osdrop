@@ -24,10 +24,12 @@ public sealed partial class TransferRow : ObservableObject
     private readonly TransfersViewModel _owner;
 
     internal TransferRow(
-        TransfersViewModel owner, TransferKey key, string name, string peer, ulong bytesDone, ulong bytesTotal)
+        TransfersViewModel owner, TransferKey key, string deviceId, string name, string peer, ulong bytesDone,
+        ulong bytesTotal)
     {
         _owner = owner;
         Key = key;
+        DeviceId = deviceId;
         Name = name;
         Peer = peer;
         BytesDone = bytesDone;
@@ -35,6 +37,16 @@ public sealed partial class TransferRow : ObservableObject
     }
 
     internal TransferKey Key { get; }
+
+    /// <summary>The other computer or phone (hex device ID).</summary>
+    public string DeviceId { get; }
+
+    /// <summary>A received item as it was created, once it arrived; null until then and for sent items.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFile))]
+    public partial string? File { get; internal set; }
+
+    public bool HasFile => File is not null;
 
     public string Name { get; }
 
@@ -143,7 +155,7 @@ public sealed partial class TransfersViewModel : ObservableObject
     /// <summary>Sends to phones the user withdrew: their end needs no notification of its own.</summary>
     private readonly HashSet<ulong> _withdrawnSends = [];
     /// <summary>Ends of transfers reported before they were listed (clipboard ones never are).</summary>
-    private readonly Dictionary<ulong, (CoreResult Result, ulong LinksLeftOut)> _early = [];
+    private readonly Dictionary<ulong, (CoreResult Result, ulong LinksLeftOut, string File)> _early = [];
 
     internal TransfersViewModel(IGroupEngine engine, Func<string, string> nameOf, Action<string, string> notify)
     {
@@ -205,7 +217,7 @@ public sealed partial class TransfersViewModel : ObservableObject
                 Update(TransferKey.Receive(received.Connection), received.BytesDone, received.BytesTotal);
                 break;
             case EngineEventKind.TransferFinished:
-                Finished(received.Connection, received.Reason, received.Code);
+                Finished(received.Connection, received.Reason, received.Code, received.Message);
                 break;
             case EngineEventKind.SendProgress:
                 Sent(received, toPhone: false);
@@ -224,19 +236,21 @@ public sealed partial class TransfersViewModel : ObservableObject
     private void Receiving(EngineEvent received)
     {
         var key = TransferKey.Receive(received.Connection);
-        Insert(new TransferRow(this, key, received.Name, _nameOf(received.DeviceId), 0, received.BytesTotal));
+        Insert(new TransferRow(
+            this, key, received.DeviceId, received.Name, _nameOf(received.DeviceId), 0, received.BytesTotal));
         if (_early.Remove(received.Connection, out var ended))
         {
-            Finished(received.Connection, ended.Result, ended.LinksLeftOut);
+            Finished(received.Connection, ended.Result, ended.LinksLeftOut, ended.File);
         }
     }
 
-    private void Finished(ulong transferId, CoreResult result, ulong linksLeftOut)
+    /// <summary><paramref name="file"/>: the item as it was created, when it arrived.</summary>
+    private void Finished(ulong transferId, CoreResult result, ulong linksLeftOut, string file)
     {
         var key = TransferKey.Receive(transferId);
         if (Find(key) is not { } row)
         {
-            _early[transferId] = (result, linksLeftOut);
+            _early[transferId] = (result, linksLeftOut, file);
             if (_early.Count > AppTunables.TransfersEarlyEnds)
             {
                 _early.Remove(_early.Keys.Min());
@@ -252,6 +266,7 @@ public sealed partial class TransfersViewModel : ObservableObject
         if (state == TransferState.Done && row.IsRunning)
         {
             row.LinksLeftOut = linksLeftOut;
+            row.File = file.Length > 0 ? file : null;
         }
         End(key, state);
     }
@@ -268,7 +283,8 @@ public sealed partial class TransfersViewModel : ObservableObject
                 return; // ended before it was listed
             }
             string name = received.Name.Length > 0 ? received.Name : Localization.Strings.TransfersCopiedFiles;
-            Insert(new TransferRow(this, key, name, _nameOf(received.DeviceId), received.BytesDone, received.BytesTotal));
+            Insert(new TransferRow(
+                this, key, received.DeviceId, name, _nameOf(received.DeviceId), received.BytesDone, received.BytesTotal));
         }
         Update(key, received.BytesDone, received.BytesTotal);
         if (received.Code == done)

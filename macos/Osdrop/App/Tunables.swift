@@ -76,6 +76,11 @@ enum Tunables {
         static let keptStagings = 16
     }
 
+    enum Corner {
+        /// A box that only sent files closes this long after the last one ended.
+        static let sentLinger: Duration = .seconds(3)
+    }
+
     enum Transfers {
         /// Ended transfers the transfers window still lists, newest first.
         static let endedRows = 50

@@ -624,4 +624,49 @@
   <data name="TransfersNotifyNotSent" xml:space="preserve">
     <value>Sending stopped</value>
   </data>
+  <data name="CornerDropHere" xml:space="preserve">
+    <value>Drop here to send to {0}.</value>
+  </data>
+  <data name="CornerDragOut" xml:space="preserve">
+    <value>Drag a file out of the box into any folder or app. Each one is also in Downloads.</value>
+  </data>
+  <data name="CornerClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="CornerShowInFolder" xml:space="preserve">
+    <value>Show in folder</value>
+  </data>
+  <data name="CornerTopLeft" xml:space="preserve">
+    <value>Top left</value>
+  </data>
+  <data name="CornerTopRight" xml:space="preserve">
+    <value>Top right</value>
+  </data>
+  <data name="CornerBottomLeft" xml:space="preserve">
+    <value>Bottom left</value>
+  </data>
+  <data name="CornerBottomRight" xml:space="preserve">
+    <value>Bottom right</value>
+  </data>
+  <data name="SettingsPhoneCorners" xml:space="preserve">
+    <value>Phone corners</value>
+  </data>
+  <data name="SettingsPhoneCornersDescription" xml:space="preserve">
+    <value>Drag files into a phone's corner to send them to it; files from the phone appear there. The box shows while the phone is connected.</value>
+  </data>
+  <data name="SettingsNoPhones" xml:space="preserve">
+    <value>Pair a phone to choose its corner.</value>
+  </data>
+  <data name="SettingsCornerScreen" xml:space="preserve">
+    <value>Box screen</value>
+  </data>
+  <data name="SettingsCorner" xml:space="preserve">
+    <value>Box corner</value>
+  </data>
+  <data name="SettingsMainScreen" xml:space="preserve">
+    <value>{0} (main)</value>
+  </data>
+  <data name="SettingsScreenNumber" xml:space="preserve">
+    <value>Screen {0}</value>
+  </data>
 </root>

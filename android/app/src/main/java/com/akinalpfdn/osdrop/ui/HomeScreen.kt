@@ -43,7 +43,7 @@ interface HomeActions {
     /** Picks files and sends them to a connected computer. */
     fun sendFiles(member: Member)
 
-    fun cancelIncoming(sendId: Long)
+    fun cancelIncoming(files: IncomingFiles)
 }
 
 @Composable
@@ -82,8 +82,8 @@ fun HomeScreen(state: MeshState, incoming: List<IncomingFiles>, sends: List<Outg
                 }
                 item { TextButton(onClick = actions::leaveGroup) { Text(stringResource(R.string.group_leave)) } }
             }
-            items(incoming, key = { it.sendId }) { files -> Incoming(files) { actions.cancelIncoming(files.sendId) } }
-            items(sends.asReversed(), key = { it.id }) { send -> Outgoing(send) }
+            items(incoming, key = { it.listKey }) { files -> Incoming(files) { actions.cancelIncoming(files) } }
+            items(sends.asReversed(), key = { it.listKey }) { send -> Outgoing(send) }
         }
     }
     state.pairing?.let { PairingDialog(it, actions) }

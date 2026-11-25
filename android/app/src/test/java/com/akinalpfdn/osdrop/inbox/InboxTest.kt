@@ -7,6 +7,7 @@ import com.akinalpfdn.osdrop.core.Member
 import com.akinalpfdn.osdrop.core.Platform
 import com.akinalpfdn.osdrop.core.SendOutcome
 import com.akinalpfdn.osdrop.core.SentReceiving
+import com.akinalpfdn.osdrop.outbox.OutgoingSend
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,7 +39,7 @@ class InboxTest {
         override fun receiveSent(device: DeviceId, sendId: Long, index: Int, folder: String): Long {
             if (index in failing) throw CoreException(CoreResult.NOT_FOUND)
             requested += index
-            val transfer = sendId * 100 + index
+            val transfer = (device.bytes[0] - 1) * 10_000L + sendId * 100 + index // unique per computer, as in core
             beforeReturning?.invoke(transfer)
             return transfer
         }
@@ -127,7 +128,7 @@ class InboxTest {
         val inbox = inbox().apply { attach(mesh) }
         inbox.onSendArrived(laptop, 11, listOf("a.jpg", "b.jpg"), listOf(5, 5))
 
-        inbox.cancel(11)
+        inbox.cancel(laptop, 11)
         assertEquals(listOf(1100L, 1101L), mesh.cancelled.sorted())
         inbox.onTransferFinished(1100, CoreResult.CANCELLED, emptyList())
         inbox.onTransferFinished(1101, CoreResult.CANCELLED, emptyList())
@@ -135,6 +136,28 @@ class InboxTest {
         assertEquals(listOf(11L to SendOutcome.Failed), mesh.answers)
         assertTrue(arrivals.isEmpty())
         assertTrue(inbox.incoming.value.isEmpty())
+    }
+
+    @Test
+    fun `should keep sends apart when two computers use the same number`() {
+        val mesh = FakeMesh()
+        val inbox = inbox().apply { attach(mesh) }
+        val desktop = DeviceId(ByteArray(16) { 2 })
+        inbox.onSendArrived(laptop, 1, listOf("a.jpg"), listOf(5))
+        inbox.onSendArrived(desktop, 1, listOf("b.jpg"), listOf(5))
+
+        val incoming = inbox.incoming.value
+        assertEquals(2, incoming.size)
+        assertEquals(2, incoming.map { it.listKey }.toSet().size)
+        inbox.cancel(laptop, 1)
+        assertEquals(1, mesh.cancelled.size)
+    }
+
+    @Test
+    fun `should give incoming and outgoing sends with the same number different list keys`() {
+        val incoming = IncomingFiles(laptop, 1, "Laptop", listOf("a.jpg"), 0, 5)
+        val outgoing = OutgoingSend(1, "Laptop", 1)
+        assertTrue(incoming.listKey != outgoing.listKey)
     }
 
     @Test

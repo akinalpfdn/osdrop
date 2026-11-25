@@ -166,6 +166,65 @@ public sealed class SettingsTests
         }
     }
 
+    [Fact]
+    public void APhonesCornerSurvivesARestartAndADamagedOneFallsBack()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(folder, "settings.json");
+        const string screen = "0102030405060708090a0b0c0d0e0f10";
+        try
+        {
+            var first = AppSettings.Load(path);
+            Assert.Equal(PhoneCorner.Default, first.Corner(_laptop));
+            first.SetCorner(_laptop, new PhoneCorner(screen, ScreenCorner.TopLeft));
+            Assert.Equal(new PhoneCorner(screen, ScreenCorner.TopLeft), AppSettings.Load(path).Corner(_laptop));
+
+            File.WriteAllText(path, "{\"PhoneCorners\": {\"" + _laptop + "\": {\"Screen\": \"x\", \"Corner\": 2}}}");
+            Assert.Equal(PhoneCorner.Default, AppSettings.Load(path).Corner(_laptop));
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ScreensAreOfferedLeftToRightTheMainOneMarkedAndNamelessOnesNumbered()
+    {
+        IReadOnlyList<ScreenChoice> choices = ScreenChoice.Of(
+        [
+            new ScreenInfo("bb", "DELL U2720Q", IsPrimary: true, Left: 0, Top: 0),
+            new ScreenInfo("aa", string.Empty, IsPrimary: false, Left: -1920, Top: 0),
+        ]);
+        Assert.Equal(["aa", "bb"], choices.Select(choice => choice.Key));
+        Assert.Equal(Formatted(Localization.Strings.SettingsScreenNumber, "1"), choices[0].Name);
+        Assert.Equal(Formatted(Localization.Strings.SettingsMainScreen, "DELL U2720Q"), choices[1].Name);
+        Assert.True(choices[1].IsMain);
+    }
+
+    [Fact]
+    public void APhonesCornerRowStartsOnTheMainScreenAndSavesWhatIsChosen()
+    {
+        var stored = AppSettings.InMemory();
+        IReadOnlyList<ScreenChoice> screens =
+            [new ScreenChoice("aa", "Left", IsMain: false), new ScreenChoice("bb", "Main", IsMain: true)];
+        var row = new PhoneCornerRow(
+            _laptop, "Phone", screens, PhoneCorner.Default, changed => stored.SetCorner(changed.DeviceId, changed.Chosen));
+        Assert.Equal("bb", row.Screen?.Key);
+        Assert.Equal(ScreenCorner.BottomRight, row.Corner.Value);
+        Assert.Empty(stored.PhoneCorners); // loading the choice is no change
+
+        row.Screen = screens[0];
+        row.Corner = PhoneCornerRow.Corners[0];
+        Assert.Equal(new PhoneCorner("aa", ScreenCorner.TopLeft), stored.Corner(_laptop));
+    }
+
+    private static string Formatted(string text, string value) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, text, value);
+
     private static async Task<(SettingsViewModel Settings, AppSettings Stored)> MakeAsync(FakeEngine engine)
     {
         var group = new GroupViewModel(engine);

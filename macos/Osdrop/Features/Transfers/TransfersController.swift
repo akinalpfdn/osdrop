@@ -42,6 +42,8 @@ final class TransfersController: DragTransfersTracking {
         var state: State
         /// The links in a received item that did not arrive, known once it arrived.
         var linksLeftOut: UInt64 = 0
+        /// A received item's top-level files and folders, known once it arrived.
+        var files: [URL] = []
 
         var isSending: Bool {
             if case .send = id { true } else { false }
@@ -154,7 +156,10 @@ final class TransfersController: DragTransfersTracking {
             case .failure: .failed
             }
         if case .success(let item) = result {
-            update(.receive(id)) { $0.linksLeftOut = item.skippedLinks }
+            update(.receive(id)) {
+                $0.linksLeftOut = item.skippedLinks
+                $0.files = item.items
+            }
         }
         end(.receive(id), as: state)
     }

@@ -34,6 +34,8 @@ struct PhysicalMonitor {
     std::int32_t bottom = 0;
     std::uint32_t dpi = 96; ///< effective DPI; 96 is 100%
     bool primary = false;
+    PixelRect work{}; ///< without the taskbar; empty when unknown
+    std::string name; ///< as Windows' Display settings shows it; empty when it has none
 };
 
 /// A stable 16-byte key for a monitor from its device interface path (FNV-1a, two seeds).

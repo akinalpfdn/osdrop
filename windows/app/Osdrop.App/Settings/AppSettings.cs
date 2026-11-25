@@ -8,6 +8,16 @@ using Osdrop.App.Interop;
 namespace Osdrop.App.Settings;
 
 /// <summary>
+/// Where a phone's box sits (DEVPLAN Phase 21): a screen by its key (lowercase hex; null, or one not connected,
+/// is the main screen) and a corner of it.
+/// </summary>
+public sealed record PhoneCorner(string? Screen, ScreenCorner Corner)
+{
+    /// <summary>The bottom-right corner of the main screen (user decision 2026-11-24).</summary>
+    public static PhoneCorner Default { get; } = new(null, ScreenCorner.BottomRight);
+}
+
+/// <summary>
 /// What the user chose, saved to %APPDATA%\Osdrop\settings.json on every change (the identity, the
 /// group and the arrangement are the engine's, sealed with DPAPI next to it).
 /// </summary>
@@ -75,6 +85,10 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial IReadOnlyDictionary<string, uint> PointerSpeeds { get; set; } = new Dictionary<string, uint>();
 
+    /// <summary>Each phone's corner (hex device ID); phones not listed use <see cref="PhoneCorner.Default"/>.</summary>
+    [ObservableProperty]
+    public partial IReadOnlyDictionary<string, PhoneCorner> PhoneCorners { get; set; } = new Dictionary<string, PhoneCorner>();
+
     internal InputSettings Input => new(ModifierMapping, CrossesImmediately, CrossingModifiers, PushMilliseconds);
 
     internal EngineOptions EngineOptions =>
@@ -114,6 +128,12 @@ public sealed partial class AppSettings : ObservableObject
     public void SetPointerSpeed(string deviceId, uint permille) =>
         PointerSpeeds = new Dictionary<string, uint>(PointerSpeeds) { [deviceId] = permille };
 
+    public PhoneCorner Corner(string deviceId) =>
+        PhoneCorners.TryGetValue(deviceId, out PhoneCorner? corner) ? corner : PhoneCorner.Default;
+
+    public void SetCorner(string deviceId, PhoneCorner corner) =>
+        PhoneCorners = new Dictionary<string, PhoneCorner>(PhoneCorners) { [deviceId] = corner };
+
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
@@ -146,6 +166,11 @@ public sealed partial class AppSettings : ObservableObject
             PointerSpeeds = (stored.PointerSpeeds ?? [])
                 .Where(entry => entry.Value is >= 250 and <= 4000 && entry.Key.Length == NativeSizes.DeviceId * 2)
                 .ToDictionary(entry => entry.Key, entry => entry.Value);
+            PhoneCorners = (stored.PhoneCorners ?? [])
+                .Where(entry => entry.Key.Length == NativeSizes.DeviceId * 2 && entry.Value is not null
+                    && Enum.IsDefined(entry.Value.Corner)
+                    && entry.Value.Screen is null or { Length: NativeSizes.MonitorKey * 2 })
+                .ToDictionary(entry => entry.Key, entry => entry.Value);
         }
         finally
         {
@@ -162,7 +187,8 @@ public sealed partial class AppSettings : ObservableObject
         var stored = new Stored(
             DeviceName, ChecksForUpdates, LastUpdateCheck, SharesClipboard, ClipboardFilesLimit, ModifierMapping,
             CrossesImmediately, CrossingModifiers, PushMilliseconds, new Dictionary<string, uint>(PointerSpeeds),
-            ReturnHotkey, LockHotkey, RespectsGameCursor, HasShownPanel);
+            ReturnHotkey, LockHotkey, RespectsGameCursor, HasShownPanel,
+            new Dictionary<string, PhoneCorner>(PhoneCorners));
         try
         {
             _ = Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
@@ -188,7 +214,8 @@ public sealed partial class AppSettings : ObservableObject
         Hotkey? ReturnHotkey = null,
         Hotkey? LockHotkey = null,
         bool RespectsGameCursor = true,
-        bool HasShownPanel = false);
+        bool HasShownPanel = false,
+        Dictionary<string, PhoneCorner>? PhoneCorners = null);
 
     /// <summary>Stored chords, or the defaults when they are missing, damaged or the same.</summary>
     private static (Hotkey Return, Hotkey Lock) Usable(Hotkey? returnHome, Hotkey? lockInput) =>

@@ -14,6 +14,7 @@ import com.akinalpfdn.osdrop.app.OsdropApplication
 import com.akinalpfdn.osdrop.core.DeviceId
 import com.akinalpfdn.osdrop.core.Member
 import com.akinalpfdn.osdrop.discovery.DiscoveredDevice
+import com.akinalpfdn.osdrop.inbox.IncomingFiles
 import com.akinalpfdn.osdrop.ui.HomeActions
 import com.akinalpfdn.osdrop.ui.HomeScreen
 import com.akinalpfdn.osdrop.ui.OsdropTheme
@@ -51,7 +52,7 @@ class MainActivity : ComponentActivity() {
                 picker.launch(arrayOf("*/*"))
             }
 
-            override fun cancelIncoming(sendId: Long) = app.inbox.cancel(sendId)
+            override fun cancelIncoming(files: IncomingFiles) = app.inbox.cancel(files.device, files.sendId)
         }
         setContent {
             OsdropTheme {

@@ -88,6 +88,25 @@ internal sealed record InputState(
     public static InputState Unknown { get; } = new(IsReachable: true, IsLocked: false, null, null, null);
 }
 
+/// <summary>A monitor of this PC, for choosing a phone's corner; <paramref name="Key"/> is lowercase hex.</summary>
+internal sealed record ScreenInfo(string Key, string Name, bool IsPrimary, int Left, int Top);
+
+/// <summary>Which corner of a screen.</summary>
+public enum ScreenCorner
+{
+    TopLeft = 0,
+    TopRight = 1,
+    BottomLeft = 2,
+    BottomRight = 3,
+}
+
+/// <summary>
+/// A connected phone's corner as the engine takes it: <paramref name="Screen"/> null or not connected is the main
+/// screen; sizes in device-independent pixels; <paramref name="Box"/> the phone's box window while it shows, else 0.
+/// </summary>
+internal sealed record CornerPlacement(
+    string DeviceId, string? Screen, ScreenCorner Corner, ushort Zone, ushort Inset, nint Box);
+
 /// <summary>One engine event; fields that do not belong to its kind are empty.</summary>
 internal sealed record EngineEvent(
     EngineEventKind Kind,
@@ -129,6 +148,10 @@ internal interface IGroupEngine
     Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths);
     /// <summary>Withdraws a send: the phone stops fetching its items.</summary>
     Task WithdrawSendAsync(ulong sendId);
+    /// <summary>This PC's monitors as the engine last read them.</summary>
+    Task<IReadOnlyList<ScreenInfo>> GetScreensAsync();
+    /// <summary>The connected phones' corners, replacing the last ones (DEVPLAN Phase 21).</summary>
+    Task SetCornersAsync(IReadOnlyList<CornerPlacement> corners);
 
     Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions);
     Task<IReadOnlyList<LayoutComputer>> GetLayoutAsync();

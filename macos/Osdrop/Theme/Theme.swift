@@ -88,6 +88,19 @@ enum Theme {
         static let menuBar = "MenuBarIcon"
     }
 
+    /// A phone's box in a screen corner (DEVPLAN Phase 21).
+    enum Corner {
+        /// The square in the corner that a drag has to reach before the box shows.
+        static let hotZone: CGFloat = 64
+        static let boxWidth: CGFloat = 300
+        /// The list scrolls beyond this height.
+        static let maxListHeight: CGFloat = 320
+        /// Space between the box and the screen's sides.
+        static let inset: CGFloat = 8
+        static let cornerRadius: CGFloat = 12
+        static let rowIcon: CGFloat = 28
+    }
+
     enum Symbol {
         static let warning = "exclamationmark.triangle.fill"
         static let granted = "checkmark.circle.fill"
@@ -114,5 +127,7 @@ enum Theme {
         static let sending = "arrow.up.circle"
         static let receiving = "arrow.down.circle"
         static let cancel = "xmark.circle.fill"
+        static let close = "xmark"
+        static let showInFinder = "magnifyingglass"
     }
 }
