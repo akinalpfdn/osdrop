@@ -19,11 +19,15 @@
 // files' paths: those stay until Osdrop starts again.
 //
 // Core's events only queue work; a thread of the bridge's own calls the group engine.
+//
+// Phones' corners (DEVPLAN Phase 21): the shell says where each connected phone's corner is; a
+// drop there is sent to the phone.
 
 #include "drag/drag_starter.hpp"
 #include "drag/edge_targets.hpp"
 
 #include <osdrop/osdrop.h>
+#include <osdrop/win/corners.hpp>
 #include <osdrop/win/group_engine.hpp>
 #include <osdrop/win/network_drag.hpp>
 #include <osdrop/win/screens.hpp>
@@ -50,6 +54,16 @@ class InputBridge;
 
 namespace osdrop::engine::drag {
 
+/// A phone's corner as the shell chose it.
+struct PhoneCorner {
+    win::DeviceIdBytes device{};
+    win::MonitorKey screen{}; ///< a monitor not connected: the main one
+    win::ScreenCorner corner = win::ScreenCorner::BottomRight;
+    std::int32_t zone = 0;  ///< the corner's side, in device-independent pixels
+    std::int32_t inset = 0; ///< the box's distance from the work area's sides, the same way
+    HWND box = nullptr;     ///< the phone's box while it shows
+};
+
 class DragBridge {
 public:
     /// Called on the bridge's thread.
@@ -59,6 +73,13 @@ public:
         std::function<void(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
                            const std::string& name, std::uint64_t size)>
             receiving;
+        /// A drag that can be taken reached a phone's corner, or left it without a drop.
+        std::function<void(const win::DeviceIdBytes& phone)> corner_entered;
+        std::function<void(const win::DeviceIdBytes& phone)> corner_left;
+        /// A drop in a phone's corner: the send's ID, or why its files could not be sent.
+        std::function<void(const win::DeviceIdBytes& phone, std::uint64_t send_id,
+                           osdrop_result result)>
+            corner_dropped;
     };
 
     /// `staging`: where arriving drags are received, emptied now.
@@ -75,6 +96,8 @@ public:
     /// Whether the developer loopback has the edges. Any thread.
     void set_paused(bool paused);
     void set_monitors(std::vector<win::PhysicalMonitor> monitors);
+    /// The connected phones' corners. Any thread.
+    void set_corners(std::vector<PhoneCorner> corners);
 
     // Core's events, on its thread: they only queue.
     void arrived(const win::DragArrival& arrival);
@@ -110,6 +133,7 @@ private:
     void post_after(Clock::duration delay, std::function<void()> task);
     void run();
     void update_strips();
+    void update_corners();
 
     // On the bridge's thread.
     void report(std::vector<std::filesystem::path> files, bool virtual_files);
@@ -119,6 +143,8 @@ private:
     void arrive(const win::DragArrival& arrival);
     void arrival_ended(std::uint32_t drag_id, DragOutcome outcome);
     void arrival_done(const std::shared_ptr<Arrival>& arrival);
+    void corner_send(const win::DeviceIdBytes& phone,
+                     const std::vector<std::filesystem::path>& items);
 
     win::GroupEngine& group_;
     InputBridge& input_;
@@ -133,6 +159,7 @@ private:
     bool active_ = false;                                                     ///< under mutex_
     bool paused_ = false;                                                     ///< under mutex_
     std::vector<win::PhysicalMonitor> monitors_;                              ///< under mutex_
+    std::vector<PhoneCorner> corners_;                                        ///< under mutex_
 
     std::atomic<DropTaking> taking_{DropTaking::Refuse}; ///< read at a drop on the targets
     std::atomic<bool> reported_{false};                  ///< a drag of this PC is reported

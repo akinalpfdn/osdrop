@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -37,7 +38,7 @@ osdrop_txt_record record_of(const osdrop_advertisement& advertisement) {
 TEST(Discovery, TheTxtRecordUsesTheDocumentedValues) {
     const osdrop_txt_record record = record_of(grouped_pc());
     EXPECT_STREQ(record.protocol_version, "1");
-    EXPECT_STREQ(record.protocol_minor, "0");
+    EXPECT_STREQ(record.protocol_minor, "1");
     EXPECT_STREQ(record.device_id, "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf");
     EXPECT_STREQ(record.name, "Akınalp'ın PC");
     EXPECT_STREQ(record.os, "windows");
@@ -60,6 +61,23 @@ TEST(Discovery, ARecordReadsBackAsTheSameAdvertisement) {
         ASSERT_EQ(osdrop_advertisement_from_txt(&record, &parsed), OSDROP_OK);
         EXPECT_EQ(std::memcmp(&parsed, &original, sizeof(parsed)), 0);
     }
+}
+
+TEST(Discovery, PhonesAdvertiseTheirSystem) {
+    for (const auto& [platform, os] :
+         {std::pair{OSDROP_PLATFORM_ANDROID, "android"}, std::pair{OSDROP_PLATFORM_IOS, "ios"}}) {
+        osdrop_advertisement phone = grouped_pc();
+        phone.platform = platform;
+        const osdrop_txt_record record = record_of(phone);
+        EXPECT_STREQ(record.os, os);
+        osdrop_advertisement parsed{};
+        ASSERT_EQ(osdrop_advertisement_from_txt(&record, &parsed), OSDROP_OK);
+        EXPECT_EQ(parsed.platform, platform);
+    }
+    osdrop_advertisement unknown = grouped_pc();
+    unknown.platform = static_cast<osdrop_platform>(OSDROP_PLATFORM_IOS + 1);
+    osdrop_txt_record record{};
+    EXPECT_EQ(osdrop_advertisement_to_txt(&unknown, &record), OSDROP_ERROR_VALUE_OUT_OF_RANGE);
 }
 
 TEST(Discovery, ANewerProtocolVersionIsReportedNotRefused) {
@@ -114,8 +132,8 @@ TEST(Discovery, InvalidAdvertisementsAreNotPublished) {
     };
     const osdrop_result range = OSDROP_ERROR_VALUE_OUT_OF_RANGE;
     expect([](osdrop_advertisement& a) { a.protocol_version = 0; }, range, "version 0");
-    expect([](osdrop_advertisement& a) { a.platform = static_cast<osdrop_platform>(3); }, range,
-           "platform 3");
+    expect([](osdrop_advertisement& a) { a.platform = static_cast<osdrop_platform>(5); }, range,
+           "platform 5");
     expect([](osdrop_advertisement& a) { a.has_group = 2; }, range, "has_group 2");
     expect([](osdrop_advertisement& a) { std::memset(a.group_id, 0, sizeof(a.group_id)); }, range,
            "zero group ID");

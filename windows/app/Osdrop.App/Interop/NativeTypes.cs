@@ -52,6 +52,8 @@ internal enum Platform
 {
     MacOS = 1,
     Windows = 2,
+    Android = 3,
+    IOS = 4,
 }
 
 /// <summary>osdrop_log_level.</summary>
@@ -87,6 +89,11 @@ internal enum EngineEventKind
     TransferProgress = 19,
     TransferFinished = 20,
     SendProgress = 21,
+    SendFinished = 22,
+    SentProgress = 23,
+    CornerEntered = 24,
+    CornerLeft = 25,
+    CornerDropped = 26,
 }
 
 internal static class NativeSizes
@@ -282,4 +289,27 @@ internal struct NativeLayoutComputer
     public NativePlacement Placement;
     public byte MonitorCount;
     public NativeMonitors Monitors;
+}
+
+/// <summary>osdrop_engine_screen.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeScreen
+{
+    public fixed byte Key[NativeSizes.MonitorKey];
+    public byte Primary;
+    public int Left;
+    public int Top;
+    public fixed byte Name[NativeSizes.Name];
+}
+
+/// <summary>osdrop_engine_corner.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeCorner
+{
+    public fixed byte DeviceId[NativeSizes.DeviceId];
+    public fixed byte ScreenKey[NativeSizes.MonitorKey];
+    public byte Corner;
+    public ushort Zone;
+    public ushort Inset;
+    public ulong BoxWindow;
 }

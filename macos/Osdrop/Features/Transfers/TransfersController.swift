@@ -42,6 +42,8 @@ final class TransfersController: DragTransfersTracking {
         var state: State
         /// The links in a received item that did not arrive, known once it arrived.
         var linksLeftOut: UInt64 = 0
+        /// A received item's top-level files and folders, known once it arrived.
+        var files: [URL] = []
 
         var isSending: Bool {
             if case .send = id { true } else { false }
@@ -60,19 +62,23 @@ final class TransfersController: DragTransfersTracking {
     @ObservationIgnored private let notifier: any TransferNotifying
     @ObservationIgnored private let cancelReceiving: @MainActor (UInt64) -> Void
     @ObservationIgnored private let withdrawDrag: @MainActor (UInt32) -> Void
+    @ObservationIgnored private let withdrawSend: @MainActor (UInt64) -> Void
     @ObservationIgnored private var dragNames: [(dragID: UInt32, names: [String])] = []
+    @ObservationIgnored private var sendNames: [(sendID: UInt64, names: [String])] = []
     /// Ends of transfers reported before they were registered.
     @ObservationIgnored private var early: [UInt64: Result<ReceivedItem, CoreError>] = [:]
     @ObservationIgnored private var cancelled: Set<Row.Key> = []
 
     init(
         nameOf: @escaping @MainActor (DeviceID) -> String, notifier: any TransferNotifying,
-        cancelReceiving: @escaping @MainActor (UInt64) -> Void, withdrawDrag: @escaping @MainActor (UInt32) -> Void
+        cancelReceiving: @escaping @MainActor (UInt64) -> Void, withdrawDrag: @escaping @MainActor (UInt32) -> Void,
+        withdrawSend: @escaping @MainActor (UInt64) -> Void = { _ in }
     ) {
         self.nameOf = nameOf
         self.notifier = notifier
         self.cancelReceiving = cancelReceiving
         self.withdrawDrag = withdrawDrag
+        self.withdrawSend = withdrawSend
     }
 
     func name(of row: Row) -> String {
@@ -85,6 +91,14 @@ final class TransfersController: DragTransfersTracking {
         dragNames.append((dragID, names))
         if dragNames.count > Tunables.Transfers.rememberedDrags {
             dragNames.removeFirst()
+        }
+    }
+
+    /// This Mac sent these items, in order, to one member without a drag (a phone).
+    func offeredSend(sendID: UInt64, names: [String]) {
+        sendNames.append((sendID, names))
+        if sendNames.count > Tunables.Transfers.rememberedDrags {
+            sendNames.removeFirst()
         }
     }
 
@@ -120,6 +134,8 @@ final class TransfersController: DragTransfersTracking {
         switch row.id {
         case .receive(let id):
             cancelReceiving(id)
+        case .send(_, let item) where item.kind == .sent:
+            withdrawSend(item.objectID)
         case .send(_, let item):
             withdrawDrag(UInt32(truncatingIfNeeded: item.objectID))
         }
@@ -140,7 +156,10 @@ final class TransfersController: DragTransfersTracking {
             case .failure: .failed
             }
         if case .success(let item) = result {
-            update(.receive(id)) { $0.linksLeftOut = item.skippedLinks }
+            update(.receive(id)) {
+                $0.linksLeftOut = item.skippedLinks
+                $0.files = item.items
+            }
         }
         end(.receive(id), as: state)
     }
@@ -166,10 +185,13 @@ final class TransfersController: DragTransfersTracking {
     }
 
     private func name(of item: TransferItem) -> String {
-        guard item.kind == .drag,
-            let names = dragNames.last(where: { UInt64($0.dragID) == item.objectID })?.names,
-            Int(item.index) < names.count
-        else {
+        let names: [String]? =
+            switch item.kind {
+            case .drag: dragNames.last(where: { UInt64($0.dragID) == item.objectID })?.names
+            case .sent: sendNames.last(where: { $0.sendID == item.objectID })?.names
+            case .clipboard: nil
+            }
+        guard let names, Int(item.index) < names.count else {
             return String(localized: "transfers.copiedFiles")
         }
         return names[Int(item.index)]

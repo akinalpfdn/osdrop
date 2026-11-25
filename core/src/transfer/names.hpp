@@ -1,8 +1,9 @@
 #pragma once
 
 // Received names as the receiving file system can hold them (DEVPLAN, Phase 13): NFC on every
-// platform; on Windows, characters it refuses become their fullwidth look-alikes, trailing dots and
-// spaces their look-alikes, and reserved device names get an underscore. Names are cut, not
+// platform; on Windows and Android (whose shared storage refuses the same characters), characters
+// Windows refuses become their fullwidth look-alikes, trailing dots and spaces their look-alikes,
+// and reserved device names get an underscore. Names are cut, not
 // refused, when they are longer than the target allows, and names that one folder would hold twice
 // on a case-insensitive file system are numbered. A name the target can hold maps to itself.
 
@@ -16,7 +17,7 @@
 
 namespace osdrop::transfer {
 
-enum class TargetPlatform : std::uint8_t { MacOS, Windows };
+enum class TargetPlatform : std::uint8_t { MacOS, Windows, Android };
 
 /// The platform this build runs on.
 [[nodiscard]] TargetPlatform current_platform();

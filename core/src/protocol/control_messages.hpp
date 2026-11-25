@@ -43,9 +43,20 @@ enum class ControlType : std::uint8_t {
     DragOffer = 0x31,
     DragResult = 0x32,
     ClipboardAnnounce = 0x40,
+    SendOffer = 0x50,
+    SendResult = 0x51,
 };
 
-enum class Platform : std::uint8_t { MacOS = 1, Windows = 2 };
+enum class Platform : std::uint8_t { MacOS = 1, Windows = 2, Android = 3, IOS = 4 };
+/// Platforms 1 to this are known; new ones are appended. Peers before protocol minor 1 know only
+/// macOS and Windows; minor 1 adds Android and iOS (PROTOCOL.md "Versioning").
+inline constexpr std::uint8_t kLastPlatform = 4;
+
+/// Whether a peer speaking protocol minor `minor` knows `platform`: one that does not refuses any
+/// Hello or RosterState that names it.
+constexpr bool knows_platform(std::uint8_t minor, Platform platform) {
+    return platform == Platform::MacOS || platform == Platform::Windows || minor >= 1;
+}
 enum class PairingDecision : std::uint8_t { Accepted = 1, Rejected = 2 };
 enum class ByeReason : std::uint8_t {
     UserDisconnected = 1,
@@ -77,6 +88,7 @@ enum class ScrollPhase : std::uint8_t {
 enum class MomentumPhase : std::uint8_t { None = 0, Began = 1, Changed = 2, Ended = 3 };
 enum class ItemKind : std::uint8_t { File = 1, Folder = 2 };
 enum class DragOutcome : std::uint8_t { Dropped = 1, Cancelled = 2, Failed = 3 };
+enum class SendOutcome : std::uint8_t { Received = 1, Declined = 2, Failed = 3 };
 enum class ClipboardFormat : std::uint8_t {
     PlainText = 1,
     RichText = 2,
@@ -356,6 +368,21 @@ struct DragResult {
     bool operator==(const DragResult&) const = default;
 };
 
+/// Files sent to one member without a drag (protocol minor 1).
+struct SendOffer {
+    static constexpr ControlType kType = ControlType::SendOffer;
+    std::uint64_t send_id = 0;
+    std::vector<OfferedItem> items;
+    bool operator==(const SendOffer&) const = default;
+};
+
+struct SendResult {
+    static constexpr ControlType kType = ControlType::SendResult;
+    std::uint64_t send_id = 0;
+    SendOutcome outcome = SendOutcome::Received;
+    bool operator==(const SendResult&) const = default;
+};
+
 struct AnnouncedFormat {
     ClipboardFormat format = ClipboardFormat::PlainText;
     std::uint64_t byte_count = 0;
@@ -373,7 +400,8 @@ using ControlMessage =
     std::variant<Hello, HandshakeMessage, PairingConfirm, Capabilities, SessionSetup, Ping, Pong,
                  Heartbeat, PeerError, Bye, RosterState, ScreenReport, LayoutState, Enter, Leave,
                  Refuse, KeyEvent, ButtonEvent, ScrollEvent, ReleaseAll, CursorReport,
-                 LocalTakeover, DragProbe, DragOffer, DragResult, ClipboardAnnounce>;
+                 LocalTakeover, DragProbe, DragOffer, DragResult, ClipboardAnnounce, SendOffer,
+                 SendResult>;
 
 [[nodiscard]] ControlType type_of(const ControlMessage& message);
 

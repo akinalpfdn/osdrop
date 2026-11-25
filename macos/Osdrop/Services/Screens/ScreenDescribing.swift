@@ -21,15 +21,42 @@ struct ScreenDescription: Equatable, Sendable, Identifiable {
 @MainActor
 protocol ScreenDescribing: AnyObject {
     func screens() -> [ScreenDescription]
-    /// Called on the main actor whenever displays are added, removed, moved or change mode.
-    var onChange: (() -> Void)? { get set }
+    /// Calls `handler` on the main actor whenever displays are added, removed, moved or change
+    /// mode, until `stopObserving`. Several parts of the app follow the displays at once.
+    func observe(_ handler: @escaping @MainActor () -> Void) -> ScreenObservation
+    func stopObserving(_ observation: ScreenObservation)
+}
+
+/// One `observe` call's handle.
+struct ScreenObservation: Hashable, Sendable {
+    fileprivate(set) var id = UUID()
+}
+
+/// The handlers following the displays, for describers to keep.
+@MainActor
+struct ScreenObservers {
+    private var handlers: [ScreenObservation: @MainActor () -> Void] = [:]
+
+    mutating func add(_ handler: @escaping @MainActor () -> Void) -> ScreenObservation {
+        let observation = ScreenObservation()
+        handlers[observation] = handler
+        return observation
+    }
+
+    mutating func remove(_ observation: ScreenObservation) {
+        handlers[observation] = nil
+    }
+
+    func notify() {
+        handlers.values.forEach { $0() }
+    }
 }
 
 @MainActor
 final class CGScreenDescriber: ScreenDescribing {
     private static let maximumDisplays: UInt32 = 32
 
-    var onChange: (() -> Void)?
+    private var observers = ScreenObservers()
     nonisolated(unsafe) private var observer: NSObjectProtocol?
 
     init() {
@@ -38,7 +65,7 @@ final class CGScreenDescriber: ScreenDescribing {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 Log.screens.info("Display configuration changed")
-                self?.onChange?()
+                self?.observers.notify()
             }
         }
     }
@@ -47,6 +74,14 @@ final class CGScreenDescriber: ScreenDescribing {
         if let observer {
             NotificationCenter.default.removeObserver(observer)
         }
+    }
+
+    func observe(_ handler: @escaping @MainActor () -> Void) -> ScreenObservation {
+        observers.add(handler)
+    }
+
+    func stopObserving(_ observation: ScreenObservation) {
+        observers.remove(observation)
     }
 
     func screens() -> [ScreenDescription] {
@@ -59,13 +94,18 @@ final class CGScreenDescriber: ScreenDescribing {
         return displays.prefix(Int(count)).map(Self.describe)
     }
 
+    /// The display's UUID, stable across reboots and reconnections.
+    nonisolated static func identifier(of display: CGDirectDisplayID) -> String {
+        let uuid = CGDisplayCreateUUIDFromDisplayID(display)?.takeRetainedValue()
+        return uuid.flatMap { CFUUIDCreateString(kCFAllocatorDefault, $0) as String? } ?? "display-\(display)"
+    }
+
     private static func describe(_ display: CGDirectDisplayID) -> ScreenDescription {
         let frame = CGDisplayBounds(display)
         let mode = CGDisplayCopyDisplayMode(display)
-        let uuid = CGDisplayCreateUUIDFromDisplayID(display)?.takeRetainedValue()
-        let id = uuid.flatMap { CFUUIDCreateString(kCFAllocatorDefault, $0) as String? } ?? "display-\(display)"
         return ScreenDescription(
-            id: id, displayID: display, frame: frame, pixelWidth: mode?.pixelWidth ?? Int(frame.width),
+            id: identifier(of: display), displayID: display, frame: frame,
+            pixelWidth: mode?.pixelWidth ?? Int(frame.width),
             pixelHeight: mode?.pixelHeight ?? Int(frame.height), isMain: CGDisplayIsMain(display) != 0)
     }
 }

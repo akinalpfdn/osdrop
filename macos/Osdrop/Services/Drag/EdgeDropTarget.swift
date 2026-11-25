@@ -23,6 +23,8 @@ enum EdgeDropDecision: Sendable, Equatable {
 final class EdgeDropTarget {
     /// Called when a drag enters, with what the pasteboard offers.
     var onEnter: ((_ fileCount: Int, _ promiseCount: Int) -> Void)?
+    /// Called when a drag that entered leaves without a drop.
+    var onExit: (() -> Void)?
     /// Decides the drop; called synchronously when the source app's drag is released on the edge.
     var decide: (() -> EdgeDropDecision)?
     /// Called when the drop holds promises and Osdrop waits for the source app to write them.
@@ -175,6 +177,10 @@ private final class EdgeDropView: NSView {
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         target?.entered(sender) ?? []
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        target?.onExit?()
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {

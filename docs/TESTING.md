@@ -327,6 +327,7 @@ these tests take over input on every computer they cross.
 | U7 | Advanced | Copy diagnostics, export the log | The text has no computer names or addresses; Finder shows the log file |
 | U8 | VoiceOver | Go through the menu and every Settings tab with VoiceOver | Every control is announced with its name |
 | U9 | Menu opens by itself | Quit Osdrop, run `defaults delete com.akinalpfdn.osdrop shownMenu`, start it; quit and start it again; while it runs, open it again from Applications or Spotlight | The first start opens the menu under the icon, after the permissions window is closed when that shows; the second start does not; opening it while it runs opens the menu |
+| U10 | Transfers list | Send four files one after another, open the menu, press "Show all" | The menu lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Windows interface (Phase 17)
 
@@ -344,6 +345,7 @@ On the PC with Osdrop built from the branch, the service installed and a Mac in 
 | WU8 | Chords | In Settings › Input record Ctrl+Alt+Shift+H for "Bring the cursor back", cross to the Mac and press it; try to record the same combination for the other chord; press "Reset to defaults" | Ctrl+Alt+Shift+H brings the cursor back and Ctrl+Alt+Win+Esc no longer does; the second recording is refused with a message; after the reset Ctrl+Alt+Win+Esc works again |
 | WU9 | Games | Start a full-screen game on the PC, push its cursor against the Mac's side; turn off "Don't cross while a game holds the cursor" and push again; quit the game and push | With the game holding the cursor it stays on the PC; with the setting off it crosses; after the game it crosses as before |
 | WU10 | Panel opens by itself | Quit Osdrop, remove `"HasShownPanel": true` from `%APPDATA%\Osdrop\settings.json` (or install for a user who never ran it) and start it, or let the installer start it; quit and start it again; while it runs, start it again from the Start menu | The first start opens the panel above the taskbar; the second start does not; a start while it runs opens it |
+| WU11 | Transfers list | Send four files one after another, open the panel, press "Show all" | The panel lists the three newest, each ended one on two lines; "Show all (4)" opens a window with all four, newest first |
 
 ### Robustness (Phase 18)
 
@@ -361,14 +363,76 @@ the members are connected again and the cursor crosses, without restarting Osdro
 | R7 | Locked screen | Lock the PC (Win+L) and push the Mac's cursor against its edge; unlock and push again. Then lock the Mac (⌃⌘Q) and push from the PC | Locked: the edge is a wall and the controlling computer says the other one is locked; unlocked: it crosses |
 | R8 | Locked while controlled | While the Mac controls the PC, press Win+L on the PC's own keyboard | The cursor comes back to the Mac; the PC is refused until it is unlocked |
 | R9 | Another user | Switch to another user on the Mac (Fast User Switching) and on the PC (Switch user), then back | While the other user is in front, crossing in is refused; back to the first user, it crosses again |
-| R10 | Osplay displays | With Osplay showing the Mac's virtual displays on the PC, open Osdrop's arrangement on both | The virtual displays are ordinary monitors in the arrangement; the cursor crosses through them as through any monitor |
+| R10 | Osplay displays | Start Osplay's Mac → PC display while Osdrop runs, open the arrangement, move the cursor right; stop Osplay and do it again | With Osplay on, the virtual displays are in the Mac's part of the arrangement, the PC moved past them and the cursor reaches the virtual displays, then the PC; with Osplay off, the PC is back beside the MacBook and the cursor crosses there |
 | R11 | Diagnostics | Settings › Advanced › Copy diagnostics on both computers; paste into a text editor | Versions, members, sessions and recent log lines; no typed text, clipboard contents or file names |
 | R12 | Two hours | Use both computers for two hours with crossings, drags and pastes; note Osdrop's memory (Activity Monitor, Task Manager) and the input latency (developer window) at the start and the end | Memory within 20 % of the start; the latency median does not grow |
+
+### Phones (Phase 20)
+
+Run with an Android phone (Android 12 or later) and the 0.2 apps on a Mac and a PC, on one Wi-Fi
+network. Osdrop stays open on the phone unless a row says otherwise.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| P1 | Pairing | On the phone, **Pair** next to the Mac; accept the code on both. Then pair the PC from the Mac's group | The phone lists both computers as connected; the Mac's menu and the PC's panel show it with a phone icon |
+| P2 | Computer → phone | Mac: the phone's row › **Send files to this phone**, pick a photo, a 2 GB file and a folder of photos. PC: the same from the panel's "…" menu | Progress on the computer and on the phone; everything arrives intact in Download › Osdrop, the photos also in the gallery; a notification on the phone |
+| P3 | APK | Send an APK from a computer | The phone's notification opens the installer |
+| P4 | Phone → computer | Share a photo and a 2 GB video from the gallery to Osdrop, pick the Mac; again from the app's **Send files** to the PC | They arrive in the computer's Downloads, listed with progress and a notification |
+| P5 | Cancel | During P2 and P4, cancel on the receiving side, then on the sending side | Both sides stop; no partial file stays in Downloads; the sender says the sending stopped |
+| P6 | App closed | Close Osdrop on the phone (swipe it away), then open it again | The computers show the phone as not connected, and connected again without a code |
+| P7 | Files permission | On the Mac, turn off files for the phone; send from the phone | The send is refused at once and the phone says so |
+| P8 | Old computer | A computer on 0.1 in the group | The 0.1 computer keeps working with the others and does not list the phone |
+
+### iPhone and iPad (Phase 22)
+
+Osdrop open in the foreground on an iPhone or iPad (the iPad stands in for the iPhone), on the
+same network as the Mac and the PC.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| IP1 | Pairing | Open Osdrop on the device, allow local network access, pair with the Mac, then with the PC | Each computer lists the device as a phone; the device lists both as connected |
+| IP2 | Drop to the device | Drag a file into the device's corner on the Mac and on the PC | The box shows the device's name; the file appears in the transfers and in Files › Osdrop |
+| IP3 | Send from the app | Send a photo and a file to the Mac and to the PC from the computer's row | The rows end done on the device; the computer's box opens and the files are in Downloads |
+| IP4 | Share sheet | Share photos from Photos to Osdrop, pick a computer, then open Osdrop | The photos go once Osdrop is open |
+| IP5 | Save to Photos | Save a received photo and a video to Photos | Asks once for permission, then both are in Photos |
+| IP6 | Background | Send Osdrop to the background, then open it again | The computers show the device as not connected, then connected again; a transfer under way finishes first |
+
+### Phone corners (Phase 21)
+
+A phone in the group with Osdrop open on it; Settings › Devices sets its box's screen and corner.
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| PB1 | Drop to the phone | Drag files from Finder or Explorer into the phone's corner, drop them in the box | The box shows the phone's name once the drag reaches the corner; the files arrive on the phone, the box shows their progress and closes a moment after they arrived |
+| PB2 | Files from the phone | Share photos from the phone to the computer | The box opens in the corner by itself; each photo can be dragged out into a folder and a chat app; the photos are also in Downloads |
+| PB3 | Screen and corner | Choose another screen and corner for the phone, drag again | The box shows at the new place |
+| PB4 | Phone away | Close Osdrop on the phone, drag a file into the corner | Nothing shows and the drag is not taken |
+| PB5 | Crossing | Drag a file to an edge with another computer beside it, away from the corner | The drag crosses to the other computer as before |
+| PB6 | Two screens of different scale (PC) | Put the phone's corner on a monitor at another scale than the main one, drag into it and share a photo from the phone | The box sits in that monitor's corner, inside the taskbar's edge, and the drop reaches the phone |
 
 ### Runs
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | release/0.2.0 | Not run before 0.2.0, by the user's decision: a 2 GB file to a phone, P8 (a 0.1 computer in a group with a phone), R10 PC → Mac | Untested; the 0.2.0 release notes list them |
+| 2026-11-25 | feature/phase-19-osplay-displays (3ee7e8d), M3 Air (Debug) + NVIDIA PC (feature/mobile-03-iphone, Release) | R10 Mac → PC | Pass, as reported by the user after the fix: Osplay started and stopped twice; the virtual displays came and went in the arrangement, the PC moved past them and back, the cursor crossed right both ways. Before it, debug builds never reported display changes after start (the developer window took the handler, fixed in 3ee7e8d) |
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + iPad A16 (Debug) | IP4, IP5, IP6 | Pass, as reported by the user: photos shared to Osdrop went once it was opened, a received photo and video were saved to Photos after one permission prompt, the iPad left and rejoined the group with the app |
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + NVIDIA PC (Release) + iPad A16 (Debug) | IP1, IP2, IP3 with the Mac and the PC | Pass, as reported by the user: the iPad paired with both, files dropped in its corner arrived, photos sent from the app ended done and opened the computers' boxes |
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), Release, NVIDIA PC | PC build: ctest 405/405, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass, as reported by the PC; no fix needed |
+| 2026-11-25 | feature/mobile-02-corner-box (da1f6ab), M3 Air (Debug) + NVIDIA PC (Release) + Android phone (debug APK) | PB5 both ways; PB3, PB4 with the Mac | Pass, as reported by the user: files dragged to the facing edge away from the corner crossed Mac → PC and PC → Mac with no box; the Mac box followed a new corner; with the phone app closed the Mac corner took nothing |
+| 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC + Android phone (debug APK) | PB1, PB2, PB3, PB4, PB6 with the PC | Pass, as reported by the user: a file dragged to the corner reached the phone, a shared photo opened the box and was dragged out to the desktop, the box followed a new corner and screen, with the phone app closed the corner took nothing |
+| 2026-11-25 | feature/mobile-02-corner-box (ed0ad51), Release, NVIDIA PC | PC build: ctest 404/404, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass after two fixes on the PC: a local shadowing a member in report_screens (MSVC C4458, 3667b76) and display config headers built without their type (clang-tidy, ed0ad51) |
+| 2026-11-25 | feature/mobile-02-corner-box (0db9936), Debug, M3 Air + Android phone (debug APK) | PB1, rest of PB2 with the Mac; the crash scenario | Pass, as reported by the user: a file dragged to the very corner opened the box and reached the phone; a photo dragged out of the box was copied; the phone app no longer crashed when the Mac sent after the phone had sent |
+| 2026-11-24 | feature/mobile-02-corner-box (caeaadf), Debug, M3 Air + Android phone (debug APK) | PB1, PB2 with the Mac | PB2: the box opened by itself when the phone sent files. PB1 failed: the corner sat above the Dock, fixed in 327f825. The phone app crashed when the Mac sent after the phone had sent (two list rows with the same key), fixed in 0db9936 |
+| 2026-11-24 | feature/mobile-01-android (3b30686), Release, NVIDIA PC + Android phone (debug APK) | P2, P5, P7 with the PC, WU11 | Pass, as reported by the user: the panel sent a file to the phone, cancelling stopped it, with files off the phone's send was refused, the panel listed the three newest transfers and "Show all" opened every one. P8 not run |
+| 2026-11-24 | feature/mobile-01-android (ffbb2e2), Release, NVIDIA PC + Android phone (debug APK) | PC build: ctest 399/399, clang-tidy, dotnet format, build with 0 warnings, dotnet test 41/41; P1 and P4 with the PC | Pass: the phone paired with the PC and files sent from the phone landed in Downloads |
+| 2026-11-24 | feature/mobile-01-android (7e7ff28), Debug, M3 Air + Android phone (debug APK) | P7, U10 | Pass, as reported by the user: with files off the phone's send was refused; the menu listed the three newest transfers and "Show all" opened every one |
+| 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P4 from the share sheet, P5, P6 with the Mac | Pass, as reported by the user: a shared file reached the Mac, cancelling stopped the transfer, the phone reconnected without a code after the app was closed and opened |
+| 2026-11-24 | feature/mobile-01-android (a9bf3b2), Debug, M3 Air + Android phone (debug APK) | P3 with the Mac; the phone stayed connected through the run | Pass, as reported by the user: the APK arrived and the notification opened the installer |
+| 2026-11-24 | feature/mobile-01-android (2f61031), Debug, M3 Air + Android phone (debug APK) | P4 with the Mac, from the app's **Send files** | Pass after 2f61031: before it the picker sent Osdrop to the background, the phone dropped its connection and the send failed |
+| 2026-11-24 | feature/mobile-01-android (37a1b53), Debug, M3 Air + Android phone (debug APK) | P1 with the Mac, P2 with one MP4 from the Mac | Pass, as reported by the user: the phone paired and the video arrived. P3–P8 and the PC not run yet |
+| 2026-11-23 | dev (a8bf2b5 and the branches before it), Debug, M3 Air on macOS 27.2 + PC | U9, WU10, I11 with the Mac's trackpad | Pass: the menu opened by itself at the first start (after the permissions window) and when Osdrop was opened again, not at a second start; the PC's panel the same; coming home with the trackpad no longer waits at the edge (8a1db77). The click alone had not opened the menu on macOS 27 |
+| 2026-11-23 | 0.1.1 candidates on the PC and the M3 Air | WU5, I10, I11 with the PC's mouse, installer upgrade from 0.1.0 | Pass (maintainer) |
 | 2026-11-23 | dev (ee4e13a), Debug, M3 Air + PC | Mac → PC in daily use | Fail: the cursor crossed and came back about a hundred times a second (797 captures in 40 minutes); keys reached the PC, the mouse never stayed. The warp that parked the Mac's cursor added its distance to the next mouse delta (b2bafc2); parking removed |
 | 2026-11-22 | dev (6a78f6b) on the PC (debug engine and shell) and the M3 Air | PC → Mac crossings with the new crossing log | Pass: 18 of 18 crossings with the PC's mouse in 26 minutes, each logged by core, and OsdropInput's capture lines within 1–3 ms of each. WU5 and I10 not run yet |
 | 2026-11-21 | dev (21a3a93), Debug, M3 Air connected to the PC | R12, replaced by a look at the running app (user decision) | Mac: after 2 h 45 min of the day's use, footprint 52.3 MB with a lifetime peak of 52.5 MB; over the next 10 minutes 52.1–52.3 MB, 61 open files, 9–11 threads, Mach ports 313 then 299, one TCP connection. No growth. PC: numbers to come |

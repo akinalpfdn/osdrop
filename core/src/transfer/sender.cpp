@@ -408,7 +408,10 @@ bool Sender::serve_content(const StreamKey& key, Serving& serving, const Job& jo
     if (entry.kind == protocol::EntryKind::Link) {
         const std::string& target = tree.sources[job.entry].link_target;
         const auto bytes = protocol::bytes_of(target);
-        const auto range = std::span(bytes).subspan(job.offset, end - job.offset);
+        // Both fit size_t on 32-bit systems too: they stop at the entry's byte count, the length of
+        // the link's target.
+        const auto range = std::span(bytes).subspan(static_cast<std::size_t>(job.offset),
+                                                    static_cast<std::size_t>(end - job.offset));
         if (!range.empty()) {
             streams_.send(key, protocol::ContentChunk{.request_id = job.request_id,
                                                       .offset = job.offset,

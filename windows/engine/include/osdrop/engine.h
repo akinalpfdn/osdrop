@@ -51,11 +51,22 @@ typedef enum osdrop_engine_event_kind {
                                              PC receives, at most every 100 ms */
     OSDROP_ENGINE_TRANSFER_FINISHED = 20, /* connection, reason: OK, CANCELLED, or why not;
                                              code: the links in the item, which a drop on this
-                                             PC leaves out */
+                                             PC leaves out; message: on OK, the item's first
+                                             file or folder as created (absolute path) */
     OSDROP_ENGINE_SEND_PROGRESS = 21,     /* connection: drag ID << 32 | item index; device_id
                                              (the member fetching it), name, bytes_done,
                                              bytes_total; code: 1 sending, 2 every byte went out,
                                              3 stopped */
+    OSDROP_ENGINE_SEND_FINISHED = 22,     /* connection: a send's ID; device_id: the member it
+                                             went to; code: 1 received, 2 declined, 3 failed */
+    OSDROP_ENGINE_SENT_PROGRESS = 23,     /* as SEND_PROGRESS, for files this PC sent a member
+                                             (a phone): connection is the send's ID << 32 | item
+                                             index */
+    OSDROP_ENGINE_CORNER_ENTERED = 24,    /* device_id: a drag that can be taken reached the
+                                             phone's corner (DEVPLAN Phase 21) */
+    OSDROP_ENGINE_CORNER_LEFT = 25,       /* device_id: it left the corner without a drop */
+    OSDROP_ENGINE_CORNER_DROPPED = 26,    /* device_id, connection: the send's ID; reason: OK,
+                                             or why the drop's files could not be sent */
     OSDROP_ENGINE_EVENT_KIND_MAX_ENUM = 0x7FFFFFFF
 } osdrop_engine_event_kind;
 /* NOLINTEND(cppcoreguidelines-use-enum-class,performance-enum-size) */
@@ -136,6 +147,28 @@ typedef struct osdrop_nearby_computer {
     char name[OSDROP_TXT_VALUE_SIZE];
 } osdrop_nearby_computer;
 
+/* A monitor of this PC, for choosing a phone's corner. */
+typedef struct osdrop_engine_screen {
+    uint8_t key[OSDROP_MONITOR_KEY_SIZE];
+    uint8_t primary;
+    int32_t left; /* physical pixels, virtual screen coordinates */
+    int32_t top;
+    char name[OSDROP_TXT_VALUE_SIZE]; /* as Display settings shows it, NUL-terminated UTF-8;
+                                         empty when Windows has none */
+} osdrop_engine_screen;
+
+/* A connected phone's corner (DEVPLAN Phase 21). */
+typedef struct osdrop_engine_corner {
+    uint8_t device_id[OSDROP_DEVICE_ID_SIZE];
+    uint8_t screen_key[OSDROP_MONITOR_KEY_SIZE]; /* a monitor not connected: the main one */
+    uint8_t corner;      /* 0 top left, 1 top right, 2 bottom left, 3 bottom right */
+    uint16_t zone;       /* the corner's side, in device-independent pixels */
+    uint16_t inset;      /* the box's distance from the sides of the monitor without the
+                            taskbar, in device-independent pixels */
+    uint64_t box_window; /* the phone's box (an HWND) while it shows, else 0: the engine places
+                            it in the corner, and the corner then covers it too */
+} osdrop_engine_corner;
+
 /*
  * Starts the engine: loads or creates the identity, starts the mesh and DNS-SD, and reports this
  * PC's monitors. UNSUPPORTED_VERSION: the stored group was written by a newer Osdrop (it is kept).
@@ -176,6 +209,16 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_blocked(osdrop_engine* engine,
 OSDROP_ENGINE_API osdrop_result osdrop_engine_leave_group(osdrop_engine* engine);
 /* The displays changed: the engine reads and reports them again. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_screens_changed(osdrop_engine* engine);
+/* `*out_count` monitors of this PC as last read; BUFFER_TOO_SMALL when they do not fit. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_screens(osdrop_engine* engine,
+                                                      osdrop_engine_screen* out, size_t capacity,
+                                                      size_t* out_count);
+/* The connected phones' corners, replacing the last ones: a drag reaching one is reported with
+   CORNER_ENTERED, and a drop there is sent to the phone (CORNER_DROPPED). Call it again when a
+   box shows, hides or changes its size. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_set_corners(osdrop_engine* engine,
+                                                          const osdrop_engine_corner* corners,
+                                                          size_t count);
 /* Before sleep (peers see PEER_SLEEPING) or quitting. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_close_all(osdrop_engine* engine, uint8_t sleeping);
 /* After waking: browses again, so members are found and dialled again. */
@@ -188,6 +231,16 @@ OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_transfer(osdrop_engine* eng
 /* Withdraws this PC's drag `drag_id`: members fetching its items stop. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine,
                                                             uint32_t drag_id);
+/* Sends `count` files and folders (NUL-terminated UTF-8 absolute paths) to the connected member
+   `device_id`, a phone (DEVPLAN Phase 20): SENT_PROGRESS and SEND_FINISHED follow. Files phones
+   send this PC arrive in Downloads, listed as TRANSFER_RECEIVING. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_send_files(osdrop_engine* engine,
+                                                         const uint8_t* device_id,
+                                                         const char* const* paths, size_t count,
+                                                         uint64_t* out_send_id);
+/* Withdraws a send: the member stops fetching its items. */
+OSDROP_ENGINE_API osdrop_result osdrop_engine_withdraw_send(osdrop_engine* engine,
+                                                            uint64_t send_id);
 /* Stops fetching copied files from another computer; the clipboard keeps what it had. */
 OSDROP_ENGINE_API osdrop_result osdrop_engine_cancel_clipboard_fetch(osdrop_engine* engine);
 /* The user's clipboard settings. Turned off, this PC's copy is withdrawn and copies are neither

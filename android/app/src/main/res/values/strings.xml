@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Osdrop</string>
+    <string name="pair_title">Pair with a computer</string>
+    <string name="pair_hint">Computers running Osdrop on this Wi-Fi network show up here.</string>
+    <string name="pair_action">Pair</string>
+    <string name="group_title">Computers</string>
+    <string name="group_hint">Files sent from these computers arrive in Downloads › Osdrop while Osdrop is open.</string>
+    <string name="group_leave">Leave the group</string>
+    <string name="member_connected">Connected</string>
+    <string name="member_not_connected">Not connected</string>
+    <string name="member_send">Files</string>
+    <string name="member_send_photos">Photos</string>
+    <string name="pairing_title">Pairing with %1$s</string>
+    <string name="pairing_hint">Accept only if the computer shows the same code.</string>
+    <string name="pairing_accept">Same code</string>
+    <string name="pairing_reject">Cancel</string>
+    <string name="incoming_from">From %1$s</string>
+    <string name="incoming_cancel">Cancel</string>
+    <string name="channel_arrivals">Received files</string>
+    <plurals name="arrival_received">
+        <item quantity="one">%1$d file from %2$s</item>
+        <item quantity="other">%1$d files from %2$s</item>
+    </plurals>
+    <string name="arrival_failed">Files from %1$s did not all arrive</string>
+    <string name="arrival_install">Install</string>
+    <string name="share_label">Send to a computer</string>
+    <plurals name="share_title">
+        <item quantity="one">Send %1$d file to</item>
+        <item quantity="other">Send %1$d files to</item>
+    </plurals>
+    <string name="share_nothing">Nothing here can be sent.</string>
+    <string name="share_no_computer">No computer is connected. Open Osdrop on your Mac or PC on the same Wi-Fi network.</string>
+    <string name="share_send">Send</string>
+    <string name="share_sending">Sending to %1$s…</string>
+    <string name="share_received">%1$s received them.</string>
+    <string name="share_declined">%1$s did not take them.</string>
+    <string name="share_failed">Sending to %1$s failed.</string>
+    <string name="share_done">Done</string>
+</resources>

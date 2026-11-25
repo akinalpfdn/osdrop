@@ -62,7 +62,7 @@ claude-ground rules live in `~/.claude/rules/` and load automatically — no imp
 - Builds and checks are described in `docs/BUILDING.md` — keep it exact; it is an acceptance criterion.
 
 ## Context
-- Developer hardware: MacBook Air M3 (macOS 26) with an external monitor, a second Mac, a Windows PC
+- Developer hardware: MacBook Air M3 (macOS 27) with an external monitor, a second Mac, a Windows PC
   with two monitors and a second Windows computer; tests run wired and over Wi-Fi.
 - Windows code is checked on the Mac with zig's mingw-w64 headers, then built and tested on the PC
   by hand; CI's `windows` job checks it again on the PR into `main`.

@@ -28,6 +28,9 @@
         <DataTrigger Binding="{Binding IsWindows}" Value="True">
           <Setter Property="Symbol" Value="Desktop24" />
         </DataTrigger>
+        <DataTrigger Binding="{Binding IsPhone}" Value="True">
+          <Setter Property="Symbol" Value="Phone24" />
+        </DataTrigger>
       </Style.Triggers>
     </Style>
   </ui:FluentWindow.Resources>
@@ -166,6 +169,36 @@
             <ui:Button Margin="{StaticResource Osdrop.Thickness.SectionGap}" Content="{x:Static res:Strings.GroupLeave}"
                        Command="{Binding Group.LeaveCommand}"
                        Visibility="{Binding Group.HasOthers, Converter={StaticResource Osdrop.Converter.Visible}}" />
+
+            <TextBlock Text="{x:Static res:Strings.SettingsPhoneCorners}" Style="{StaticResource Osdrop.Text.Section}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.SettingsPhoneCornersDescription}"
+                       Style="{StaticResource Osdrop.Text.Caption}" />
+            <TextBlock Margin="{StaticResource Osdrop.Thickness.ItemGap}" Text="{x:Static res:Strings.SettingsNoPhones}"
+                       Style="{StaticResource Osdrop.Text.Caption}"
+                       Visibility="{Binding PhoneCorners.Count, Converter={StaticResource Osdrop.Converter.Zero}}" />
+            <ItemsControl ItemsSource="{Binding PhoneCorners}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type settings:PhoneCornerRow}">
+                  <ui:CardControl Margin="{StaticResource Osdrop.Thickness.ItemGap}">
+                    <ui:CardControl.Header>
+                      <TextBlock Text="{Binding Name}" Style="{StaticResource Osdrop.Text.Body}" />
+                    </ui:CardControl.Header>
+                    <StackPanel>
+                      <ComboBox Width="{StaticResource Osdrop.Width.Setting}" ItemsSource="{Binding Screens}"
+                                DisplayMemberPath="Name" SelectedItem="{Binding Screen}"
+                                Visibility="{Binding HasScreens, Converter={StaticResource Osdrop.Converter.Visible}}"
+                                ToolTip="{x:Static res:Strings.SettingsCornerScreen}"
+                                AutomationProperties.Name="{x:Static res:Strings.SettingsCornerScreen}" />
+                      <ComboBox Width="{StaticResource Osdrop.Width.Setting}" Margin="{StaticResource Osdrop.Thickness.ItemGap}"
+                                ItemsSource="{x:Static settings:PhoneCornerRow.Corners}"
+                                DisplayMemberPath="Name" SelectedItem="{Binding Corner}"
+                                ToolTip="{x:Static res:Strings.SettingsCorner}"
+                                AutomationProperties.Name="{x:Static res:Strings.SettingsCorner}" />
+                    </StackPanel>
+                  </ui:CardControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
             <StackPanel Visibility="{Binding Group.HasBlocked, Converter={StaticResource Osdrop.Converter.Visible}}">
               <TextBlock Text="{x:Static res:Strings.GroupBlocked}" Style="{StaticResource Osdrop.Text.Section}" />

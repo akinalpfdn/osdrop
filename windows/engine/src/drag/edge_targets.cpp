@@ -10,6 +10,7 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -26,6 +27,7 @@ namespace {
 
 constexpr UINT kPlaceMessage = WM_APP + 1;
 constexpr UINT kHoldMessage = WM_APP + 2;
+constexpr UINT kCornersMessage = WM_APP + 3;
 /// Half the hold window's side: the parked cursor stays well inside it.
 constexpr int kHoldHalf = 32;
 /// How long set_hold() waits for the targets' thread.
@@ -139,12 +141,16 @@ bool write_storage(IStorage* storage, const std::filesystem::path& path) {
            SUCCEEDED(copy->Commit(STGC_DEFAULT));
 }
 
-/// A new, empty folder under %TEMP%\Osdrop\drags for one drop's virtual files.
+/// A new, empty folder under the drop staging root for one drop's virtual files.
 std::filesystem::path staging_folder() {
     static std::atomic<unsigned> counter{0};
+    const std::filesystem::path root = drop_staging_root();
+    if (root.empty()) {
+        return {};
+    }
     std::error_code error;
-    const auto folder = std::filesystem::temp_directory_path(error) / L"Osdrop" / L"drags" /
-                        (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(++counter));
+    const auto folder =
+        root / (std::to_wstring(GetTickCount64()) + L"-" + std::to_wstring(++counter));
     std::filesystem::create_directories(folder, error);
     return error ? std::filesystem::path() : folder;
 }
@@ -211,6 +217,72 @@ std::vector<std::filesystem::path> saved_virtual_files(IDataObject* data) {
     return items;
 }
 
+using Items = std::vector<std::filesystem::path>;
+
+/// A drag Osdrop started: it is carried across by the controller, not by these targets.
+bool is_own_drag(IDataObject* data) {
+    FORMATETC mark = format(own_drag_format(), TYMED_HGLOBAL);
+    return data->QueryGetData(&mark) == S_OK;
+}
+
+/// Files, or virtual files.
+bool is_readable(IDataObject* data) {
+    if (data == nullptr) {
+        return false;
+    }
+    FORMATETC files = format(CF_HDROP, TYMED_HGLOBAL);
+    FORMATETC descriptors = format(registered(CFSTR_FILEDESCRIPTORW), TYMED_HGLOBAL);
+    return data->QueryGetData(&files) == S_OK || data->QueryGetData(&descriptors) == S_OK;
+}
+
+HRESULT copy_effect(bool accepts, DWORD* effect) {
+    if (effect == nullptr) {
+        return E_INVALIDARG;
+    }
+    *effect = accepts && (*effect & DROPEFFECT_COPY) != 0 ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+}
+
+/// Hands what a drop carries to `done`: its files, or its virtual files saved into staging, in the
+/// background when the source allows it, so it does not wait.
+void read_drop(IDataObject* data, const std::function<void(Items)>& done) {
+    Items files = dropped_files(data);
+    if (!files.empty()) {
+        done(std::move(files));
+        return;
+    }
+    ComPtr<IDataObjectAsyncCapability> async;
+    BOOL asynchronous = FALSE;
+    IStream* marshaled = nullptr;
+    if (SUCCEEDED(data->QueryInterface(IID_PPV_ARGS(async.put()))) &&
+        SUCCEEDED(async->GetAsyncMode(&asynchronous)) && asynchronous != FALSE &&
+        SUCCEEDED(async->StartOperation(nullptr)) &&
+        SUCCEEDED(CoMarshalInterThreadInterfaceInStream(IID_IDataObject, data, &marshaled))) {
+        std::thread([marshaled, done] {
+            CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            {
+                ComPtr<IDataObject> remote;
+                if (SUCCEEDED(CoGetInterfaceAndReleaseStream(
+                        marshaled, IID_IDataObject, reinterpret_cast<void**>(remote.put())))) {
+                    Items saved = saved_virtual_files(remote.get());
+                    ComPtr<IDataObjectAsyncCapability> operation;
+                    if (SUCCEEDED(remote->QueryInterface(IID_PPV_ARGS(operation.put())))) {
+                        operation->EndOperation(saved.empty() ? E_FAIL : S_OK, nullptr,
+                                                DROPEFFECT_COPY);
+                    }
+                    done(std::move(saved));
+                }
+            }
+            CoUninitialize();
+        }).detach();
+        return;
+    }
+    if (async && asynchronous != FALSE) {
+        async->EndOperation(E_FAIL, nullptr, DROPEFFECT_NONE); // it was started above
+    }
+    done(saved_virtual_files(data));
+}
+
 /// Takes drops as the handler says and hands their files on.
 class DropTarget final : public ComObject<IDropTarget> {
 public:
@@ -221,16 +293,16 @@ public:
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD /*keys*/, POINTL /*at*/,
                                         DWORD* effect) override {
         ++over_;
-        accepts_ = readable(data) && !own(data);
+        accepts_ = is_readable(data) && !is_own_drag(data);
         if (accepts_ && reports_ && handler_.entered) {
-            std::vector<std::filesystem::path> files = dropped_files(data);
+            Items files = dropped_files(data);
             const bool virtual_files = files.empty();
             handler_.entered(std::move(files), virtual_files);
         }
-        return answer(effect);
+        return copy_effect(accepts_, effect);
     }
     HRESULT STDMETHODCALLTYPE DragOver(DWORD /*keys*/, POINTL /*at*/, DWORD* effect) override {
-        return answer(effect);
+        return copy_effect(accepts_, effect);
     }
     HRESULT STDMETHODCALLTYPE DragLeave() override {
         --over_;
@@ -248,85 +320,99 @@ public:
             return S_OK;
         }
         *effect = DROPEFFECT_COPY; // the source keeps its files
-        if (taking == DropTaking::Take) {
-            take(data, POINT{.x = at.x, .y = at.y});
+        if (taking == DropTaking::Take && handler_.taken) {
+            read_drop(data, [taken = handler_.taken, dropped = POINT{.x = at.x, .y = at.y}](
+                                Items items) { taken(std::move(items), dropped); });
         }
         return S_OK;
     }
 
 private:
-    /// A drag Osdrop started: it is carried across by the controller, not by these targets.
-    static bool own(IDataObject* data) {
-        FORMATETC mark = format(own_drag_format(), TYMED_HGLOBAL);
-        return data->QueryGetData(&mark) == S_OK;
-    }
-
-    static bool readable(IDataObject* data) {
-        if (data == nullptr) {
-            return false;
-        }
-        FORMATETC files = format(CF_HDROP, TYMED_HGLOBAL);
-        FORMATETC descriptors = format(registered(CFSTR_FILEDESCRIPTORW), TYMED_HGLOBAL);
-        return data->QueryGetData(&files) == S_OK || data->QueryGetData(&descriptors) == S_OK;
-    }
-
-    HRESULT answer(DWORD* effect) const {
-        if (effect == nullptr) {
-            return E_INVALIDARG;
-        }
-        *effect = accepts_ && (*effect & DROPEFFECT_COPY) != 0 ? DROPEFFECT_COPY : DROPEFFECT_NONE;
-        return S_OK;
-    }
-
-    void take(IDataObject* data, POINT at) {
-        std::vector<std::filesystem::path> files = dropped_files(data);
-        if (!files.empty()) {
-            handler_.taken(std::move(files), at);
-            return;
-        }
-        // Virtual files: in the background when the source allows it, so it does not wait.
-        ComPtr<IDataObjectAsyncCapability> async;
-        BOOL asynchronous = FALSE;
-        IStream* marshaled = nullptr;
-        if (SUCCEEDED(data->QueryInterface(IID_PPV_ARGS(async.put()))) &&
-            SUCCEEDED(async->GetAsyncMode(&asynchronous)) && asynchronous != FALSE &&
-            SUCCEEDED(async->StartOperation(nullptr)) &&
-            SUCCEEDED(CoMarshalInterThreadInterfaceInStream(IID_IDataObject, data, &marshaled))) {
-            std::thread([marshaled, at, taken = handler_.taken] {
-                CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-                {
-                    ComPtr<IDataObject> remote;
-                    if (SUCCEEDED(CoGetInterfaceAndReleaseStream(
-                            marshaled, IID_IDataObject, reinterpret_cast<void**>(remote.put())))) {
-                        std::vector<std::filesystem::path> saved =
-                            saved_virtual_files(remote.get());
-                        ComPtr<IDataObjectAsyncCapability> operation;
-                        if (SUCCEEDED(remote->QueryInterface(IID_PPV_ARGS(operation.put())))) {
-                            operation->EndOperation(saved.empty() ? E_FAIL : S_OK, nullptr,
-                                                    DROPEFFECT_COPY);
-                        }
-                        taken(std::move(saved), at);
-                    }
-                }
-                CoUninitialize();
-            }).detach();
-            return;
-        }
-        if (async && asynchronous != FALSE) {
-            async->EndOperation(E_FAIL, nullptr, DROPEFFECT_NONE); // it was started above
-        }
-        handler_.taken(saved_virtual_files(data), at);
-    }
-
     const EdgeTargets::Handler& handler_;
     std::atomic<int>& over_;
     bool reports_;
     bool accepts_ = false;
 };
 
+/// A phone's corner: reports the drags that reach it and leave it, and takes every drop for the
+/// phone.
+class CornerDropTarget final : public ComObject<IDropTarget> {
+public:
+    CornerDropTarget(const EdgeTargets::Handler& handler, std::atomic<int>& over,
+                     const CornerDevice& device)
+        : handler_(handler), over_(over), device_(device) {}
+
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD /*keys*/, POINTL /*at*/,
+                                        DWORD* effect) override {
+        ++over_;
+        accepts_ = is_readable(data) && !is_own_drag(data);
+        if (accepts_ && handler_.corner_entered) {
+            handler_.corner_entered(device_);
+        }
+        return copy_effect(accepts_, effect);
+    }
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD /*keys*/, POINTL /*at*/, DWORD* effect) override {
+        return copy_effect(accepts_, effect);
+    }
+    HRESULT STDMETHODCALLTYPE DragLeave() override {
+        --over_;
+        left();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD /*keys*/, POINTL /*at*/,
+                                   DWORD* effect) override {
+        --over_;
+        if (!accepts_ || data == nullptr || effect == nullptr || (*effect & DROPEFFECT_COPY) == 0 ||
+            !handler_.corner_taken) {
+            if (effect != nullptr) {
+                *effect = DROPEFFECT_NONE; // the drag slides back
+            }
+            left();
+            return S_OK;
+        }
+        accepts_ = false;
+        *effect = DROPEFFECT_COPY; // the source keeps its files
+        read_drop(data, [taken = handler_.corner_taken, device = device_](Items items) {
+            taken(device, std::move(items));
+        });
+        return S_OK;
+    }
+
+private:
+    void left() {
+        if (accepts_ && handler_.corner_left) {
+            handler_.corner_left(device_);
+        }
+        accepts_ = false;
+    }
+
+    const EdgeTargets::Handler& handler_;
+    std::atomic<int>& over_;
+    CornerDevice device_;
+    bool accepts_ = false;
+};
+
+/// A topmost window that never takes the focus, nearly invisible and hidden until a drag.
+HWND target_window(const win::PixelRect& rect) {
+    HWND window = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kClassName, L"",
+        WS_POPUP, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, nullptr,
+        nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (window != nullptr) {
+        SetLayeredWindowAttributes(window, 0, kAlpha, LWA_ALPHA);
+    }
+    return window;
+}
+
 // NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
 } // namespace
+
+std::filesystem::path drop_staging_root() {
+    std::error_code error;
+    const std::filesystem::path temp = std::filesystem::temp_directory_path(error);
+    return error ? std::filesystem::path() : temp / L"Osdrop" / L"drags";
+}
 
 EdgeTargets::EdgeTargets(Handler handler)
     : handler_(std::move(handler)), thread_([this] { run(); }) {}
@@ -365,6 +451,16 @@ void EdgeTargets::set_hold(std::optional<POINT> at) {
     hold_changed_.wait_for(lock, kHoldWait, [&] { return hold_placed_ >= request; });
 }
 
+void EdgeTargets::set_corners(std::vector<CornerTarget> corners) {
+    {
+        const std::scoped_lock lock(mutex_);
+        corners_wanted_ = std::move(corners);
+    }
+    if (const DWORD id = thread_id_.load(); id != 0) {
+        PostThreadMessageW(id, kCornersMessage, 0, 0);
+    }
+}
+
 void EdgeTargets::run() {
     // The strips are placed in physical pixels, as the monitors are measured.
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -390,12 +486,15 @@ void EdgeTargets::run() {
     thread_id_ = GetCurrentThreadId();
     place(); // what was set before the queue existed
     place_hold();
+    place_corners();
     const UINT_PTR timer = SetTimer(nullptr, 0, kPollMilliseconds, nullptr);
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         if (message.hwnd == nullptr && message.message == kPlaceMessage) {
             place();
         } else if (message.hwnd == nullptr && message.message == kHoldMessage) {
             place_hold();
+        } else if (message.hwnd == nullptr && message.message == kCornersMessage) {
+            place_corners();
         } else if (message.hwnd == nullptr && message.message == WM_TIMER) {
             poll();
         } else {
@@ -411,6 +510,7 @@ void EdgeTargets::run() {
     }
     place(); // removes the windows
     place_hold();
+    remove_corners();
     OleUninitialize();
 }
 
@@ -420,7 +520,10 @@ void EdgeTargets::place() {
         DestroyWindow(window);
     }
     windows_.clear();
-    shown_ = false;
+    shown_ = false; // the corners show again with new strips
+    for (const CornerWindow& corner : corner_windows_) {
+        set_shown(corner.window, false);
+    }
     std::vector<win::PixelRect> strips;
     {
         const std::scoped_lock lock(mutex_);
@@ -432,14 +535,10 @@ void EdgeTargets::place() {
     const ComPtr<DropTarget> target(
         new DropTarget(handler_, over_, true)); // NOLINT(cppcoreguidelines-owning-memory)
     for (const win::PixelRect& strip : strips) {
-        HWND window = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kClassName, L"",
-            WS_POPUP, strip.left, strip.top, strip.right - strip.left, strip.bottom - strip.top,
-            nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        HWND window = target_window(strip);
         if (window == nullptr) {
             continue;
         }
-        SetLayeredWindowAttributes(window, 0, kAlpha, LWA_ALPHA);
         RegisterDragDrop(window, target.get());
         windows_.push_back(window);
     }
@@ -457,12 +556,11 @@ void EdgeTargets::place_hold() {
         at = hold_wanted_;
     }
     if (at) {
-        hold_ = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                kClassName, L"", WS_POPUP, at->x - kHoldHalf, at->y - kHoldHalf,
-                                2 * kHoldHalf, 2 * kHoldHalf, nullptr, nullptr,
-                                GetModuleHandleW(nullptr), nullptr);
+        hold_ = target_window({.left = at->x - kHoldHalf,
+                               .top = at->y - kHoldHalf,
+                               .right = at->x + kHoldHalf,
+                               .bottom = at->y + kHoldHalf});
         if (hold_ != nullptr) {
-            SetLayeredWindowAttributes(hold_, 0, kAlpha, LWA_ALPHA);
             const ComPtr<DropTarget> target(
                 new DropTarget(handler_, over_, false)); // NOLINT(cppcoreguidelines-owning-memory)
             RegisterDragDrop(hold_, target.get());
@@ -473,6 +571,76 @@ void EdgeTargets::place_hold() {
     const std::scoped_lock lock(mutex_);
     hold_placed_ = hold_requests_;
     hold_changed_.notify_all();
+}
+
+void EdgeTargets::place_corners() {
+    std::vector<CornerTarget> corners;
+    {
+        const std::scoped_lock lock(mutex_);
+        corners = corners_wanted_;
+    }
+    // Windows of corners no longer wanted go; the others stay, so a drag over one stays there.
+    std::erase_if(corner_windows_, [&](const CornerWindow& kept) {
+        const bool wanted = std::ranges::any_of(
+            corners, [&](const CornerTarget& corner) { return corner.device == kept.device; });
+        if (!wanted) {
+            RevokeDragDrop(kept.window);
+            DestroyWindow(kept.window);
+        }
+        return !wanted;
+    });
+    for (const CornerTarget& corner : corners) {
+        win::PixelRect covered = corner.zone;
+        RECT current{};
+        if (corner.box != nullptr && IsWindowVisible(corner.box) != FALSE &&
+            GetWindowRect(corner.box, &current) != FALSE) {
+            // The box in its corner; asynchronously, as its thread may be waiting on the engine.
+            const win::PixelRect frame =
+                win::corner_rect(corner.work, corner.corner, current.right - current.left,
+                                 current.bottom - current.top, corner.inset);
+            if (frame.left != current.left || frame.top != current.top) {
+                SetWindowPos(corner.box, nullptr, frame.left, frame.top, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            }
+            covered = win::united(covered, frame);
+        }
+        const auto kept = std::ranges::find_if(
+            corner_windows_, [&](const CornerWindow& w) { return w.device == corner.device; });
+        if (kept != corner_windows_.end()) {
+            SetWindowPos(kept->window, HWND_TOPMOST, covered.left, covered.top,
+                         covered.right - covered.left, covered.bottom - covered.top,
+                         SWP_NOACTIVATE);
+            continue;
+        }
+        HWND window = target_window(covered);
+        if (window == nullptr) {
+            continue;
+        }
+        const ComPtr<CornerDropTarget> target(new CornerDropTarget(
+            handler_, over_, corner.device)); // NOLINT(cppcoreguidelines-owning-memory)
+        RegisterDragDrop(window, target.get());
+        corner_windows_.push_back({.device = corner.device, .window = window});
+        if (shown_) {
+            set_shown(window, true);
+        }
+    }
+}
+
+void EdgeTargets::remove_corners() {
+    for (const CornerWindow& corner : corner_windows_) {
+        RevokeDragDrop(corner.window);
+        DestroyWindow(corner.window);
+    }
+    corner_windows_.clear();
+}
+
+void EdgeTargets::set_shown(HWND window, bool shown) {
+    if (shown) {
+        SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    } else {
+        ShowWindow(window, SW_HIDE);
+    }
 }
 
 void EdgeTargets::poll() {
@@ -488,12 +656,11 @@ void EdgeTargets::poll() {
     }
     shown_ = show;
     for (HWND window : windows_) {
-        if (show) {
-            SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        } else {
-            ShowWindow(window, SW_HIDE);
-        }
+        set_shown(window, show);
+    }
+    // After the strips, so a corner lies above the strips it overlaps.
+    for (const CornerWindow& corner : corner_windows_) {
+        set_shown(corner.window, show);
     }
 }
 

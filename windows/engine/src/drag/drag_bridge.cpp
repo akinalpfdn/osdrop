@@ -164,9 +164,32 @@ DragBridge::DragBridge(win::GroupEngine& group, InputBridge& input, fs::path sta
               [this](std::vector<fs::path> items, POINT /*at*/) {
                   post([this, items = std::move(items)] { take_ended(items); });
               },
-          .released = [this] { post([this] { release(); }); }})),
+          .released = [this] { post([this] { release(); }); },
+          .corner_entered =
+              [this](const CornerDevice& phone) {
+                  post([this, phone] {
+                      if (listener_.corner_entered) {
+                          listener_.corner_entered(phone);
+                      }
+                  });
+              },
+          .corner_left =
+              [this](const CornerDevice& phone) {
+                  post([this, phone] {
+                      if (listener_.corner_left) {
+                          listener_.corner_left(phone);
+                      }
+                  });
+              },
+          .corner_taken =
+              [this](const CornerDevice& phone, std::vector<fs::path> items) {
+                  post([this, phone, items = std::move(items)] { corner_send(phone, items); });
+              }})),
       thread_([this] { run(); }) {
     remove_folder(staging_); // what the last run left
+    if (const fs::path drops = drop_staging_root(); !drops.empty()) {
+        remove_folder(drops); // virtual files saved from drops in the last run
+    }
 }
 
 DragBridge::~DragBridge() {
@@ -220,6 +243,52 @@ void DragBridge::set_monitors(std::vector<win::PhysicalMonitor> monitors) {
         monitors_ = std::move(monitors);
     }
     update_strips();
+    update_corners();
+}
+
+void DragBridge::set_corners(std::vector<PhoneCorner> corners) {
+    {
+        const std::scoped_lock lock(mutex_);
+        corners_ = std::move(corners);
+    }
+    update_corners();
+}
+
+void DragBridge::update_corners() {
+    std::vector<CornerTarget> targets;
+    {
+        const std::scoped_lock lock(mutex_);
+        for (const PhoneCorner& corner : stopping_ ? std::vector<PhoneCorner>() : corners_) {
+            const win::PhysicalMonitor* monitor = win::corner_monitor(monitors_, corner.screen);
+            if (monitor == nullptr) {
+                continue;
+            }
+            const std::int32_t side = win::physical_pixels(corner.zone, monitor->dpi);
+            targets.push_back({.device = corner.device,
+                               .zone = win::corner_rect(win::monitor_rect(*monitor), corner.corner,
+                                                        side, side, 0),
+                               .work = win::work_rect(*monitor),
+                               .corner = corner.corner,
+                               .inset = win::physical_pixels(corner.inset, monitor->dpi),
+                               .box = corner.box});
+        }
+    }
+    if (targets_) {
+        targets_->set_corners(std::move(targets));
+    }
+}
+
+void DragBridge::corner_send(const win::DeviceIdBytes& phone, const std::vector<fs::path>& items) {
+    if (!listener_.corner_dropped) {
+        return;
+    }
+    if (items.empty()) {
+        log("Nothing could be read from a drop in a phone's corner");
+        listener_.corner_dropped(phone, 0, OSDROP_ERROR_IO);
+        return;
+    }
+    const auto sent = group_.send_files(phone, items);
+    listener_.corner_dropped(phone, sent ? sent.value() : 0, sent ? OSDROP_OK : sent.error());
 }
 
 void DragBridge::update_strips() {

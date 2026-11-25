@@ -34,6 +34,34 @@ Member member(std::uint8_t seed, std::uint32_t epoch = 1, const char* name = "Co
                   .name = name};
 }
 
+TEST(Roster, PeersBeforeMinorOneAreSentTheComputersOnly) {
+    // A computer before protocol minor 1 refuses a RosterState that names a platform it does not
+    // know, so it must not be sent the phones, neither as members nor as blocks.
+    Roster roster;
+    const Member mac = member(1);
+    Member phone = member(2, 1, "Phone");
+    phone.platform = protocol::Platform::Android;
+    ASSERT_TRUE(roster.add(mac));
+    ASSERT_TRUE(roster.add(phone));
+    roster.block(member(3).device_id, protocol::Platform::Android, "Other phone");
+    Member iphone = member(4, 1, "iPhone");
+    iphone.platform = protocol::Platform::IOS;
+    ASSERT_TRUE(roster.add(iphone));
+
+    const auto legacy = roster.to_messages(protocol::Id{7}, 0);
+    ASSERT_EQ(legacy.size(), 1U);
+    ASSERT_EQ(legacy.front().members.size(), 1U);
+    EXPECT_EQ(legacy.front().members.front().device_id, mac.device_id);
+    EXPECT_TRUE(legacy.front().blocks.empty());
+
+    const auto current = roster.to_messages(protocol::Id{7}, 1);
+    ASSERT_EQ(current.size(), 1U);
+    EXPECT_EQ(current.front().members.size(), 3U);
+    EXPECT_EQ(current.front().blocks.size(), 1U);
+    ASSERT_TRUE(protocol::encode_control(current.front()).has_value())
+        << "Android and iOS are valid platforms";
+}
+
 TEST(Roster, PairingRevokingAndPairingAgain) {
     Roster roster;
     const Member pc = member(1);

@@ -334,6 +334,9 @@ private final class ClipboardMesh: MeshDriving, @unchecked Sendable {
         }
     }
 
+    func send(_ files: [DraggedFile], to device: DeviceID) async throws(CoreError) -> UInt64 { 1 }
+    func answerSend(_ sendID: UInt64, from device: DeviceID, _ outcome: SendOutcome) async throws(CoreError) {}
+
     func fetchContent(
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
     ) async throws(CoreError)

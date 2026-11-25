@@ -14,6 +14,7 @@
 #include <windows.h>
 
 #include <bcrypt.h>
+#include <shlobj.h>
 
 #include <algorithm>
 #include <array>
@@ -85,6 +86,17 @@ void copy_name(std::string_view name, std::span<char, OSDROP_TXT_VALUE_SIZE> out
 std::uint32_t clamped_count(std::uint64_t count) {
     return static_cast<std::uint32_t>(
         std::min<std::uint64_t>(count, std::numeric_limits<std::uint32_t>::max()));
+}
+
+/// The user's Downloads folder, where files phones send arrive; empty when Windows has none.
+std::filesystem::path downloads_folder() {
+    PWSTR path = nullptr;
+    std::filesystem::path folder;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, KF_FLAG_DEFAULT, nullptr, &path))) {
+        folder = path;
+    }
+    CoTaskMemFree(path);
+    return folder;
 }
 
 osdrop_engine_event blank_event(osdrop_engine_event_kind kind) {
@@ -253,21 +265,56 @@ public:
         send(event);
     }
     void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
-                           std::uint64_t links_left_out) override {
+                           std::uint64_t links_left_out,
+                           std::span<const std::filesystem::path> items) override {
         osdrop_engine_event event = blank_event(OSDROP_ENGINE_TRANSFER_FINISHED);
         event.connection = transfer_id;
         event.reason = result;
         event.code = clamped_count(links_left_out);
+        std::string first;
+        if (result == OSDROP_OK && !items.empty()) {
+            const std::u8string text = items.front().u8string();
+            first.assign(text.begin(), text.end());
+            event.message = first.c_str();
+        }
+        send(event);
+    }
+    /// From the drag bridge's thread: a drag reached a phone's corner, or left it.
+    void corner(osdrop_engine_event_kind kind, const win::DeviceIdBytes& phone) const {
+        osdrop_engine_event event = blank_event(kind);
+        std::ranges::copy(phone, std::begin(event.device_id));
+        send(event);
+    }
+    /// From the drag bridge's thread: a drop in a phone's corner.
+    void corner_dropped(const win::DeviceIdBytes& phone, std::uint64_t send_id,
+                        osdrop_result result) const {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_CORNER_DROPPED);
+        std::ranges::copy(phone, std::begin(event.device_id));
+        event.connection = send_id;
+        event.reason = result;
         send(event);
     }
     void send_progress(const win::SendUpdate& update) override {
-        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_PROGRESS);
+        osdrop_engine_event event =
+            blank_event(update.sent ? OSDROP_ENGINE_SENT_PROGRESS : OSDROP_ENGINE_SEND_PROGRESS);
         event.connection = (std::uint64_t{update.drag_id} << 32U) | update.index;
         std::ranges::copy(update.device, std::begin(event.device_id));
         copy_name(update.name, event.name);
-        event.bytes_done = update.sent;
+        event.bytes_done = update.sent_bytes;
         event.bytes_total = update.total;
         event.code = update.state;
+        send(event);
+    }
+    void sent_receiving(std::uint64_t transfer_id, const win::DeviceIdBytes& source,
+                        const std::string& name, std::uint64_t size) override {
+        receiving(transfer_id, source, name, size);
+    }
+    void send_finished(const win::DeviceIdBytes& device, std::uint64_t send_id,
+                       osdrop_send_outcome outcome) override {
+        osdrop_engine_event event = blank_event(OSDROP_ENGINE_SEND_FINISHED);
+        event.connection = send_id;
+        std::ranges::copy(device, std::begin(event.device_id));
+        event.code = static_cast<std::uint32_t>(outcome);
         send(event);
     }
     /// From the drag bridge's thread: a transfer receiving an item of a drag started.
@@ -451,14 +498,20 @@ struct osdrop_engine {
     std::unique_ptr<osdrop::engine::drag::Loopback> loopback;
     std::unique_ptr<DragBridge> drag;
     std::unique_ptr<win::GroupEngine> group; // declared last: stopped first
+    mutable std::mutex monitors_mutex;
+    mutable std::vector<win::PhysicalMonitor> monitors; ///< as last read; under monitors_mutex
 
     /// Reads this PC's monitors and reports them, to core and to the input bridge.
     [[nodiscard]] osdrop_result report_screens() const {
-        const auto monitors = osdrop::engine::physical_monitors();
-        input->set_monitors(monitors);
-        loopback->set_monitors(monitors);
-        drag->set_monitors(monitors);
-        const auto report = win::screen_report(monitors);
+        const auto found = osdrop::engine::physical_monitors();
+        {
+            const std::scoped_lock lock(monitors_mutex);
+            monitors = found;
+        }
+        input->set_monitors(found);
+        loopback->set_monitors(found);
+        drag->set_monitors(found);
+        const auto report = win::screen_report(found);
         if (!report) {
             return report.error();
         }
@@ -493,7 +546,8 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
          .random = osdrop_random_source{.fill = system_random, .context = nullptr},
          .clipboard = &engine->clipboard,
          .shares_clipboard = config->shares_clipboard == 1,
-         .clipboard_limits = limits},
+         .clipboard_limits = limits,
+         .downloads = downloads_folder()},
         engine->store, engine->discovery, engine->events);
     if (!group) {
         return group.error();
@@ -534,6 +588,19 @@ osdrop_result osdrop_engine_create(const osdrop_engine_config* config,
                 [events](std::uint64_t transfer_id, const win::DeviceIdBytes& source,
                          const std::string& name, std::uint64_t size) {
                     events->receiving(transfer_id, source, name, size);
+                },
+            .corner_entered =
+                [events](const win::DeviceIdBytes& phone) {
+                    events->corner(OSDROP_ENGINE_CORNER_ENTERED, phone);
+                },
+            .corner_left =
+                [events](const win::DeviceIdBytes& phone) {
+                    events->corner(OSDROP_ENGINE_CORNER_LEFT, phone);
+                },
+            .corner_dropped =
+                [events](const win::DeviceIdBytes& phone, std::uint64_t send_id,
+                         osdrop_result result) {
+                    events->corner_dropped(phone, send_id, result);
                 }});
     engine->events.set_drag(engine->drag.get());
     engine->clipboard.listen(
@@ -678,6 +745,59 @@ osdrop_result osdrop_engine_screens_changed(osdrop_engine* engine) {
     return engine->report_screens();
 }
 
+osdrop_result osdrop_engine_screens(osdrop_engine* engine, osdrop_engine_screen* out,
+                                    size_t capacity, size_t* out_count) {
+    if (engine == nullptr || (out == nullptr && capacity != 0) || out_count == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<win::PhysicalMonitor> monitors;
+    {
+        const std::scoped_lock lock(engine->monitors_mutex);
+        monitors = engine->monitors;
+    }
+    *out_count = monitors.size();
+    if (monitors.size() > capacity) {
+        return OSDROP_ERROR_BUFFER_TOO_SMALL;
+    }
+    for (std::size_t i = 0; i < monitors.size(); ++i) {
+        const win::PhysicalMonitor& monitor = monitors[i];
+        osdrop_engine_screen& screen = std::span(out, capacity)[i];
+        screen = osdrop_engine_screen{.key = {},
+                                      .primary = static_cast<std::uint8_t>(monitor.primary),
+                                      .left = monitor.left,
+                                      .top = monitor.top,
+                                      .name = {}};
+        std::ranges::copy(monitor.key, std::begin(screen.key));
+        copy_name(monitor.name, screen.name);
+    }
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_set_corners(osdrop_engine* engine, const osdrop_engine_corner* corners,
+                                        size_t count) {
+    if (engine == nullptr || (corners == nullptr && count != 0)) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<osdrop::engine::drag::PhoneCorner> chosen;
+    for (const osdrop_engine_corner& corner : std::span(corners, count)) {
+        if (corner.corner > static_cast<std::uint8_t>(win::ScreenCorner::BottomRight)) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        osdrop::engine::drag::PhoneCorner phone{
+            .device = read_id(std::data(corner.device_id)),
+            .screen = {},
+            .corner = static_cast<win::ScreenCorner>(corner.corner),
+            .zone = corner.zone,
+            .inset = corner.inset,
+            // NOLINTNEXTLINE(performance-no-int-to-ptr): the shell passes its window's handle
+            .box = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(corner.box_window))};
+        std::copy_n(std::data(corner.screen_key), phone.screen.size(), phone.screen.begin());
+        chosen.push_back(phone);
+    }
+    engine->drag->set_corners(std::move(chosen));
+    return OSDROP_OK;
+}
+
 osdrop_result osdrop_engine_close_all(osdrop_engine* engine, uint8_t sleeping) {
     if (engine == nullptr || sleeping > 1) {
         return OSDROP_ERROR_INVALID_ARGUMENT;
@@ -715,6 +835,39 @@ osdrop_result osdrop_engine_withdraw_drag(osdrop_engine* engine, uint32_t drag_i
         return OSDROP_ERROR_INVALID_ARGUMENT;
     }
     engine->group->withdraw_drag(drag_id);
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_send_files(osdrop_engine* engine, const uint8_t* device_id,
+                                       const char* const* paths, size_t count,
+                                       uint64_t* out_send_id) {
+    if (engine == nullptr || device_id == nullptr || paths == nullptr || count == 0 ||
+        out_send_id == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    std::vector<std::filesystem::path> items;
+    for (const char* path : std::span(paths, count)) {
+        if (path == nullptr) {
+            return OSDROP_ERROR_INVALID_ARGUMENT;
+        }
+        const std::string_view text(path);
+        items.emplace_back(std::u8string(text.begin(), text.end()));
+    }
+    win::DeviceIdBytes device{};
+    std::copy_n(device_id, device.size(), device.begin());
+    const auto sent = engine->group->send_files(device, items);
+    if (!sent) {
+        return sent.error();
+    }
+    *out_send_id = sent.value();
+    return OSDROP_OK;
+}
+
+osdrop_result osdrop_engine_withdraw_send(osdrop_engine* engine, uint64_t send_id) {
+    if (engine == nullptr) {
+        return OSDROP_ERROR_INVALID_ARGUMENT;
+    }
+    engine->group->withdraw_send(send_id);
     return OSDROP_OK;
 }
 

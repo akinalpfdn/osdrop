@@ -37,6 +37,75 @@ public sealed partial class PointerSpeedRow : ObservableObject
     partial void OnSpeedChanged(double value) => _changed?.Invoke(this);
 }
 
+/// <summary>One of this PC's screens in a corner picker: its key (lowercase hex) and how it is named.</summary>
+public sealed record ScreenChoice(string Key, string Name, bool IsMain)
+{
+    /// <summary>Left to right, each by its name ("Screen 2" when Windows has none or two share it), the main one marked.</summary>
+    internal static IReadOnlyList<ScreenChoice> Of(IReadOnlyList<ScreenInfo> screens)
+    {
+        var ordered = screens.OrderBy(screen => screen.Left).ThenBy(screen => screen.Top).ToList();
+        var choices = new List<ScreenChoice>(ordered.Count);
+        for (int index = 0; index < ordered.Count; index++)
+        {
+            ScreenInfo screen = ordered[index];
+            string name = screen.Name.Length > 0 && ordered.Count(other => other.Name == screen.Name) == 1
+                ? screen.Name
+                : LocalizedText.Format(Localization.Strings.SettingsScreenNumber, index + 1);
+            if (screen.IsPrimary)
+            {
+                name = LocalizedText.Format(Localization.Strings.SettingsMainScreen, name);
+            }
+            choices.Add(new ScreenChoice(screen.Key, name, screen.IsPrimary));
+        }
+        return choices;
+    }
+}
+
+/// <summary>Where a phone's box sits: a screen (when there is more than one) and a corner of it.</summary>
+public sealed partial class PhoneCornerRow : ObservableObject
+{
+    private readonly Action<PhoneCornerRow>? _changed;
+
+    internal PhoneCornerRow(
+        string deviceId, string name, IReadOnlyList<ScreenChoice> screens, PhoneCorner corner, Action<PhoneCornerRow> changed)
+    {
+        DeviceId = deviceId;
+        Name = name;
+        Screens = screens;
+        // A screen not connected, or none chosen: the main one.
+        Screen = screens.FirstOrDefault(choice => choice.Key == corner.Screen) ?? screens.FirstOrDefault(choice => choice.IsMain);
+        Corner = Corners.First(choice => choice.Value == corner.Corner);
+        _changed = changed; // set last: loading the choice is no change
+    }
+
+    public string DeviceId { get; }
+    public string Name { get; }
+    public IReadOnlyList<ScreenChoice> Screens { get; }
+
+    /// <summary>The screen picker shows only when there is a choice.</summary>
+    public bool HasScreens => Screens.Count > 1;
+
+    public static IReadOnlyList<Choice<ScreenCorner>> Corners { get; } =
+    [
+        new(ScreenCorner.TopLeft, Localization.Strings.CornerTopLeft),
+        new(ScreenCorner.TopRight, Localization.Strings.CornerTopRight),
+        new(ScreenCorner.BottomLeft, Localization.Strings.CornerBottomLeft),
+        new(ScreenCorner.BottomRight, Localization.Strings.CornerBottomRight),
+    ];
+
+    [ObservableProperty]
+    public partial ScreenChoice? Screen { get; set; }
+
+    [ObservableProperty]
+    public partial Choice<ScreenCorner> Corner { get; set; }
+
+    internal PhoneCorner Chosen => new(Screen?.Key, Corner.Value);
+
+    partial void OnScreenChanged(ScreenChoice? value) => _changed?.Invoke(this);
+
+    partial void OnCornerChanged(Choice<ScreenCorner> value) => _changed?.Invoke(this);
+}
+
 /// <summary>
 /// The Settings window (the Mac's SettingsViewModel): General, Arrangement, Devices, Input,
 /// Clipboard and Files, Advanced. Every change is saved at once and reaches the engine at once.
@@ -53,6 +122,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly Func<Task<string>> _coreVersion;
     private readonly Action<string> _copy;
     private IReadOnlyList<LayoutComputer> _layout = [];
+    private IReadOnlyList<ScreenChoice> _screens = [];
 
     internal SettingsViewModel(
         AppSettings settings, IGroupEngine engine, GroupViewModel group, ControlViewModel control,
@@ -216,6 +286,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<PointerSpeedRow> PointerSpeeds { get; } = [];
 
+    /// <summary>Each paired phone's corner (DEVPLAN Phase 21).</summary>
+    public ObservableCollection<PhoneCornerRow> PhoneCorners { get; } = [];
+
     /// <summary>The chord that brings the cursor home; a refused one is put back.</summary>
     public Hotkey ReturnHotkey
     {
@@ -282,6 +355,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         DeviceNameText = Group.Members.FirstOrDefault(member => member.IsSelf)?.Name ?? Settings.DeviceName ?? Environment.MachineName;
         OnMembersChanged();
         _ = RefreshArrangementAsync();
+        _ = RefreshScreensAsync();
+    }
+
+    /// <summary>The screens the corner pickers offer, read again as the window opens.</summary>
+    public async Task RefreshScreensAsync()
+    {
+        _screens = ScreenChoice.Of(await _engine.GetScreensAsync().ConfigureAwait(true));
+        ShowPhoneCorners();
     }
 
     /// <summary>Every member's pointer speed, after the engine started or restarted.</summary>
@@ -429,7 +510,20 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             Arrangement = new ArrangementGeometry(_layout, Group.Members); // names and states follow
         }
+        ShowPhoneCorners();
     }
+
+    private void ShowPhoneCorners()
+    {
+        PhoneCorners.Clear();
+        foreach (MemberItem phone in Group.Others.Where(member => member.IsPhone))
+        {
+            PhoneCorners.Add(new PhoneCornerRow(
+                phone.DeviceId, phone.Name, _screens, Settings.Corner(phone.DeviceId), OnCornerChanged));
+        }
+    }
+
+    private void OnCornerChanged(PhoneCornerRow row) => Settings.SetCorner(row.DeviceId, row.Chosen);
 
     private void OnSpeedChanged(PointerSpeedRow row)
     {

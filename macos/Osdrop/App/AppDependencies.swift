@@ -15,6 +15,7 @@ final class AppDependencies {
     let settings: AppSettings
     let group: GroupController
     let awdl: AWDLSwitch
+    let corners: CornerBoxController
 
     init(
         accessibility: AccessibilityPermission = AccessibilityPermission(),
@@ -38,6 +39,7 @@ final class AppDependencies {
         self.settings = settings
         self.group = GroupController(
             services: groupServices ?? .system(settings: settings), screens: screens, settings: settings)
+        corners = CornerBoxController(group: group, settings: settings, staging: staging)
         awdl = AWDLSwitch(
             settings: settings, registration: SystemNetworkHelperRegistration(), helper: XPCNetworkHelper())
     }

@@ -30,7 +30,7 @@ struct MenuContentView: View {
             }
             if let transfers = group.transfers, !transfers.rows.isEmpty {
                 Divider()
-                TransfersSection(transfers: transfers)
+                TransfersSection(transfers: transfers, limit: Tunables.Transfers.menuRows)
             }
 
             Divider()

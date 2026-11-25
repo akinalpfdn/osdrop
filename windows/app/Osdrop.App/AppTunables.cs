@@ -36,8 +36,11 @@ internal static class AppTunables
     public const double MinPointerSpeed = 0.25;
     public const double MaxPointerSpeed = 4.0;
 
-    /// <summary>Ended transfers the panel still shows, newest first (as on the Mac).</summary>
-    public const int TransfersEndedRows = 5;
+    /// <summary>Ended transfers the transfers window still lists, newest first (as on the Mac).</summary>
+    public const int TransfersEndedRows = 50;
+
+    /// <summary>Transfers the panel shows; the rest are in the transfers window (as on the Mac).</summary>
+    public const int TransfersPanelRows = 3;
 
     /// <summary>Ends of transfers kept until the transfer is listed; clipboard ones never are.</summary>
     public const int TransfersEarlyEnds = 64;
@@ -47,6 +50,9 @@ internal static class AppTunables
 
     public static readonly IReadOnlyList<ulong> ClipboardFilesLimits =
         [128UL * 1024 * 1024, 512UL * 1024 * 1024, 1024UL * 1024 * 1024, 4096UL * 1024 * 1024];
+
+    /// <summary>A phone's box that only sent files closes this long after the last one ended (as on the Mac).</summary>
+    public static readonly TimeSpan CornerSentLinger = TimeSpan.FromSeconds(3);
 
     /// <summary>The longest name other computers show, in UTF-8 bytes (core's limit).</summary>
     public const int MaxDeviceNameBytes = 64;

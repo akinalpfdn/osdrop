@@ -877,3 +877,30 @@ User decision (same day): after the hardware rows pass, the PC controlling other
 **Why:** The tests ran inside a full Osdrop: it joined the user's group with this Mac's Keychain identity, which took the PC's session from the Osdrop already running (2026-11-23 18:09:42), emptied that Osdrop's drag staging folder in the shared temporary folder, and could open the permissions window or check for updates. Guarding each step misses the next one added; a second app target is more to build and sign.
 **Trade-offs:** The tests no longer exercise `OsdropApp`'s wiring; it is covered by the manual matrix. Should Xcode stop setting those variables, the full app runs again; a test checks the host has no menu bar icon.
 **Revisit if:** A test needs the running app; then it builds what it needs itself.
+
+---
+
+## 2026-11-23 — Phones exchange files through a corner box, Android first, in 0.2.0
+**Chosen:** User decisions, changing the plan of 2026-11-09: phones come in 0.2.0, after the 0.1.1 release, not after 1.0. A phone sends and receives files: a file dragged to the phone's corner on a Mac or PC goes to the phone, and a file the phone sends (share sheet, a computer picked there) opens a box at that corner, from which it is dragged out. The phone is reachable only while Osdrop is open on it; there is no clipboard with phones yet. Android comes first, as an APK on the GitHub release signed with the release keystore; Google Play and the iPhone come later.
+**Alternatives:** Receive-only phones (the plan of 2026-11-09); the mobile app before the 0.1.1 release; a background service on Android that keeps the phone reachable; placing the phone on an edge in the arrangement instead of a corner; clipboard now, sent from the phone with one tap; Google Play from the start, which would make the app leave received APKs to the Files app.
+**Why:** The user moves photos and APKs between the phone and the computers by hand today. 0.1.1 carries fixes the tester needs, so it ships first. A corner does not collide with crossing at an edge. Android and iOS let no app read the clipboard in the background, so phone clipboard would need a tap, and files matter more. A background service costs battery and a Play review justification.
+**Trade-offs:** With the app closed the phone's corner takes nothing. `REQUEST_INSTALL_PACKAGES` needs a declaration when the app moves to Google Play.
+**Revisit if:** Users expect the phone to be reachable with the app closed, or ask for the clipboard.
+
+---
+
+## 2026-11-25 — On the PC, the engine owns a phone's corner and places the WPF box
+**Chosen:** A phone's corner is a target window of the engine's `EdgeTargets`, above the edge strips and shown with them while the left button is held; it reports drags reaching and leaving it and sends a drop to the phone itself. The shell's box is a WPF window whose handle the shell passes with the corner; the engine places it in the chosen corner in physical pixels and grows the corner's target over it. While a drag hovers, the box is click-through, so the target under it keeps the drag; dragging a file out of the box clears the corners until the drag ends.
+**Alternatives:** A WPF drop target in the corner and a box placed by WPF.
+**Why:** The WPF shell is system-DPI aware, so its coordinates are scaled on a monitor of another DPI, while the engine's targets thread works in physical pixels. The engine's targets already read virtual files (Outlook attachments, zip folders), refuse Osdrop's own drags and keep a fixed order above the edge strips; a second target in WPF would repeat that and race the strips for the top.
+**Trade-offs:** The box's place is decided on another thread than the one that owns it (`SWP_ASYNCWINDOWPOS`): it can show for a frame where WPF guessed before the engine moves it.
+**Revisit if:** The shell becomes per-monitor DPI aware.
+
+---
+
+## 2026-11-25 — The iPhone app: platform 4, in the Mac project, sharing through the App Group
+**Chosen:** iOS is platform 4 in protocol minor 1, which is not released yet, so Android and iOS arrive together; every client treats both as phones, and phones list and pair with computers only. The iPhone app is an iOS target of the Mac's XcodeGen project (`macos/OsdropPhone`, bundle `com.akinalpfdn.osdrop.ios`), as Osplay builds its iPad app, and compiles the Mac's Bonjour and Keychain sources unchanged. The share extension never touches the network: it copies the shared files into the App Group (`group.com.akinalpfdn.osdrop`) with the computer they go to, and the app sends them while it is open. Received files land in the app's Documents folder, which the Files app shows; photos and videos go to Photos when the user asks.
+**Alternatives:** A protocol minor 2 for iOS; a separate Xcode project for the phone; a share extension that runs its own mesh and sends at once; saving every received photo to Photos by itself.
+**Why:** Minor 1 has not shipped, so a second minor only adds a compatibility rule nobody needs. One project keeps one core package build and one set of signing settings. An extension has a tight memory limit and is ended when the sheet closes, while a send lasts as long as the computer fetches; it would also need the identity and group state shared with it. Writing to Photos needs a permission the user grants for a reason they can see.
+**Trade-offs:** A file shared while Osdrop is closed waits until the app is opened. The Mac's sources the phone builds must stay free of AppKit.
+**Revisit if:** iOS gives share extensions longer network time, or users expect files to leave without opening the app.

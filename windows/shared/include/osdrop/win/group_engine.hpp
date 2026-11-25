@@ -9,6 +9,7 @@
 #include <osdrop/win/clipboard_sync.hpp>
 #include <osdrop/win/expected.hpp>
 #include <osdrop/win/network_drag.hpp>
+#include <osdrop/win/sent_files.hpp>
 
 #include <array>
 #include <cstdint>
@@ -117,13 +118,15 @@ struct DragArrival {
     std::vector<drag::ArrivingItem> items;
 };
 
-/// A member fetching an item of this PC's drag (osdrop_mesh_callbacks.send_progress).
+/// A member fetching an item of this PC's drag, or of files this PC sent it
+/// (osdrop_mesh_callbacks.send_progress).
 struct SendUpdate {
     DeviceIdBytes device{};
+    bool sent = false; ///< files sent without a drag: drag_id is the send's ID
     std::uint32_t drag_id = 0;
     std::uint32_t index = 0;
     std::string name; ///< the item's name, empty when not known
-    std::uint64_t sent = 0;
+    std::uint64_t sent_bytes = 0;
     std::uint64_t total = 0;
     std::uint8_t state = 1; ///< 1 sending, 2 every byte went out, 3 stopped
 };
@@ -180,11 +183,19 @@ public:
     /// A transfer this PC receives moved on, or ended (clipboard ones included).
     virtual void transfer_progress(std::uint64_t transfer_id, std::uint64_t done,
                                    std::uint64_t total) = 0;
-    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold.
+    /// `links_left_out`: the links in its item, none of which a drop on this PC can hold;
+    /// `items`: its top-level files and folders as created, when it succeeded.
     virtual void transfer_finished(std::uint64_t transfer_id, osdrop_result result,
-                                   std::uint64_t links_left_out) = 0;
-    /// A member fetches an item of this PC's drag.
+                                   std::uint64_t links_left_out,
+                                   std::span<const std::filesystem::path> items) = 0;
+    /// A member fetches an item of this PC's drag, or of files this PC sent it.
     virtual void send_progress(const SendUpdate& update) = 0;
+    /// A transfer fetching an item a member sent this PC started (a phone; DEVPLAN Phase 20).
+    virtual void sent_receiving(std::uint64_t transfer_id, const DeviceIdBytes& source,
+                                const std::string& name, std::uint64_t size) = 0;
+    /// Files this PC sent a member ended: its answer, or FAILED.
+    virtual void send_finished(const DeviceIdBytes& device, std::uint64_t send_id,
+                               osdrop_send_outcome outcome) = 0;
 };
 
 /// What a PC can do: be controlled through the input process (DEVPLAN Phase 3), share the
@@ -205,6 +216,8 @@ public:
         ClipboardLimits clipboard_limits{};
         /// What this computer announces to the members (OSDROP_FEATURE_* bits).
         std::uint32_t features = kAvailableFeatures;
+        /// Where files phones send arrive (Downloads); empty: sends are declined.
+        std::filesystem::path downloads;
     };
 
     /// Fails with UNSUPPORTED_VERSION for a group stored by a newer Osdrop (it is kept, not
@@ -278,6 +291,12 @@ public:
     void drop_finished(std::uint32_t drag_id, osdrop_drag_outcome outcome);
     /// As osdrop_mesh_withdraw for a drag: members fetching its items stop.
     void withdraw_drag(std::uint32_t drag_id);
+    /// As osdrop_mesh_send: files and folders (absolute paths) to one member (a phone). The send's
+    /// ID, or the reason core refused it.
+    [[nodiscard]] Expected<std::uint64_t, osdrop_result>
+    send_files(const DeviceIdBytes& device, std::span<const std::filesystem::path> items);
+    /// As osdrop_mesh_withdraw for a send: the member stops fetching its items.
+    void withdraw_send(std::uint64_t send_id);
     // drag::DragTransfers: the items of drags that arrive.
     [[nodiscard]] std::optional<std::uint64_t>
     receive(const drag::SourceId& source, std::uint32_t drag_id, std::uint32_t index,
@@ -306,6 +325,10 @@ private:
     /// Core's callbacks for the cursor and keyboard across computers, and for drags.
     static void control_callbacks(osdrop_mesh_callbacks& result);
     static void drag_callbacks(osdrop_mesh_callbacks& result);
+    /// Core's callbacks for files a phone sends.
+    static void send_callbacks(osdrop_mesh_callbacks& result);
+    /// The name of a dragged or sent item, from the names kept as it was offered.
+    [[nodiscard]] std::string item_name(const osdrop_object_ref& item) const;
 
     Config config_;
     StateStore& store_;
@@ -317,7 +340,11 @@ private:
     drag::TransferRouter transfers_; ///< drag items' transfer events
     /// The item names of this PC's latest drags, for send_progress; guarded by mutex_.
     std::deque<std::pair<std::uint32_t, std::vector<std::string>>> drag_names_;
-    DeviceIdBytes self_{}; ///< set before port_, which publishes it
+    /// Likewise for this PC's latest sends.
+    std::deque<std::pair<std::uint64_t, std::vector<std::string>>> send_names_;
+    std::unique_ptr<SentMesh> sent_mesh_; ///< reads mesh_ when called
+    std::unique_ptr<SentFiles> sent_;     ///< after sent_mesh_: stopped and gone first
+    DeviceIdBytes self_{};                ///< set before port_, which publishes it
 
     mutable std::mutex mutex_;
     /// Orders availability reports from the input bridge and the shell; core never takes it.

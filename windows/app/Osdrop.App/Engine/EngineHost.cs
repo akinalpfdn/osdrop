@@ -109,6 +109,24 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
 
     public Task WithdrawDragAsync(uint dragId) => Native.Run(() => NativeMethods.WithdrawDrag(_engine, dragId));
 
+    public Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths)
+    {
+        byte[] id = Convert.FromHexString(deviceId);
+        byte[][] texts = [.. paths.Select(Utf8.Terminated)];
+        return Native.Run(() => SendFilesNative(_engine, id, texts));
+    }
+
+    public Task WithdrawSendAsync(ulong sendId) => Native.Run(() => NativeMethods.WithdrawSend(_engine, sendId));
+
+    public Task<IReadOnlyList<ScreenInfo>> GetScreensAsync() =>
+        Native.Run<IReadOnlyList<ScreenInfo>>(() => ReadScreens(_engine));
+
+    public Task SetCornersAsync(IReadOnlyList<CornerPlacement> corners)
+    {
+        NativeCorner[] native = [.. corners.Select(ToNative)];
+        return Native.Run(() => SetCornersNative(_engine, native));
+    }
+
     public Task<CoreResult> SetPermissionsAsync(string deviceId, Permissions permissions)
     {
         byte[] id = Convert.FromHexString(deviceId);
@@ -238,6 +256,49 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         var native = new NativePlacement { X = placement.X, Y = placement.Y, Detached = placement.IsDetached ? (byte)1 : (byte)0 };
         Convert.FromHexString(placement.DeviceId).CopyTo(new Span<byte>(native.DeviceId, NativeSizes.DeviceId));
         return native;
+    }
+
+    private static unsafe NativeCorner ToNative(CornerPlacement corner)
+    {
+        var native = new NativeCorner
+        {
+            Corner = (byte)corner.Corner,
+            Zone = corner.Zone,
+            Inset = corner.Inset,
+            BoxWindow = (ulong)corner.Box,
+        };
+        Convert.FromHexString(corner.DeviceId).CopyTo(new Span<byte>(native.DeviceId, NativeSizes.DeviceId));
+        if (corner.Screen is { Length: NativeSizes.MonitorKey * 2 } screen)
+        {
+            Convert.FromHexString(screen).CopyTo(new Span<byte>(native.ScreenKey, NativeSizes.MonitorKey));
+        }
+        return native;
+    }
+
+    private static unsafe CoreResult SetCornersNative(nint engine, NativeCorner[] corners)
+    {
+        fixed (NativeCorner* pointer = corners)
+        {
+            return NativeMethods.SetCorners(engine, pointer, (nuint)corners.Length);
+        }
+    }
+
+    private static unsafe List<ScreenInfo> ReadScreens(nint engine)
+    {
+        NativeScreen[] screens = ReadList<NativeScreen>(
+            (items, capacity, count) => NativeMethods.Screens(engine, items, capacity, count));
+        var list = new List<ScreenInfo>(screens.Length);
+        fixed (NativeScreen* pointer = screens)
+        {
+            for (int i = 0; i < screens.Length; ++i)
+            {
+                NativeScreen* screen = pointer + i;
+                list.Add(new ScreenInfo(
+                    Utf8.Hex(screen->Key, NativeSizes.MonitorKey), Utf8.Read(screen->Name, NativeSizes.Name),
+                    screen->Primary == 1, screen->Left, screen->Top));
+            }
+        }
+        return list;
     }
 
     private static unsafe CoreResult SetPermissionsNative(nint engine, byte[] deviceId, Permissions permissions)
@@ -423,6 +484,36 @@ internal sealed class EngineHost : IGroupEngine, IAsyncDisposable
         {
             CoreResult result = NativeMethods.Pair(engine, id, &connection);
             return (result, connection);
+        }
+    }
+
+    private static unsafe CoreResult SendFilesNative(nint engine, byte[] deviceId, byte[][] paths)
+    {
+        var handles = new GCHandle[paths.Length];
+        nint[] pointers = new nint[paths.Length];
+        try
+        {
+            for (int index = 0; index < paths.Length; index++)
+            {
+                handles[index] = GCHandle.Alloc(paths[index], GCHandleType.Pinned);
+                pointers[index] = handles[index].AddrOfPinnedObject();
+            }
+            ulong sendId = 0;
+            fixed (byte* id = deviceId)
+            fixed (nint* list = pointers)
+            {
+                return NativeMethods.SendFiles(engine, id, (byte**)list, (nuint)paths.Length, &sendId);
+            }
+        }
+        finally
+        {
+            foreach (GCHandle handle in handles)
+            {
+                if (handle.IsAllocated)
+                {
+                    handle.Free();
+                }
+            }
         }
     }
 

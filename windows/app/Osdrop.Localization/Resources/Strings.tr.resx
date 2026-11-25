@@ -192,6 +192,12 @@
   <data name="UnitGigabytes" xml:space="preserve">
     <value>{0} GB</value>
   </data>
+  <data name="GroupSendFiles" xml:space="preserve">
+    <value>Dosya gönder…</value>
+  </data>
+  <data name="GroupSendFilesTitle" xml:space="preserve">
+    <value>{0} cihazına dosya gönder</value>
+  </data>
   <data name="GroupBlock" xml:space="preserve">
     <value>Çıkar ve engelle</value>
   </data>
@@ -570,6 +576,18 @@
   <data name="TransfersBytes" xml:space="preserve">
     <value>{0} / {1}</value>
   </data>
+  <data name="TransfersShowAll" xml:space="preserve">
+    <value>Tümünü göster ({0})</value>
+  </data>
+  <data name="TransfersEmpty" xml:space="preserve">
+    <value>Henüz aktarım yok.</value>
+  </data>
+  <data name="TransfersStatus" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="TransfersWindowTitle" xml:space="preserve">
+    <value>Aktarımlar</value>
+  </data>
   <data name="TransfersDone" xml:space="preserve">
     <value>Tamamlandı</value>
   </data>
@@ -605,5 +623,50 @@
   </data>
   <data name="TransfersNotifyNotSent" xml:space="preserve">
     <value>Gönderim durdu</value>
+  </data>
+  <data name="CornerDropHere" xml:space="preserve">
+    <value>{0} cihazına göndermek için buraya bırak.</value>
+  </data>
+  <data name="CornerDragOut" xml:space="preserve">
+    <value>Bir dosyayı kutudan istediğin klasöre ya da uygulamaya sürükle. Hepsi İndirilenler'de de duruyor.</value>
+  </data>
+  <data name="CornerClose" xml:space="preserve">
+    <value>Kapat</value>
+  </data>
+  <data name="CornerShowInFolder" xml:space="preserve">
+    <value>Klasörde göster</value>
+  </data>
+  <data name="CornerTopLeft" xml:space="preserve">
+    <value>Sol üst</value>
+  </data>
+  <data name="CornerTopRight" xml:space="preserve">
+    <value>Sağ üst</value>
+  </data>
+  <data name="CornerBottomLeft" xml:space="preserve">
+    <value>Sol alt</value>
+  </data>
+  <data name="CornerBottomRight" xml:space="preserve">
+    <value>Sağ alt</value>
+  </data>
+  <data name="SettingsPhoneCorners" xml:space="preserve">
+    <value>Telefon köşeleri</value>
+  </data>
+  <data name="SettingsPhoneCornersDescription" xml:space="preserve">
+    <value>Telefona göndermek için dosyaları onun köşesine sürükle; telefondan gelen dosyalar da orada görünür. Kutu, telefon bağlıyken çıkar.</value>
+  </data>
+  <data name="SettingsNoPhones" xml:space="preserve">
+    <value>Köşesini seçmek için bir telefon eşleştir.</value>
+  </data>
+  <data name="SettingsCornerScreen" xml:space="preserve">
+    <value>Kutunun ekranı</value>
+  </data>
+  <data name="SettingsCorner" xml:space="preserve">
+    <value>Kutunun köşesi</value>
+  </data>
+  <data name="SettingsMainScreen" xml:space="preserve">
+    <value>{0} (ana ekran)</value>
+  </data>
+  <data name="SettingsScreenNumber" xml:space="preserve">
+    <value>Ekran {0}</value>
   </data>
 </root>

@@ -3,6 +3,7 @@
 #include "protocol/wire.hpp"
 
 #include <cstddef>
+#include <optional>
 #include <set>
 #include <string>
 #include <type_traits>
@@ -27,7 +28,7 @@ Decoded decode_failure(Error error) {
 // --- Validation, shared by encoder and decoder ---------------------------------------------------
 
 Check validate(const Hello& m) {
-    if (!enum_in(m.platform, 1, 2)) {
+    if (!enum_in(m.platform, 1, kLastPlatform)) {
         return fail(Error::ValueOutOfRange);
     }
     return check_string(m.device_name);
@@ -75,7 +76,7 @@ Check validate(const RosterState& m) {
     }
     std::set<std::pair<Id, std::uint32_t>> members;
     for (const RosterMember& member : m.members) {
-        if (member.epoch == 0 || !enum_in(member.platform, 1, 2) ||
+        if (member.epoch == 0 || !enum_in(member.platform, 1, kLastPlatform) ||
             !members.emplace(member.device_id, member.epoch).second) {
             return fail(Error::ValueOutOfRange);
         }
@@ -92,7 +93,7 @@ Check validate(const RosterState& m) {
     }
     std::set<Id> blocks;
     for (const RosterBlock& block : m.blocks) {
-        if (block.version == 0 || !enum_in(block.platform, 1, 2) ||
+        if (block.version == 0 || !enum_in(block.platform, 1, kLastPlatform) ||
             !blocks.insert(block.device_id).second) {
             return fail(Error::ValueOutOfRange);
         }
@@ -187,15 +188,24 @@ Check validate(const DragProbe& m) {
     return range(m.probe_id != 0 && is_point(m.x, m.y));
 }
 
+Check check_items(const std::vector<OfferedItem>& items);
+
 Check validate(const DragOffer& m) {
     if (m.drag_id == 0) {
         // "No drag here" answers a probe and carries nothing.
         return range(m.probe_id != 0 && m.items.empty() && is_zero(m.source));
     }
-    if (is_zero(m.source) || !in_range(m.items.size(), 1, kMaxDragItems)) {
+    if (is_zero(m.source)) {
         return fail(Error::ValueOutOfRange);
     }
-    for (const OfferedItem& item : m.items) {
+    return check_items(m.items);
+}
+
+Check check_items(const std::vector<OfferedItem>& items) {
+    if (!in_range(items.size(), 1, kMaxDragItems)) {
+        return fail(Error::ValueOutOfRange);
+    }
+    for (const OfferedItem& item : items) {
         if (!enum_in(item.kind, 1, 2)) {
             return fail(Error::ValueOutOfRange);
         }
@@ -211,6 +221,17 @@ Check validate(const DragOffer& m) {
 
 Check validate(const DragResult& m) {
     return range(m.drag_id != 0 && enum_in(m.outcome, 1, 3));
+}
+
+Check validate(const SendOffer& m) {
+    if (m.send_id == 0) {
+        return fail(Error::ValueOutOfRange);
+    }
+    return check_items(m.items);
+}
+
+Check validate(const SendResult& m) {
+    return range(m.send_id != 0 && enum_in(m.outcome, 1, 3));
 }
 
 Check validate(const ClipboardAnnounce& m) {
@@ -483,6 +504,23 @@ Decoded read_drag_probe(BodyReader& b) {
     return finish(b, m);
 }
 
+/// `count` offered items, as DragOffer and SendOffer carry them.
+std::optional<Error> read_items(BodyReader& b, std::uint16_t count,
+                                std::vector<OfferedItem>& items) {
+    if (count > kMaxDragItems) {
+        return Error::ValueOutOfRange;
+    }
+    Reader& r = b.raw();
+    items.resize(count);
+    for (OfferedItem& item : items) {
+        if (!b.enumeration(item.kind) || !b.reserved(1) || !r.u64(item.byte_count) ||
+            !read_string(r, item.content_type) || !read_long_string(r, item.name)) {
+            return Error::Truncated;
+        }
+    }
+    return std::nullopt;
+}
+
 Decoded read_drag_offer(BodyReader& b) {
     DragOffer m;
     Reader& r = b.raw();
@@ -490,17 +528,30 @@ Decoded read_drag_offer(BodyReader& b) {
     if (!r.u32(m.probe_id) || !r.u32(m.drag_id) || !read_array(r, m.source) || !r.u16(count)) {
         return decode_failure(Error::Truncated);
     }
-    if (count > kMaxDragItems) {
-        return decode_failure(Error::ValueOutOfRange);
-    }
-    m.items.resize(count);
-    for (OfferedItem& item : m.items) {
-        if (!b.enumeration(item.kind) || !b.reserved(1) || !r.u64(item.byte_count) ||
-            !read_string(r, item.content_type) || !read_long_string(r, item.name)) {
-            return decode_failure(Error::Truncated);
-        }
+    if (const auto error = read_items(b, count, m.items)) {
+        return decode_failure(*error);
     }
     return finish(b, std::move(m));
+}
+
+Decoded read_send_offer(BodyReader& b) {
+    SendOffer m;
+    std::uint16_t count = 0;
+    if (!b.raw().u64(m.send_id) || !b.raw().u16(count) || !b.reserved(2)) {
+        return decode_failure(Error::Truncated);
+    }
+    if (const auto error = read_items(b, count, m.items)) {
+        return decode_failure(*error);
+    }
+    return finish(b, std::move(m));
+}
+
+Decoded read_send_result(BodyReader& b) {
+    SendResult m;
+    if (!b.raw().u64(m.send_id) || !b.enumeration(m.outcome)) {
+        return decode_failure(Error::Truncated);
+    }
+    return finish(b, m);
 }
 
 Decoded read_drag_result(BodyReader& b) {
@@ -584,11 +635,25 @@ Decoded read_body(std::uint8_t type, BodyReader& b) {
         return read_drag_result(b);
     case ControlType::ClipboardAnnounce:
         return read_clipboard_announce(b);
+    case ControlType::SendOffer:
+        return read_send_offer(b);
+    case ControlType::SendResult:
+        return read_send_result(b);
     }
     return decode_failure(Error::UnknownType);
 }
 
 // --- Encoding ------------------------------------------------------------------------------------
+
+void write_items(Writer& w, const std::vector<OfferedItem>& items) {
+    for (const OfferedItem& item : items) {
+        write_enum(w, item.kind);
+        write_reserved(w, 1);
+        w.u64(item.byte_count);
+        write_string(w, item.content_type);
+        write_long_string(w, item.name);
+    }
+}
 
 void write_point(Writer& w, std::int32_t x, std::int32_t y) {
     w.i32(x);
@@ -744,16 +809,20 @@ void write_body(Writer& w, const ControlMessage& message) {
                        w.u32(m.drag_id);
                        w.bytes(m.source);
                        w.u16(static_cast<std::uint16_t>(m.items.size()));
-                       for (const OfferedItem& item : m.items) {
-                           write_enum(w, item.kind);
-                           write_reserved(w, 1);
-                           w.u64(item.byte_count);
-                           write_string(w, item.content_type);
-                           write_long_string(w, item.name);
-                       }
+                       write_items(w, m.items);
                    },
                    [&](const DragResult& m) {
                        w.u32(m.drag_id);
+                       write_enum(w, m.outcome);
+                   },
+                   [&](const SendOffer& m) {
+                       w.u64(m.send_id);
+                       w.u16(static_cast<std::uint16_t>(m.items.size()));
+                       write_reserved(w, 2);
+                       write_items(w, m.items);
+                   },
+                   [&](const SendResult& m) {
+                       w.u64(m.send_id);
                        write_enum(w, m.outcome);
                    },
                    [&](const ClipboardAnnounce& m) {

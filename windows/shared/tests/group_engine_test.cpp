@@ -172,8 +172,13 @@ public:
     void transfer_progress(std::uint64_t /*transfer_id*/, std::uint64_t /*done*/,
                            std::uint64_t /*total*/) override {}
     void transfer_finished(std::uint64_t /*transfer_id*/, osdrop_result /*result*/,
-                           std::uint64_t /*links_left_out*/) override {}
+                           std::uint64_t /*links_left_out*/,
+                           std::span<const std::filesystem::path> /*items*/) override {}
     void send_progress(const osdrop::win::SendUpdate& /*update*/) override {}
+    void sent_receiving(std::uint64_t /*transfer_id*/, const DeviceIdBytes& /*source*/,
+                        const std::string& /*name*/, std::uint64_t /*size*/) override {}
+    void send_finished(const DeviceIdBytes& /*device*/, std::uint64_t /*send_id*/,
+                       osdrop_send_outcome /*outcome*/) override {}
 
     bool wait_for(const std::function<bool()>& condition) {
         std::unique_lock lock(mutex_);

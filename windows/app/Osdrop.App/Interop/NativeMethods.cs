@@ -72,6 +72,14 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult CloseAll(nint engine, byte sleeping);
 
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_screens")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult Screens(nint engine, NativeScreen* screens, nuint capacity, nuint* count);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_set_corners")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SetCorners(nint engine, NativeCorner* corners, nuint count);
+
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_cancel_transfer")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult CancelTransfer(nint engine, ulong transferId);
@@ -79,6 +87,15 @@ internal static unsafe partial class NativeMethods
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_withdraw_drag")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial CoreResult WithdrawDrag(nint engine, uint dragId);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_send_files")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult SendFiles(
+        nint engine, byte* deviceId, byte** paths, nuint count, ulong* sendId);
+
+    [LibraryImport(_engine, EntryPoint = "osdrop_engine_withdraw_send")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial CoreResult WithdrawSend(nint engine, ulong sendId);
 
     [LibraryImport(_engine, EntryPoint = "osdrop_engine_cancel_clipboard_fetch")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

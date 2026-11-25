@@ -21,6 +21,7 @@ struct OsdropApp: App {
         // No drag can be running yet, so anything staged belongs to an earlier run.
         dependencies.staging.removeAll()
         dependencies.group.start()
+        dependencies.corners.start()
         dependencies.awdl.start()
         self.dependencies = dependencies
         pairingWindow = PairingWindowPresenter(controller: dependencies.group)
@@ -69,6 +70,11 @@ struct OsdropApp: App {
         Settings {
             SettingsView(viewModel: settings)
         }
+
+        Window("transfers.title", id: TransfersWindowView.windowID) {
+            TransfersWindowView(group: dependencies.group)
+        }
+        .defaultSize(width: Theme.Size.transfersWindowWidth, height: Theme.Size.transfersWindowHeight)
 
         #if DEBUG
             Window("developer.title", id: DeveloperInputView.windowID) {

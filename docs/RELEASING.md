@@ -1,13 +1,15 @@
 # Releasing Osdrop
 
-A release has two downloads made in two places and published together as one GitHub release:
+A release has three downloads made in two places and published together as one GitHub release:
 
 | Download | Built by | Signing |
 |----------|----------|---------|
 | `Osdrop-Setup.exe` (Windows) | the Release workflow on GitHub Actions | none (SmartScreen shows "More info → Run anyway") |
 | `Osdrop.dmg` (macOS) | `scripts/macos/release.sh` on the maintainer's Mac | Developer ID, notarized and stapled |
+| `Osdrop.apk` (Android) | Gradle on the maintainer's Mac | the maintainer's release keystore (APK signature v2 and v3) |
 
-The Developer ID certificate never leaves the maintainer's Mac, so the Mac part does not run on CI.
+The Developer ID certificate and the release keystore never leave the maintainer's Mac, so the Mac
+and Android parts do not run on CI.
 Each download has a `.sha256` file next to it.
 
 ## One-time setup on the Mac
@@ -23,12 +25,16 @@ Each download has a `.sha256` file next to it.
 
 - `brew install xcodegen gh`, then `gh auth login`.
 - `pip3 install dmgbuild`.
+- For the APK: the Android toolchain from [`BUILDING.md`](BUILDING.md) and the release keystore.
+  Every Osdrop APK is signed with the same key, or Android refuses it as an update; a lost key
+  means every user has to uninstall first.
 
 ## Steps
 
-1. Set the version `X.Y.Z` in both apps: `<Version>` in `windows/app/Directory.Build.props` and
-   `MARKETING_VERSION` in `macos/project.yml`. `python3 scripts/release_version.py` checks that they
-   agree. Merge the change through a pull request as usual.
+1. Set the version `X.Y.Z` in every app: `<Version>` in `windows/app/Directory.Build.props`,
+   `MARKETING_VERSION` in `macos/project.yml`, and `osdropVersion` in `android/gradle.properties`
+   (raise `osdropVersionCode` there by one too). `python3 scripts/release_version.py` checks that
+   they agree. Merge the change through a pull request as usual.
 
 2. Tag the merge commit and push the tag:
 
@@ -43,7 +49,25 @@ Each download has a `.sha256` file next to it.
    builds and tests the Windows installer, and creates a **draft** release `vX.Y.Z` with generated
    notes, `Osdrop-Setup.exe` and `Osdrop-Setup.exe.sha256`.
 
-4. On the Mac, at the tag:
+4. On the Mac, at the tag, build and sign the APK and attach it to the draft (`build-tools` is
+   the newest folder under the SDK's `build-tools`; `apksigner` asks for the keystore's password):
+
+   ```sh
+   git checkout vX.Y.Z
+   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+   (cd android && ./gradlew clean assembleRelease)
+   "$ANDROID_HOME/build-tools/36.1.0/apksigner" sign --ks <release keystore> \
+     --out Osdrop.apk android/app/build/outputs/apk/release/app-release-unsigned.apk
+   "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs Osdrop.apk
+   shasum -a 256 Osdrop.apk > Osdrop.apk.sha256
+   gh release upload vX.Y.Z Osdrop.apk Osdrop.apk.sha256
+   rm Osdrop.apk Osdrop.apk.sha256
+   ```
+
+   R8 shrinks the release build; `android/app/proguard-rules.pro` keeps the classes the JNI bridge
+   calls by name.
+
+5. On the Mac, at the tag:
 
    ```sh
    git checkout vX.Y.Z
@@ -51,15 +75,15 @@ Each download has a `.sha256` file next to it.
    ```
 
    The script refuses to run unless the working tree is clean, `HEAD` is the tagged commit and the
-   draft already has the Windows installer. It archives the app, exports it with Developer ID,
+   draft already has the Windows installer and the APK. It archives the app, exports it with Developer ID,
    notarizes and staples the app, builds `Osdrop.dmg`, signs, notarizes and staples the DMG, checks
    both with Gatekeeper, uploads `Osdrop.dmg` and `Osdrop.dmg.sha256`, and publishes the release as
    the latest. With `--no-publish` it leaves the release a draft, for example to edit the notes;
    publish it afterwards with `gh release edit vX.Y.Z --draft=false --latest`.
 
-5. Check the published release: both downloads from
+6. Check the published release: the three downloads from
    `https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.dmg` and
-   `.../Osdrop-Setup.exe`, and the update check in an older version of each app (Settings › Check
+   `.../Osdrop-Setup.exe` and `.../Osdrop.apk` (it installs over the previous APK), and the update check in an older version of each app (Settings › Check
    now) offers the new one.
 
 ## Rules

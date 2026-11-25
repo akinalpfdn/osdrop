@@ -16,11 +16,22 @@ internal static class Shell
         Start(folder);
     }
 
-    private static void Start(string target)
+    /// <summary>An Explorer window on the file's folder, the file selected.</summary>
+    public static void ShowInFolder(string file)
+    {
+        var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+        start.ArgumentList.Add($"/select,{file}");
+        Start(start, file);
+    }
+
+    private static void Start(string target) =>
+        Start(new ProcessStartInfo(target) { UseShellExecute = true }, target);
+
+    private static void Start(ProcessStartInfo start, string target)
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            using var process = Process.Start(start);
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

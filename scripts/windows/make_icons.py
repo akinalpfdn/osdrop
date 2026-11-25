@@ -13,6 +13,9 @@ edge with a half arrow crossing it each way, on a 22-unit grid. This script draw
   AppIcon.appiconset         the Mac app icon: the same glyph and colours in the macOS icon
                              shape (a rounded square inside the 1024-point grid's margins)
 
+The Android icons are vector drawables with the same lines, written by hand:
+android/app/src/main/res/drawable/ic_launcher_foreground.xml and ic_notification.xml.
+
 Run from the repository root:  uvx --with pillow python scripts/windows/make_icons.py
 """
 

@@ -323,6 +323,29 @@ public final class Mesh: Sendable {
         return dragID
     }
 
+    /// Sends `files` to the connected member `device` without a drag (a phone): the send's ID;
+    /// `.sendFinished` reports the end. `.unsupportedVersion` when its Osdrop is too old for sends.
+    public func send(_ files: [DraggedFile], to device: DeviceID) throws(CoreError) -> UInt64 {
+        var sendID: UInt64 = 0
+        try check(
+            withCStrings(files.map { $0.url.path(percentEncoded: false) }) { paths in
+                withCStrings(files.map(\.contentType)) { types in
+                    let items = zip(paths, types).map { osdrop_dragged_item(path: $0, content_type: $1) }
+                    return items.withUnsafeBufferPointer { buffer in
+                        handle.withPointer {
+                            osdrop_mesh_send($0, device.bytes, buffer.baseAddress, buffer.count, &sendID)
+                        }
+                    }
+                }
+            })
+        return sendID
+    }
+
+    /// Answers a `.sendArrived` once its items were fetched, or `.declined` to take none.
+    public func answerSend(_ sendID: UInt64, from device: DeviceID, _ outcome: SendOutcome) throws(CoreError) {
+        try check(handle.withPointer { osdrop_mesh_answer_send($0, device.bytes, sendID, outcome.raw) })
+    }
+
     /// A drag began on this Mac with promised files, which exist only once it is dropped (Photos):
     /// `.dragWanted` asks for them when another computer wants the drag.
     public func dragPromised() throws(CoreError) {
@@ -598,6 +621,22 @@ private final class MeshCallbackBox: Sendable {
                     SendProgress(
                         device: deviceID(device), item: TransferItem(item), bytesSent: sent, bytesTotal: total,
                         state: SendState(state))))
+        }
+        callbacks.send_arrived = { context, device, sendID, items, count in
+            guard let device else { return }
+            let arriving = (0..<count).compactMap { index -> ArrivingItem? in
+                guard let item = items?[index], let name = item.name, let type = item.content_type else { return nil }
+                return ArrivingItem(
+                    name: String(cString: name), isFolder: item.is_folder == 1, byteCount: item.byte_count,
+                    contentType: String(cString: type))
+            }
+            MeshCallbackBox.from(context)?.continuation.yield(
+                .sendArrived(deviceID(device), sendID: sendID, items: arriving))
+        }
+        callbacks.send_finished = { context, device, sendID, outcome in
+            guard let device else { return }
+            MeshCallbackBox.from(context)?.continuation.yield(
+                .sendFinished(deviceID(device), sendID: sendID, SendOutcome(outcome)))
         }
         return callbacks
     }

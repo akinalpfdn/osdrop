@@ -145,6 +145,37 @@ internal sealed class FakeEngine : IGroupEngine
         return Task.CompletedTask;
     }
 
+    public List<(string DeviceId, IReadOnlyList<string> Paths)> Sends { get; } = [];
+
+    public CoreResult SendResult { get; set; } = CoreResult.Ok;
+
+    public List<ulong> WithdrawnSends { get; } = [];
+
+    public Task<CoreResult> SendFilesAsync(string deviceId, IReadOnlyList<string> paths)
+    {
+        Sends.Add((deviceId, paths));
+        return Task.FromResult(SendResult);
+    }
+
+    public Task WithdrawSendAsync(ulong sendId)
+    {
+        WithdrawnSends.Add(sendId);
+        return Task.CompletedTask;
+    }
+
+    public List<ScreenInfo> Screens { get; } = [];
+
+    /// <summary>Every list of corners the shell set, the latest last.</summary>
+    public List<IReadOnlyList<CornerPlacement>> CornerLists { get; } = [];
+
+    public Task<IReadOnlyList<ScreenInfo>> GetScreensAsync() => Task.FromResult<IReadOnlyList<ScreenInfo>>([.. Screens]);
+
+    public Task SetCornersAsync(IReadOnlyList<CornerPlacement> corners)
+    {
+        CornerLists.Add(corners);
+        return Task.CompletedTask;
+    }
+
     public Task<CoreResult> LockInputAsync(bool locked)
     {
         Locks.Add(locked);

@@ -6,9 +6,10 @@ clone, that is a bug — please open an issue.
 | Part | Built on | Toolchain |
 |------|----------|-----------|
 | `core/`, `windows/shared/` | macOS and Windows | CMake ≥ 3.28, Ninja, Clang or MSVC (C++20) |
-| `macos/` | macOS | Xcode 16 or later (Swift 6), XcodeGen |
+| `macos/` (Mac, iPhone and iPad apps) | macOS | Xcode 16 or later (Swift 6), XcodeGen |
 | `windows/engine`, `windows/input`, `windows/service` | Windows | Visual Studio 2022 or later (MSVC), CMake, Ninja |
 | `windows/app` | Windows | .NET 10 SDK |
+| `android/` | macOS, Windows or Linux | JDK 17–21, Android SDK 36, NDK 28.2, CMake 3.31 |
 
 ## macOS
 
@@ -209,6 +210,48 @@ that has to be paired again.
 `dotnet format` covers C#. C++ and Swift formatting is checked by the macOS CI job; on Windows,
 format a C++ file with the pinned version from `scripts/lint.sh`, for example
 `uvx clang-format@23.1.3 -i windows\engine\src\capi\engine_capi.cpp`.
+
+## iPhone and iPad
+
+The iOS app is a target of the Mac's project (`macos/OsdropPhone`, with its share extension in
+`macos/OsdropPhoneShare`); it builds `core` from the same Swift package. In a terminal, after
+`xcodegen generate` in `macos/`:
+
+```sh
+cd macos
+xcodebuild -project Osdrop.xcodeproj -scheme OsdropPhone \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
+```
+
+To run it on a device, add to `macos/Config/Signing.local.xcconfig`:
+
+```
+CODE_SIGN_STYLE[sdk=iphoneos*] = Automatic
+CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Development
+```
+
+then build for the device with `-allowProvisioningUpdates`, so Xcode registers the App Group
+`group.com.akinalpfdn.osdrop` and creates the development profiles. The app runs on iOS 17 or later,
+on iPhone and iPad, and talks to Osdrop 0.2 or later on the computers.
+
+## Android
+
+The phone app needs JDK 17 to 21 (Android Studio's bundled JDK works; Gradle 8.14 does not run on
+newer ones), the Android SDK with platform 36, NDK 28.2.13676358 and CMake 3.31.6 (Android Studio ›
+SDK Manager › SDK Tools, or `sdkmanager "ndk;28.2.13676358" "cmake;3.31.6"`). The NDK builds `core`
+from the same CMake sources for every ABI. In a terminal on macOS, with Android Studio's JDK:
+
+```sh
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+cd android
+./gradlew assembleDebug testDebugUnitTest lintDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or open the `android` folder in Android Studio and run on a phone with USB debugging on. The app
+runs on Android 12 or later and talks to Osdrop 0.2 or later on the computers; a computer on 0.1
+does not see the phone. A debug build cannot update a release build already on the phone (their
+signatures differ): uninstall the release first.
 
 ## Continuous integration
 

@@ -4,7 +4,9 @@
 
 #include <shellscalingapi.h>
 
+#include <map>
 #include <string>
+#include <vector>
 
 namespace osdrop::engine {
 namespace {
@@ -51,6 +53,43 @@ std::string stable_name(const wchar_t* gdi_name) {
     return utf8(gdi_name);
 }
 
+/// Monitors' names as Display settings shows them, by their GDI name ("\\.\DISPLAY1").
+std::map<std::wstring, std::string> monitor_names() {
+    UINT32 path_count = 0;
+    UINT32 mode_count = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) !=
+        ERROR_SUCCESS) {
+        return {};
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_count);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_count);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count,
+                           modes.data(), nullptr) != ERROR_SUCCESS) {
+        return {};
+    }
+    paths.resize(path_count);
+    std::map<std::wstring, std::string> names;
+    for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{
+            .header = {.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+                       .size = sizeof(DISPLAYCONFIG_SOURCE_DEVICE_NAME),
+                       .adapterId = path.sourceInfo.adapterId,
+                       .id = path.sourceInfo.id}};
+        DISPLAYCONFIG_TARGET_DEVICE_NAME target{
+            .header = {.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+                       .size = sizeof(DISPLAYCONFIG_TARGET_DEVICE_NAME),
+                       .adapterId = path.targetInfo.adapterId,
+                       .id = path.targetInfo.id}};
+        if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS &&
+            DisplayConfigGetDeviceInfo(&target.header) == ERROR_SUCCESS &&
+            target.monitorFriendlyDeviceName[0] != L'\0') {
+            names.emplace(std::data(source.viewGdiDeviceName),
+                          utf8(std::data(target.monitorFriendlyDeviceName)));
+        }
+    }
+    return names;
+}
+
 BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC /*dc*/, LPRECT /*rect*/, LPARAM context) {
     // NOLINTNEXTLINE(performance-no-int-to-ptr): EnumDisplayMonitors passes our pointer back
     reinterpret_cast<std::vector<HMONITOR>*>(context)->push_back(monitor);
@@ -63,6 +102,7 @@ std::vector<win::PhysicalMonitor> physical_monitors() {
     const PhysicalPixelsScope scope;
     std::vector<HMONITOR> handles;
     EnumDisplayMonitors(nullptr, nullptr, collect_monitor, reinterpret_cast<LPARAM>(&handles));
+    const std::map<std::wstring, std::string> names = monitor_names();
     std::vector<win::PhysicalMonitor> monitors;
     for (HMONITOR handle : handles) {
         MONITORINFOEXW info{};
@@ -81,7 +121,14 @@ std::vector<win::PhysicalMonitor> physical_monitors() {
                             .right = info.rcMonitor.right,
                             .bottom = info.rcMonitor.bottom,
                             .dpi = dpi_x,
-                            .primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0});
+                            .primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                            .work = {.left = info.rcWork.left,
+                                     .top = info.rcWork.top,
+                                     .right = info.rcWork.right,
+                                     .bottom = info.rcWork.bottom},
+                            .name = names.contains(std::data(info.szDevice))
+                                        ? names.at(std::data(info.szDevice))
+                                        : std::string()});
     }
     return monitors;
 }

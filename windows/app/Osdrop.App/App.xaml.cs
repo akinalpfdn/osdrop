@@ -3,6 +3,7 @@ using System.Windows.Interop;
 using H.NotifyIcon;
 using Microsoft.Win32;
 using Osdrop.App.Control;
+using Osdrop.App.Corners;
 using Osdrop.App.Diagnostics;
 using Osdrop.App.Engine;
 using Osdrop.App.Group;
@@ -36,6 +37,8 @@ public partial class App : Application, IDisposable
     private PairingWindowPresenter? _pairingWindow;
     private ClipboardFetchWindowPresenter? _clipboardFetchWindow;
     private MeshWindow? _meshWindow;
+    private TransfersWindow? _transfersWindow;
+    private CornerBoxController? _corners;
     private bool _quitting;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -138,6 +141,10 @@ public partial class App : Application, IDisposable
         _group.NotificationRequested += (title, message) => _trayIcon?.ShowNotification(title, message);
         var transfers = new TransfersViewModel(
             engine, _group.NameOf, (title, message) => _trayIcon?.ShowNotification(title, message));
+        transfers.ShowAllRequested += () => OpenTransfers(transfers);
+        _corners = new CornerBoxController(
+            engine, _group, _settings, transfers, (title, message) => _trayIcon?.ShowNotification(title, message),
+            zone: Token("Osdrop.Corner.HotZone"), inset: Token("Osdrop.Corner.Inset"));
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -146,6 +153,9 @@ public partial class App : Application, IDisposable
         await _group.RefreshAsync().ConfigureAwait(true);
         await control.RefreshAsync().ConfigureAwait(true);
     }
+
+    /// <summary>A size from Theme/Tokens.xaml, in whole device-independent pixels.</summary>
+    private ushort Token(string key) => (ushort)Math.Round((double)FindResource(key));
 
     private void Fail(string message)
     {
@@ -223,6 +233,22 @@ public partial class App : Application, IDisposable
         }
         _meshWindow.Show();
         _ = _meshWindow.Activate();
+    }
+
+    private void OpenTransfers(TransfersViewModel transfers)
+    {
+        _panel?.Hide();
+        if (_transfersWindow is null)
+        {
+            _transfersWindow = new TransfersWindow(transfers);
+            _transfersWindow.Closed += (_, _) => _transfersWindow = null;
+        }
+        if (_transfersWindow.WindowState == WindowState.Minimized)
+        {
+            _transfersWindow.WindowState = WindowState.Normal;
+        }
+        _transfersWindow.Show();
+        _ = _transfersWindow.Activate();
     }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)

@@ -76,6 +76,10 @@ protocol MeshDriving: ControlDriving, TransferDriving {
         _ item: TransferItem, from device: DeviceID, maxBytes: UInt64
     ) async throws(CoreError)
         -> UInt64
+    /// Sends files to one member without a drag (a phone): the send's ID.
+    func send(_ files: [DraggedFile], to device: DeviceID) async throws(CoreError) -> UInt64
+    /// Answers files a member sent once they were fetched, or to take none.
+    func answerSend(_ sendID: UInt64, from device: DeviceID, _ outcome: SendOutcome) async throws(CoreError)
 }
 
 actor CoreMesh: MeshDriving {
@@ -220,5 +224,13 @@ actor CoreMesh: MeshDriving {
         -> UInt64
     {
         try mesh.receive(item, from: device, into: folder, maxBytes: maxBytes)
+    }
+
+    func send(_ files: [DraggedFile], to device: DeviceID) throws(CoreError) -> UInt64 {
+        try mesh.send(files, to: device)
+    }
+
+    func answerSend(_ sendID: UInt64, from device: DeviceID, _ outcome: SendOutcome) throws(CoreError) {
+        try mesh.answerSend(sendID, from: device, outcome)
     }
 }
