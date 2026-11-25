@@ -51,6 +51,9 @@ internal static class AppTunables
     public static readonly IReadOnlyList<ulong> ClipboardFilesLimits =
         [128UL * 1024 * 1024, 512UL * 1024 * 1024, 1024UL * 1024 * 1024, 4096UL * 1024 * 1024];
 
+    /// <summary>A phone's box that only sent files closes this long after the last one ended (as on the Mac).</summary>
+    public static readonly TimeSpan CornerSentLinger = TimeSpan.FromSeconds(3);
+
     /// <summary>The longest name other computers show, in UTF-8 bytes (core's limit).</summary>
     public const int MaxDeviceNameBytes = 64;
 
