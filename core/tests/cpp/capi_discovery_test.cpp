@@ -64,8 +64,8 @@ TEST(Discovery, ARecordReadsBackAsTheSameAdvertisement) {
 }
 
 TEST(Discovery, PhonesAdvertiseTheirSystem) {
-    for (const auto& [platform, os] : {std::pair{OSDROP_PLATFORM_ANDROID, "android"},
-                                       std::pair{OSDROP_PLATFORM_IOS, "ios"}}) {
+    for (const auto& [platform, os] :
+         {std::pair{OSDROP_PLATFORM_ANDROID, "android"}, std::pair{OSDROP_PLATFORM_IOS, "ios"}}) {
         osdrop_advertisement phone = grouped_pc();
         phone.platform = platform;
         const osdrop_txt_record record = record_of(phone);
