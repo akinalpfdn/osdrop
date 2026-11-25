@@ -7,14 +7,14 @@ DEVPLAN reference: Phase 22. Depends on: Phase 022
 An iPhone sends and receives files as the Android app does, while Osdrop is in the foreground on it.
 
 ## Tasks
-- [ ] Swift app with `core` through the Swift package; Keychain identity; Bonjour with the Local Network permission; pairing and the group.
-- [ ] Received files into the app's folder in the Files app; images and videos to Photos with permission.
-- [ ] Sending from the app and from a share extension that hands the files to the app.
-- [ ] Listens only while in the foreground.
+- [x] Swift app with `core` through the Swift package; Keychain identity; Bonjour with the Local Network permission; pairing and the group.
+- [x] Received files into the app's folder in the Files app; images and videos to Photos with permission.
+- [x] Sending from the app and from a share extension that hands the files to the app.
+- [x] Listens only while in the foreground.
 
 ## Acceptance Criteria
-- [ ] An iPhone pairs, appears on both computers, receives files dropped on its corner and sends photos to a computer's box.
-- [ ] Going to the background ends the session cleanly; reopening reconnects.
+- [x] An iPhone pairs, appears on both computers, receives files dropped on its corner and sends photos to a computer's box.
+- [x] Going to the background ends the session cleanly; reopening reconnects.
 
 ## Decisions Made This Phase
 (append as you go; full entries go to DECISIONS.md)

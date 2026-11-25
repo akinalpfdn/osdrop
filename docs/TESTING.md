@@ -414,6 +414,7 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + iPad A16 (Debug) | IP4, IP5, IP6 | Pass, as reported by the user: photos shared to Osdrop went once it was opened, a received photo and video were saved to Photos after one permission prompt, the iPad left and rejoined the group with the app |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + NVIDIA PC (Release) + iPad A16 (Debug) | IP1, IP2, IP3 with the Mac and the PC | Pass, as reported by the user: the iPad paired with both, files dropped in its corner arrived, photos sent from the app ended done and opened the computers' boxes |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), Release, NVIDIA PC | PC build: ctest 405/405, clang-tidy, dotnet format, build with 0 warnings, dotnet test 49/49 | Pass, as reported by the PC; no fix needed |
 | 2026-11-25 | feature/mobile-02-corner-box (da1f6ab), M3 Air (Debug) + NVIDIA PC (Release) + Android phone (debug APK) | PB5 both ways; PB3, PB4 with the Mac | Pass, as reported by the user: files dragged to the facing edge away from the corner crossed Mac → PC and PC → Mac with no box; the Mac box followed a new corner; with the phone app closed the Mac corner took nothing |
