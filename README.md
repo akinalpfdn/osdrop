@@ -9,13 +9,15 @@
 
 <p align="center">
   <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.dmg"><img src="docs/media/download-macos.svg" height="48" alt="Download for macOS"></a>&nbsp;&nbsp;
-  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop-Setup.exe"><img src="docs/media/download-windows.svg" height="48" alt="Download for Windows"></a>
+  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop-Setup.exe"><img src="docs/media/download-windows.svg" height="48" alt="Download for Windows"></a>&nbsp;&nbsp;
+  <a href="https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.apk"><img src="docs/media/download-android.svg" height="48" alt="Download for Android"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/akinalpfdn/osdrop/releases/latest"><img src="https://img.shields.io/github/v/release/akinalpfdn/osdrop?label=version&color=1e8e5a" alt="Latest version"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-111111" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0067c0" alt="Windows 10 or 11">
+  <img src="https://img.shields.io/badge/Android-12%2B-0b7a43" alt="Android 12 or later">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT license"></a>
 </p>
 
@@ -33,6 +35,9 @@
 - **Shared clipboard.** Copy text, images or files on one computer and paste them on another.
 - **Every direction.** Mac ⇄ Windows, Mac ⇄ Mac and Windows ⇄ Windows, up to eight computers in one
   arrangement.
+- **Your phone too.** Drag files into your phone's corner of the screen to send them to it; files
+  shared from the phone open a box in that corner, to drag them where you want. Android now; the
+  phone is reachable while Osdrop is open on it.
 - **Shortcuts keep their place.** ⌘C on a Mac is Ctrl+C on a PC, and the other way round.
 - **Local and private.** No cloud, no account. Computers pair once with a 6-digit code, every
   connection is end-to-end encrypted, and each computer decides what the others may do.
@@ -122,12 +127,22 @@ pairing, encryption and the protocol for both apps; see [`docs/ARCHITECTURE.md`]
 3. The installer adds the app, the Osdrop Input service (which moves the cursor and types for the
    other computers) and a firewall rule. Osdrop lives in the notification area.
 
+### Android
+
+1. Download [`Osdrop.apk`](https://github.com/akinalpfdn/osdrop/releases/latest/download/Osdrop.apk) on the phone and open it; allow installing from the browser
+   when Android asks.
+2. Open Osdrop on the phone, choose **Pair** next to a computer and confirm the same 6-digit code on
+   both.
+3. Drag files into the phone's corner on the computer (bottom right of the main screen; Settings ›
+   Devices changes it), or share files from the phone to Osdrop.
+
 ### Requirements
 
 | | |
 |---|---|
 | **Mac** | macOS 14 Sonoma or later |
 | **Windows** | Windows 10 22H2 or Windows 11, x64 |
+| **Android** | Android 12 or later, with Osdrop open while files go back and forth |
 | **Network** | All computers on the same local network, wired or Wi-Fi |
 
 ## Keyboard shortcuts
@@ -166,7 +181,7 @@ copied on.
 <summary><b>Is it a Universal Control alternative for Windows?</b></summary>
 
 It does the same job between Macs and Windows PCs: one keyboard and mouse, files dragged across the
-edge and a shared clipboard. It does not support iPads.
+edge and a shared clipboard. It does not control iPads; phones exchange files with it.
 </details>
 
 <details>
@@ -202,6 +217,14 @@ AirPlay and Sidecar use, off while Osdrop runs; see
 
 No. Osdrop sends no picture of any screen; each computer keeps showing its own monitors. To use one
 computer as an extra display of another, see [Osplay](https://github.com/akinalpfdn/osplay).
+</details>
+
+<details>
+<summary><b>Can I send files between my phone and my computer?</b></summary>
+
+Yes, with the Android app: drag files into the phone's corner on a Mac or PC, or share photos and
+files from the phone to Osdrop and pick the computer. Osdrop must be open on the phone; it does not
+run in the background.
 </details>
 
 <details>

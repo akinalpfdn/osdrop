@@ -414,6 +414,7 @@ A phone in the group with Osdrop open on it; Settings › Devices sets its box's
 
 | Date | Build | Scenarios | Result |
 |------|-------|-----------|--------|
+| 2026-11-25 | release/0.2.0 | Not run before 0.2.0, by the user's decision: a 2 GB file to a phone, P8 (a 0.1 computer in a group with a phone), R10 PC → Mac | Untested; the 0.2.0 release notes list them |
 | 2026-11-25 | feature/phase-19-osplay-displays (3ee7e8d), M3 Air (Debug) + NVIDIA PC (feature/mobile-03-iphone, Release) | R10 Mac → PC | Pass, as reported by the user after the fix: Osplay started and stopped twice; the virtual displays came and went in the arrangement, the PC moved past them and back, the cursor crossed right both ways. Before it, debug builds never reported display changes after start (the developer window took the handler, fixed in 3ee7e8d) |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + iPad A16 (Debug) | IP4, IP5, IP6 | Pass, as reported by the user: photos shared to Osdrop went once it was opened, a received photo and video were saved to Photos after one permission prompt, the iPad left and rejoined the group with the app |
 | 2026-11-25 | feature/mobile-03-iphone (c85f35b), M3 Air (Debug) + NVIDIA PC (Release) + iPad A16 (Debug) | IP1, IP2, IP3 with the Mac and the PC | Pass, as reported by the user: the iPad paired with both, files dropped in its corner arrived, photos sent from the app ended done and opened the computers' boxes |
